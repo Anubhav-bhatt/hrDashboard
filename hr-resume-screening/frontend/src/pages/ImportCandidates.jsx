@@ -9,12 +9,12 @@ import {
   Search,
   CheckCircle2,
   AlertCircle,
-  ArrowLeft,
   Loader2,
   Users,
   Play,
   FileCheck,
   Eye,
+  Settings2,
   Sparkles
 } from 'lucide-react';
 import {
@@ -26,7 +26,7 @@ import {
   uploadSingleCandidate,
   uploadBulkCandidates
 } from '../services/api';
-import { Spinner } from '../components/ui';
+import { PageHeader, ProgressBar, Spinner } from '../components/ui';
 
 const ImportCandidates = () => {
   const { jobId } = useParams();
@@ -399,70 +399,75 @@ const ImportCandidates = () => {
   const totalSizeMB = (totalSizeBytes / (1024 * 1024)).toFixed(1);
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      {/* Back Link */}
-      <button
-        type="button"
-        onClick={() => navigate(`/jobs/${jobId}`)}
-        className="inline-flex items-center space-x-1 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        <span>Back to Job Details</span>
-      </button>
-
-      {/* Main Header Container */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-8">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between border-b border-slate-200 pb-6 gap-4">
-          <div>
-            <span className="text-xs font-semibold text-brand-600 bg-brand-50 border border-brand-100 px-3 py-1 rounded-full uppercase tracking-wider">
-              Candidate Resume Ingestion Pipeline
-            </span>
-            <h1 className="text-2xl font-bold text-slate-900 mt-2 tracking-tight">
-              Import Candidates
-            </h1>
-            <p className="text-sm text-slate-600 mt-1">
-              Target Job: <strong className="font-semibold text-slate-900">{job?.title}</strong>
-            </p>
-          </div>
-
-          <div className="flex items-center space-x-3">
-            <Link
-              to={`/jobs/${jobId}/candidates`}
-              className="inline-flex items-center space-x-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-sm rounded-xl transition-colors shrink-0"
-            >
-              <Users className="w-4 h-4" />
-              <span>View Candidates</span>
+    <div className="max-w-6xl mx-auto space-y-5">
+      {/* Breadcrumb */}
+      <nav aria-label="Breadcrumb" className="text-meta text-slate-500">
+        <ol className="flex flex-wrap items-center gap-1.5">
+          <li>
+            <Link to="/jobs" className="hover:text-slate-900 transition-colors duration-fast font-medium">
+              Jobs
             </Link>
-          </div>
-        </div>
+          </li>
+          <li aria-hidden="true" className="text-slate-300">/</li>
+          <li>
+            <Link
+              to={`/jobs/${jobId}`}
+              className="hover:text-slate-900 transition-colors duration-fast font-medium max-w-[16rem] truncate inline-block align-bottom"
+            >
+              {job?.title || 'Job'}
+            </Link>
+          </li>
+          <li aria-hidden="true" className="text-slate-300">/</li>
+          <li className="text-slate-900 font-semibold" aria-current="page">
+            Import
+          </li>
+        </ol>
+      </nav>
 
-        {/* Navigation Tabs */}
-        <div className="mt-6 flex border-b border-slate-200 gap-6">
-          <button
-            type="button"
-            onClick={() => setActiveTab('manual')}
-            className={`pb-3 text-sm font-bold border-b-2 flex items-center space-x-2 transition-colors ${
-              activeTab === 'manual'
-                ? 'border-brand-600 text-brand-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <Upload className="w-4 h-4" />
-            <span>Manual Resume Upload (Single &amp; Bulk)</span>
-          </button>
+      <PageHeader
+        eyebrow="Candidate import"
+        title="Import candidates"
+        description={`Add resumes to ${job?.title || 'this role'}. Each one is parsed and scored against the job's requirements as it arrives.`}
+        actions={
+          <>
+            <Link to={`/jobs/${jobId}`} className="btn btn-md btn-secondary">
+              <Settings2 className="w-4 h-4" aria-hidden="true" />
+              Job details
+            </Link>
+            <Link to={`/jobs/${jobId}/candidates`} className="btn btn-md btn-primary">
+              <Users className="w-4 h-4" aria-hidden="true" />
+              View candidates
+            </Link>
+          </>
+        }
+      />
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('outlook')}
-            className={`pb-3 text-sm font-bold border-b-2 flex items-center space-x-2 transition-colors ${
-              activeTab === 'outlook'
-                ? 'border-brand-600 text-brand-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <Mail className="w-4 h-4" />
-            <span>Microsoft Outlook Integration</span>
-          </button>
+      <div className="card card-pad-lg">
+        {/* Source tabs */}
+        <div className="flex border-b border-slate-200 gap-1 -mx-1 px-1 overflow-x-auto scroll-slim">
+          {[
+            { id: 'manual', label: 'Upload resumes', icon: Upload },
+            { id: 'outlook', label: 'Outlook mailbox', icon: Mail }
+          ].map((tab) => {
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                aria-pressed={active}
+                className={`relative px-3.5 py-2.5 text-meta font-semibold whitespace-nowrap transition-colors duration-fast rounded-t-control inline-flex items-center gap-2 ${
+                  active ? 'text-brand-700' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <tab.icon className="w-4 h-4" aria-hidden="true" />
+                {tab.label}
+                {active && (
+                  <span className="absolute left-0 right-0 -bottom-px h-0.5 bg-brand-600 rounded-t" aria-hidden="true" />
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* TAB 1: MANUAL RESUME UPLOAD (SINGLE, BULK & FOLDER) */}
@@ -693,53 +698,100 @@ const ImportCandidates = () => {
                   </div>
                 </div>
 
-                {/* Progress Bar & Status Cards */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between text-xs font-bold text-slate-700">
-                    <span>
-                      {bulkProcessing ? 'Processing Candidates...' : bulkCompleted ? 'Batch Processing Completed' : 'Ready to Process'}
-                    </span>
-                    <span>
-                      {bulkProgress.processed} / {bulkProgress.total} ({bulkProgress.total > 0 ? Math.round((bulkProgress.processed / bulkProgress.total) * 100) : 0}%)
-                    </span>
-                  </div>
+                {/* Real progress, driven by files actually processed */}
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex items-baseline justify-between gap-3 mb-2">
+                      <p className="text-meta font-semibold text-slate-800">
+                        {bulkProcessing
+                          ? 'Processing candidates'
+                          : bulkCompleted
+                            ? 'Import complete'
+                            : 'Ready to process'}
+                      </p>
+                      <p className="text-meta text-slate-500 tabular-nums">
+                        <span className="font-semibold text-slate-900">
+                          {bulkProgress.processed.toLocaleString('en-IN')}
+                        </span>{' '}
+                        of {bulkProgress.total.toLocaleString('en-IN')}
+                        {bulkProgress.total > 0 && (
+                          <span className="text-slate-400">
+                            {' '}
+                            · {Math.round((bulkProgress.processed / bulkProgress.total) * 100)}%
+                          </span>
+                        )}
+                      </p>
+                    </div>
 
-                  <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden border border-slate-200">
-                    <div
-                      className="bg-brand-600 h-full transition-all duration-300 rounded-full"
-                      style={{
-                        width: `${bulkProgress.total > 0 ? Math.round((bulkProgress.processed / bulkProgress.total) * 100) : 0}%`
-                      }}
+                    <ProgressBar
+                      value={bulkProgress.processed}
+                      max={bulkProgress.total || 1}
+                      tone={bulkCompleted ? 'success' : 'brand'}
+                      label={
+                        bulkProcessing
+                          ? `Processing ${bulkProgress.processed} of ${bulkProgress.total} resumes`
+                          : 'Import progress'
+                      }
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2 text-xs">
-                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-center">
-                      <span className="text-slate-500 font-semibold uppercase text-[10px] block">Total Files</span>
-                      <span className="text-lg font-extrabold text-slate-900 mt-0.5 block">{bulkProgress.total}</span>
-                    </div>
-
-                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
-                      <span className="text-emerald-800 font-semibold uppercase text-[10px] block">Successful</span>
-                      <span className="text-lg font-extrabold text-emerald-900 mt-0.5 block">{bulkProgress.success}</span>
-                    </div>
-
-                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-center">
-                      <span className="text-amber-800 font-semibold uppercase text-[10px] block">Duplicates</span>
-                      <span className="text-lg font-extrabold text-amber-900 mt-0.5 block">{bulkProgress.duplicates}</span>
-                    </div>
-
-                    <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-center">
-                      <span className="text-rose-800 font-semibold uppercase text-[10px] block">Failed</span>
-                      <span className="text-lg font-extrabold text-rose-900 mt-0.5 block">{bulkProgress.failed}</span>
-                    </div>
-
-                    <div className="p-3 bg-slate-100 border border-slate-200 rounded-xl text-center col-span-2 sm:col-span-1">
-                      <span className="text-slate-600 font-semibold uppercase text-[10px] block">Ignored</span>
-                      <span className="text-lg font-extrabold text-slate-800 mt-0.5 block">{bulkProgress.unsupported}</span>
-                    </div>
+                  {/* Outcome counters. Only non-zero categories draw attention. */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    {[
+                      { label: 'Created', value: bulkProgress.success, tone: 'emerald' },
+                      { label: 'Duplicates', value: bulkProgress.duplicates, tone: 'amber' },
+                      { label: 'Failed', value: bulkProgress.failed, tone: 'rose' },
+                      { label: 'Ignored', value: bulkProgress.unsupported, tone: 'slate' }
+                    ].map((stat) => {
+                      const tones = {
+                        emerald: stat.value > 0 ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : '',
+                        amber: stat.value > 0 ? 'border-amber-200 bg-amber-50 text-amber-800' : '',
+                        rose: stat.value > 0 ? 'border-rose-200 bg-rose-50 text-rose-800' : '',
+                        slate: ''
+                      };
+                      return (
+                        <div
+                          key={stat.label}
+                          className={`rounded-control border px-3 py-2.5 text-center ${
+                            tones[stat.tone] || 'border-slate-200 bg-slate-50 text-slate-700'
+                          }`}
+                        >
+                          <p className="text-lg font-bold tabular-nums leading-none">{stat.value}</p>
+                          <p className="text-[11px] font-medium mt-1 opacity-80">{stat.label}</p>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
+
+                {/* Completion summary with the next obvious action */}
+                {bulkCompleted && (
+                  <div className="rounded-card border border-emerald-200 bg-emerald-50 p-5">
+                    <div className="flex items-start gap-3">
+                      <span className="w-9 h-9 rounded-pill bg-white text-emerald-600 flex items-center justify-center shrink-0">
+                        <CheckCircle2 className="w-5 h-5" aria-hidden="true" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-card-title text-emerald-900">Import complete</h4>
+                        <p className="text-meta text-emerald-800/90 mt-1">
+                          {bulkProgress.success} candidate{bulkProgress.success === 1 ? '' : 's'} created and scored
+                          {bulkProgress.duplicates > 0 && `, ${bulkProgress.duplicates} already existed`}
+                          {bulkProgress.failed > 0 && `, ${bulkProgress.failed} could not be read`}
+                          {bulkProgress.unsupported > 0 && `, ${bulkProgress.unsupported} in an unsupported format`}.
+                        </p>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <Link to={`/jobs/${jobId}/candidates`} className="btn btn-md btn-primary">
+                            <Users className="w-4 h-4" aria-hidden="true" />
+                            View ranked candidates
+                          </Link>
+                          <button type="button" onClick={handleClearBulk} className="btn btn-md btn-secondary">
+                            Import more
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* File-Level Status Table */}
                 <div className="border border-slate-200 rounded-xl overflow-hidden shadow-inner">

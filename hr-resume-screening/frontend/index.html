@@ -9,6 +9,27 @@
     <!-- Candidate profiles contain personal data; keep them out of search indexes. -->
     <meta name="robots" content="noindex, nofollow" />
     <title>Resume Screening Dashboard</title>
+    <script>
+      /*
+       * Applies the saved theme before anything renders.
+       *
+       * Lives in <head>, ahead of the stylesheet and the app bundle, so the
+       * correct theme class is on <html> before the first paint. Without it the
+       * page would render light, React would mount, and the UI would snap to
+       * dark — a visible flash on every load. Kept dependency-free and tiny.
+       */
+      (function () {
+        try {
+          var stored = localStorage.getItem('hr-dashboard-theme') || 'system';
+          var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var resolved = stored === 'dark' || (stored === 'system' && prefersDark) ? 'dark' : 'light';
+          document.documentElement.classList.toggle('dark', resolved === 'dark');
+          document.documentElement.style.colorScheme = resolved;
+        } catch (e) {
+          /* Storage unavailable — fall through to the light default. */
+        }
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">

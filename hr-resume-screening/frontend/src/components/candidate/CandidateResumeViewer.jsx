@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Download, ExternalLink, FileText, FileWarning, Loader2 } from 'lucide-react';
-import { Badge, Button, Card, EmptyState } from '../ui';
+import { Badge, Button, Card, EmptyState, cx } from '../ui';
 import {
   downloadCandidateResume,
   fetchCandidateResumeObjectUrl,
@@ -24,6 +24,7 @@ const CandidateResumeViewer = ({ candidate }) => {
   const [previewUrl, setPreviewUrl] = useState(null);
   const [previewError, setPreviewError] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [activeView, setActiveView] = useState('document');
 
   const resume = candidate.resume || {};
   const jobId = candidate.jobId;
@@ -32,6 +33,11 @@ const CandidateResumeViewer = ({ candidate }) => {
   const isPdf = String(resume.mimeType || '').includes('pdf');
   const isPlainText = String(resume.mimeType || '').startsWith('text/');
   const viewUrl = getCandidateResumeUrl(jobId, candidateId);
+
+  // Text is the only view when there is no document to render, and for
+  // plain-text resumes the browser has nothing better to show.
+  const hasText = Boolean(resume.hasExtractedText && resume.text);
+  const showText = hasText && (activeView === 'text' || !resume.available || (isPlainText && !isPdf));
 
   // PDFs are previewed from a same-origin blob so the browser's PDF viewer can
   // render them; the API's framing protections stay in force.
@@ -118,15 +124,49 @@ const CandidateResumeViewer = ({ candidate }) => {
         )}
       </div>
 
+      {/* Document / Extracted text switch. The extracted text is a deliberate
+          second view rather than a wall of text under the preview. */}
+      {resume.hasExtractedText && resume.text && resume.available && (
+        <div className="px-5 pt-3">
+          <div className="inline-flex items-center gap-1 p-0.5 rounded-control bg-slate-100" role="tablist" aria-label="Resume view">
+            {[
+              { id: 'document', label: 'Document' },
+              { id: 'text', label: 'Extracted text' }
+            ].map((view) => (
+              <button
+                key={view.id}
+                type="button"
+                role="tab"
+                aria-selected={activeView === view.id}
+                onClick={() => setActiveView(view.id)}
+                className={cx(
+                  'px-3 py-1.5 rounded-[0.375rem] text-xs font-semibold transition-colors duration-fast',
+                  activeView === view.id
+                    ? 'bg-white text-slate-900 shadow-card'
+                    : 'text-slate-500 hover:text-slate-800'
+                )}
+              >
+                {view.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="p-5">
-        {!resume.available ? (
+        {showText ? (
+          <div className="rounded-control border border-slate-200 bg-slate-50 p-4 max-h-[70vh] min-h-[420px] overflow-y-auto scroll-slim">
+            {/* Rendered as text, never as HTML — resume content is untrusted. */}
+            <pre className="text-xs text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">{resume.text}</pre>
+          </div>
+        ) : !resume.available ? (
           <EmptyState
             icon={FileWarning}
             title="Original document not available"
             description={
               resume.storage === 'OUTLOOK'
                 ? 'This resume lives in the connected Outlook mailbox. Reconnect the mailbox to open the original file.'
-                : 'This candidate was imported before resume files were retained, so only the extracted text below is available.'
+                : 'This candidate was imported before resume files were retained. The extracted text is shown below.'
             }
             className="border-0 shadow-none py-6"
           />
@@ -164,18 +204,6 @@ const CandidateResumeViewer = ({ candidate }) => {
           </div>
         )}
 
-        {/* Extracted text is always available when parsing succeeded. */}
-        {resume.hasExtractedText && resume.text && (
-          <details className="mt-4" open={!resume.available || isPlainText}>
-            <summary className="text-meta font-semibold text-slate-700 cursor-pointer hover:text-slate-900 transition-colors duration-fast">
-              Extracted resume text
-            </summary>
-            <div className="mt-3 rounded-control border border-slate-200 bg-slate-50 p-4 max-h-[28rem] overflow-y-auto scroll-slim">
-              {/* Rendered as text, never as HTML — resume content is untrusted. */}
-              <pre className="text-xs text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">{resume.text}</pre>
-            </div>
-          </details>
-        )}
       </div>
     </Card>
   );

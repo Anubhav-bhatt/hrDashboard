@@ -171,6 +171,11 @@ try {
 
   /* -------------------------------------------------- candidate list ---- */
   section('Candidate list');
+  // Wait for the controls under audit, not just for a result card: the toolbar
+  // and the list commit in separate renders, so auditing on the card alone can
+  // sample the page before the search field and status tabs exist.
+  await page.locator('#candidate-search').waitFor({ state: 'visible', timeout: 20000 });
+  await page.locator('button[aria-pressed]').first().waitFor({ state: 'visible', timeout: 20000 });
   await page.locator('a[aria-label^="Open profile for"]').first().waitFor({ state: 'visible', timeout: 20000 });
 
   const listAudit = await page.evaluate(() => {
@@ -298,6 +303,110 @@ try {
     const required = isLarge ? 3 : 4.5;
     check(ratio >= required, `${sample.label} contrast ${ratio.toFixed(2)}:1 meets AA (needs ${required}:1)`);
   }
+
+  /* ------------------------------------------------------- dark theme --- */
+  section('Dark theme');
+
+  // Switch via the app's own control so the persisted preference is exercised.
+  await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
+  await page.locator('a[aria-label^="Total candidates"]').waitFor({ state: 'visible', timeout: 20000 });
+  await page.evaluate(() => window.localStorage.setItem('hr-dashboard-theme', 'dark'));
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.locator('a[aria-label^="Total candidates"]').waitFor({ state: 'visible', timeout: 20000 });
+  await page.waitForTimeout(700);
+
+  const darkState = await page.evaluate(() => ({
+    rootHasDark: document.documentElement.classList.contains('dark'),
+    colorScheme: document.documentElement.style.colorScheme,
+    bodyBg: getComputedStyle(document.body).backgroundColor,
+    cardBg: document.querySelector('.card') ? getComputedStyle(document.querySelector('.card')).backgroundColor : null
+  }));
+
+  check(darkState.rootHasDark, 'the dark class is applied to the document root');
+  check(darkState.colorScheme === 'dark', 'color-scheme is set so native controls follow the theme');
+  check(darkState.bodyBg !== darkState.cardBg, 'the page and card surfaces are visibly distinct', JSON.stringify(darkState));
+  // A dark theme built on pure black loses surface hierarchy.
+  const bodyRgb = parseRgb(darkState.bodyBg);
+  check(bodyRgb && bodyRgb.some((c) => c > 8), 'the page background is a deep neutral, not pure black', darkState.bodyBg);
+
+  const darkSamples = await page.evaluate(() => {
+    const resolveBackground = (element) => {
+      let node = element;
+      while (node && node !== document.documentElement) {
+        const bg = window.getComputedStyle(node).backgroundColor;
+        if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') return bg;
+        node = node.parentElement;
+      }
+      return window.getComputedStyle(document.body).backgroundColor;
+    };
+
+    const targets = [
+      ['page heading', 'h1'],
+      ['section heading', 'h2'],
+      ['body text', 'p'],
+      ['primary button', '.btn-primary'],
+      ['secondary button', '.btn-secondary'],
+      ['metric value', '.text-metric'],
+      ['badge', '.badge']
+    ];
+
+    return targets
+      .map(([label, selector]) => {
+        const el = document.querySelector(selector);
+        if (!el) return null;
+        const style = window.getComputedStyle(el);
+        return {
+          label,
+          color: style.color,
+          background: resolveBackground(el),
+          fontSize: parseFloat(style.fontSize),
+          fontWeight: Number(style.fontWeight) || 400
+        };
+      })
+      .filter(Boolean);
+  });
+
+  for (const sample of darkSamples) {
+    const fg = parseRgb(sample.color);
+    const bg = parseRgb(sample.background);
+    if (!fg || !bg) continue;
+    const ratio = contrastRatio(fg, bg);
+    const isLarge = sample.fontSize >= 24 || (sample.fontSize >= 18.66 && sample.fontWeight >= 700);
+    const required = isLarge ? 3 : 4.5;
+    check(ratio >= required, `dark: ${sample.label} contrast ${ratio.toFixed(2)}:1 meets AA (needs ${required}:1)`);
+  }
+
+  // Inputs must remain legible and visibly bordered in dark mode.
+  await page.goto(`${BASE}/candidates`, { waitUntil: 'networkidle' });
+  await page.locator('#candidate-search').waitFor({ state: 'visible', timeout: 20000 });
+  const darkInput = await page.evaluate(() => {
+    const el = document.querySelector('#candidate-search');
+    const style = window.getComputedStyle(el);
+    return { color: style.color, background: style.backgroundColor, borderColor: style.borderTopColor };
+  });
+  const inputFg = parseRgb(darkInput.color);
+  const inputBg = parseRgb(darkInput.background);
+  if (inputFg && inputBg) {
+    check(contrastRatio(inputFg, inputBg) >= 4.5, `dark: input text contrast ${contrastRatio(inputFg, inputBg).toFixed(2)}:1`);
+  }
+  const borderRgb = parseRgb(darkInput.borderColor);
+  check(borderRgb && contrastRatio(borderRgb, inputBg) > 1.15, 'dark: inputs keep a visible border', JSON.stringify(darkInput));
+
+  // Skeletons must not flash near-white against a dark page.
+  const skeletonBg = await page.evaluate(() => {
+    const probe = document.createElement('div');
+    probe.className = 'skeleton';
+    document.body.appendChild(probe);
+    const bg = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return bg;
+  });
+  const skeletonRgb = parseRgb(skeletonBg);
+  check(skeletonRgb && skeletonRgb.every((c) => c < 120), 'dark: skeletons use a dark surface', skeletonBg);
+
+  // Restore the light theme for any later assertions.
+  await page.evaluate(() => window.localStorage.setItem('hr-dashboard-theme', 'light'));
+  await page.reload({ waitUntil: 'networkidle' });
 
   /* --------------------------------------------------- reduced motion --- */
   section('Reduced motion');

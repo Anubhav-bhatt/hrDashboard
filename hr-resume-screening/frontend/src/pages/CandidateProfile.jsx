@@ -48,6 +48,7 @@ import {
 import CandidateContactCard from '../components/candidate/CandidateContactCard';
 import CandidateMatchPanel from '../components/candidate/CandidateMatchPanel';
 import CandidateResumeViewer from '../components/candidate/CandidateResumeViewer';
+import CandidateTimeline from '../components/candidate/CandidateTimeline';
 import OutreachDialog from '../components/candidate/OutreachDialog';
 import {
   CandidateAchievements,
@@ -554,37 +555,8 @@ const CandidateProfile = () => {
               </form>
             </Card>
 
-            <Card padding="p-0">
-              <div className="px-5 py-4 border-b border-slate-100">
-                <CardHeader title="Note history" description={`${candidate.noteEntries.length} note${candidate.noteEntries.length === 1 ? '' : 's'}`} />
-              </div>
-
-              {candidate.noteEntries.length === 0 ? (
-                <div className="p-5">
-                  <EmptyState
-                    icon={StickyNote}
-                    title="No notes yet"
-                    description="Add the first note to keep your team aligned on this candidate."
-                    className="border-0 shadow-none py-6"
-                  />
-                </div>
-              ) : (
-                <ul className="divide-y divide-slate-100">
-                  {candidate.noteEntries.map((note) => (
-                    <li key={note.id} className="px-5 py-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-meta font-semibold text-slate-800">{note.authorName}</span>
-                        <span className="text-xs text-slate-400" title={formatDateTime(note.createdAt)}>
-                          {formatRelativeTime(note.createdAt)}
-                        </span>
-                      </div>
-                      {/* Rendered as text — never as HTML. */}
-                      <p className="text-meta text-slate-600 mt-1.5 whitespace-pre-wrap leading-relaxed">{note.body}</p>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Card>
+            {/* Notes and recorded activity read as one history. */}
+            <CandidateTimeline notes={candidate.noteEntries} activities={candidate.activities} />
           </div>
 
           {/* Legacy single-field note, kept visible so nothing recorded earlier is lost */}
@@ -599,36 +571,9 @@ const CandidateProfile = () => {
 
       {/* ------------------------------------------------------ Activity --- */}
       <TabPanel id="activity" activeId={activeTab}>
-        <Card padding="p-0" className="max-w-3xl">
-          <div className="px-5 py-4 border-b border-slate-100">
-            <CardHeader title="Recruitment activity" description="Every recorded action on this candidate, newest first." />
-          </div>
-
-          {candidate.activities.length === 0 ? (
-            <div className="p-5">
-              <EmptyState icon={Activity} title="No activity recorded yet" className="border-0 shadow-none py-6" />
-            </div>
-          ) : (
-            <ol className="divide-y divide-slate-100">
-              {candidate.activities.map((activity) => {
-                const Icon = ACTIVITY_ICONS[activity.type] || Activity;
-                return (
-                  <li key={activity.id} className="px-5 py-3.5 flex items-start gap-3">
-                    <span className="w-8 h-8 rounded-control bg-slate-100 text-slate-500 flex items-center justify-center shrink-0">
-                      <Icon className="w-4 h-4" aria-hidden="true" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-meta text-slate-800">{activity.description}</p>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        {activity.actorName} · <span title={formatDateTime(activity.createdAt)}>{formatRelativeTime(activity.createdAt)}</span>
-                      </p>
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
-          )}
-        </Card>
+        {/* The same unified history the Notes tab shows, so the two tabs never
+            disagree about what happened. */}
+        <CandidateTimeline notes={candidate.noteEntries} activities={candidate.activities} className="max-w-3xl" />
       </TabPanel>
 
       {showOutreach && (

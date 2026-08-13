@@ -1,20 +1,40 @@
+/* Colour tokens first: an @import must precede every other rule, and the
+   variables it defines back the whole palette. */
+@import './styles/tokens.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  :root {
-    --surface: 255 255 255;
-    --surface-muted: 248 250 252;
-    --border-subtle: 226 232 240;
-  }
-
   html {
     -webkit-text-size-adjust: 100%;
   }
 
   body {
     @apply bg-slate-50 text-slate-900 font-sans text-body antialiased;
+    /* A short transition on the page surface only. Animating colour on every
+       node would make theme switching feel sluggish. */
+    transition: background-color 120ms ease, color 120ms ease;
+  }
+
+  /* Native controls, scrollbars and autofill follow the active theme. The
+     ThemeProvider also sets this on the root element. */
+  .dark {
+    color-scheme: dark;
+  }
+
+  /* Browser autofill paints its own background, which is unreadable against a
+     dark field. Overriding the internal shadow is the only reliable fix. */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  textarea:-webkit-autofill,
+  select:-webkit-autofill {
+    -webkit-text-fill-color: rgb(var(--c-slate-900));
+    -webkit-box-shadow: 0 0 0 1000px rgb(var(--c-white)) inset;
+    caret-color: rgb(var(--c-slate-900));
+    transition: background-color 5000s ease-in-out 0s;
   }
 
   /* A single, consistent focus ring for every interactive element. Removing the
@@ -37,7 +57,7 @@
   /* Slimmer scrollbars inside scrollable panels (resume text, tables). */
   .scroll-slim {
     scrollbar-width: thin;
-    scrollbar-color: rgb(203 213 225) transparent;
+    scrollbar-color: rgb(var(--scrollbar-thumb)) transparent;
   }
 
   .scroll-slim::-webkit-scrollbar {
@@ -46,7 +66,8 @@
   }
 
   .scroll-slim::-webkit-scrollbar-thumb {
-    @apply rounded-pill bg-slate-300;
+    @apply rounded-pill;
+    background-color: rgb(var(--scrollbar-thumb));
   }
 
   .scroll-slim::-webkit-scrollbar-track {
@@ -95,15 +116,23 @@
 
   /* ------------------------------------------------------------------ cards */
   .card {
-    @apply bg-white border border-slate-200 rounded-card shadow-card;
+    @apply bg-white border border-slate-200 rounded-card;
+    /* Shadow comes from a token so dark mode can use a deeper, more diffuse one
+       — the light shadow is invisible against a dark surface. */
+    box-shadow: var(--shadow-card);
   }
 
   /* Interactive card: the entire surface is the target, and it advertises that
      with cursor, hover elevation and a focus ring. */
   .card-interactive {
     @apply card text-left w-full cursor-pointer transition duration-fast
-           hover:shadow-card-hover hover:border-slate-300
-           focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2;
+           hover:border-slate-300
+           focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2
+           focus-visible:ring-offset-slate-50;
+  }
+
+  .card-interactive:hover {
+    box-shadow: var(--shadow-card-hover);
   }
 
   .card-pad { @apply p-5; }
@@ -129,9 +158,17 @@
 
   .select {
     @apply input pr-8 cursor-pointer appearance-none bg-no-repeat;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%2364748b' stroke-width='1.75'%3E%3Cpath d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+    /* The chevron is drawn with currentColor so it follows the active theme
+       instead of staying a fixed grey that disappears on dark. */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='currentColor' stroke-width='1.75'%3E%3Cpath d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
     background-position: right 0.5rem center;
     background-size: 1.125rem;
+  }
+
+  /* Native option lists are painted by the OS; color-scheme makes them follow
+     the theme, and an explicit background covers browsers that ignore it. */
+  .select option {
+    @apply bg-white text-slate-900;
   }
 
   .textarea {
@@ -161,7 +198,9 @@
 
   /* ---------------------------------------------------------------- skeleton */
   .skeleton {
-    @apply relative overflow-hidden bg-slate-200/70 rounded;
+    @apply relative overflow-hidden rounded;
+    /* Theme-aware base so a dark page never flashes near-white blocks. */
+    background-color: rgb(var(--skeleton-base));
   }
 
   .skeleton::after {
@@ -169,9 +208,9 @@
     @apply absolute inset-0 -translate-x-full;
     background-image: linear-gradient(
       90deg,
-      rgba(255, 255, 255, 0) 0%,
-      rgba(255, 255, 255, 0.55) 50%,
-      rgba(255, 255, 255, 0) 100%
+      rgb(var(--skeleton-sheen) / 0) 0%,
+      rgb(var(--skeleton-sheen) / var(--skeleton-sheen-opacity)) 50%,
+      rgb(var(--skeleton-sheen) / 0) 100%
     );
     animation: shimmer 1.4s infinite;
   }

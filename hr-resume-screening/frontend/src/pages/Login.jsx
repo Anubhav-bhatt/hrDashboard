@@ -65,8 +65,12 @@ const Login = () => {
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-white">
-      {/* Brand panel — hidden on small screens where the form matters most. */}
-      <div className="hidden lg:flex flex-col justify-between bg-slate-900 text-white p-12 relative overflow-hidden">
+      {/*
+        Brand panel — hidden on small screens where the form matters most.
+        Uses the fixed `ink` palette rather than a neutral token: this surface is
+        meant to stay dark in both themes, and a token would invert it to light.
+      */}
+      <div className="hidden lg:flex flex-col justify-between bg-ink-900 text-slate-50 p-12 relative overflow-hidden">
         <div
           className="absolute inset-0 opacity-[0.07]"
           style={{
@@ -85,10 +89,10 @@ const Login = () => {
         </div>
 
         <div className="relative max-w-md">
-          <h2 className="text-3xl font-bold tracking-tight leading-tight">
+          <h2 className="text-3xl font-bold tracking-tight leading-tight text-ink-100">
             Screen every applicant against the role, not a gut feeling.
           </h2>
-          <p className="text-slate-300 text-body mt-4 leading-relaxed">
+          <p className="text-ink-300 text-body mt-4 leading-relaxed">
             Import resumes, score them against your job description with an explainable model, and move the
             right people forward faster.
           </p>
@@ -99,7 +103,7 @@ const Login = () => {
               { icon: Sparkles, text: 'Explainable 0–100 relevance scoring, no black box' },
               { icon: ShieldCheck, text: 'Candidate data stays behind authenticated access' }
             ].map(({ icon: Icon, text }) => (
-              <li key={text} className="flex items-start gap-3 text-meta text-slate-300">
+              <li key={text} className="flex items-start gap-3 text-meta text-ink-300">
                 <Icon className="w-4 h-4 mt-0.5 text-brand-400 shrink-0" aria-hidden="true" />
                 {text}
               </li>
@@ -107,7 +111,7 @@ const Login = () => {
           </ul>
         </div>
 
-        <p className="relative text-xs text-slate-500">
+        <p className="relative text-xs text-ink-400">
           Scoring is a decision-support signal. Hiring decisions remain with your recruiters.
         </p>
       </div>

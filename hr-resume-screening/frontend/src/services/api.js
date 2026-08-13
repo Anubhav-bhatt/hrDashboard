@@ -90,9 +90,30 @@ export const logout = async () => {
 
 /* -------------------------------------------------------------- analytics --- */
 
-/** Dashboard KPIs, pipeline, score bands, trend and recent activity. */
-export const getDashboardOverview = async (config = {}) => {
-  const response = await api.get('/analytics/overview', config);
+/**
+ * Dashboard KPIs, pipeline, score bands, trend, top candidates, jobs overview
+ * and recent activity.
+ *
+ * @param {Object} [params] Pass `{ jobId }` to scope every figure to one job.
+ */
+export const getDashboardOverview = async (params = {}, config = {}) => {
+  const response = await api.get('/dashboard/overview', { params, ...config });
+  return response.data;
+};
+
+/**
+ * Jobs with aggregated candidate statistics for the jobs portal.
+ *
+ * @param {Object} [params] `{ search, sort, limit }`
+ */
+export const getJobsSummary = async (params = {}, config = {}) => {
+  const response = await api.get('/jobs/summary', { params, ...config });
+  return response.data;
+};
+
+/** Candidate statistics and requirement context for a single job. */
+export const getJobSummary = async (jobId, config = {}) => {
+  const response = await api.get(`/jobs/${jobId}/summary`, config);
   return response.data;
 };
 

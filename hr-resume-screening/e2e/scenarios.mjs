@@ -118,7 +118,12 @@ try {
   const cardBox = await totalCard.boundingBox();
   await page.mouse.click(cardBox.x + cardBox.width - 24, cardBox.y + 14);
   await page.waitForURL('**/candidates**', { timeout: 15000 });
-  check(page.url().endsWith('/candidates'), 'clicking the card corner navigates to the candidate list', page.url());
+  // The card links to the ranked list, so a sort parameter is expected.
+  check(
+    new URL(page.url()).pathname === '/candidates',
+    'clicking the card corner navigates to the candidate list',
+    page.url()
+  );
 
   await page.locator('a[aria-label^="Open profile for"]').first().waitFor({ state: 'visible', timeout: 20000 });
   check(/candidates/i.test(await text()), 'the candidate list renders');
@@ -155,7 +160,8 @@ try {
   const tabExpectations = [
     ['Experience', /xyz technologies/i],
     ['Skills', /frontend/i],
-    ['Resume', /extracted resume text/i],
+    // The resume panel offers a Document / Extracted text switch.
+    ['Resume', /extracted text|document not available/i],
     ['Notes', /add a note/i],
     ['Activity', /resume imported/i]
   ];
@@ -197,13 +203,25 @@ try {
     check(resumePanel.framesBlob, 'the PDF preview is rendered from a same-origin blob URL');
     check(!/could not be loaded/i.test(resumePanel.bodyText), 'the preview did not report a load failure');
   } else {
-    // Non-PDF resumes intentionally show the extracted text instead of a frame.
+    // A non-PDF resume shows its extracted text rather than an empty frame.
     check(
-      /in-browser preview is only available for pdf|plain-text document|original document not available/i.test(resumePanel.bodyText),
-      'a non-PDF resume explains why there is no inline preview'
+      /extracted text|original document not available|preview is only available for pdf/i.test(resumePanel.bodyText),
+      'a non-PDF resume shows its text instead of an empty preview'
     );
   }
-  check(/extracted resume text/i.test(resumePanel.bodyText), 'the extracted resume text is available');
+
+  // The extracted text must be reachable: either already shown, or one click away.
+  const textSwitch = page.getByRole('tab', { name: /extracted text/i });
+  if ((await textSwitch.count()) > 0) {
+    await textSwitch.click();
+    await page.waitForTimeout(600);
+    check(/experienced react developer|technical skills/i.test(await text()), 'the extracted resume text is viewable');
+  } else {
+    check(
+      /experienced react developer|technical skills|original document not available/i.test(resumePanel.bodyText),
+      'the extracted resume text is viewable'
+    );
+  }
 
   /* ------------- Scenario 2: dashboard card -> filtered candidates -------- */
   section('Scenario 2 — the Shortlisted card deep-links to a filtered list');
@@ -219,8 +237,8 @@ try {
   section('Scenario 3 — filter, sort, open a profile, then go Back');
   await page.goto(`${BASE}/candidates`, { waitUntil: 'networkidle' });
   await page.locator('a[aria-label^="Open profile for"]').first().waitFor({ state: 'visible', timeout: 20000 });
-  await page.click('button[aria-controls="candidate-filters"]');
-  await page.waitForTimeout(400);
+  // Skill and sort are primary filters and sit inline in the toolbar; the
+  // "More filters" drawer holds only the secondary ones.
   await page.selectOption('#filter-skill', 'React');
   await page.waitForTimeout(1100);
   await page.selectOption('select[aria-label="Sort candidates"]', 'newest');

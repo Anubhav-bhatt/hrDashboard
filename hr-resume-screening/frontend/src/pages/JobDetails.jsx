@@ -1,25 +1,35 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import {
+  Award,
   Briefcase,
   Calendar,
+  Clock,
   DownloadCloud,
   FileText,
   GraduationCap,
   IndianRupee,
   MapPin,
-  Plus,
+  Pencil,
   RefreshCw,
   Save,
   Search,
   Sparkles,
+  UserCheck,
   Users,
   X
 } from 'lucide-react';
-import { analyzeAllCandidates, getJobById, toApiError, updateJobCriteria } from '../services/api';
+import {
+  analyzeAllCandidates,
+  getCandidates,
+  getJobById,
+  getJobSummary,
+  toApiError,
+  updateJobCriteria
+} from '../services/api';
 import { useApiResource } from '../hooks/useApiResource';
 import { useToast } from '../components/ToastProvider';
-import StatCard from '../components/StatCard';
+import TopCandidates from '../components/dashboard/TopCandidates';
 import {
   Badge,
   Button,
@@ -30,169 +40,116 @@ import {
   InlineAlert,
   PageHeader,
   Skeleton,
+  SkillChip,
   cx
 } from '../components/ui';
-import { formatDate, formatSalary } from '../utils/format';
+import TokenInput from '../components/ui/TokenInput';
+import { formatDate, formatExperience, formatSalary } from '../utils/format';
 
-const SUGGESTIONS = {
-  skill: ['React', 'TypeScript', 'JavaScript', 'Node.js', 'PostgreSQL', 'Python', 'Java', 'AWS', 'Docker', 'Kubernetes'],
-  location: ['Gurugram', 'Noida', 'Delhi', 'Bengaluru', 'Hyderabad', 'Pune', 'Mumbai', 'Chennai', 'Remote'],
-  qualification: ['B.Tech', 'B.E.', 'M.Tech', 'BCA', 'MCA', 'B.Sc', 'MBA', 'Diploma', 'Any Graduate']
+const SKILL_SUGGESTIONS = [
+  'React', 'TypeScript', 'JavaScript', 'Node.js', 'Express', 'PostgreSQL', 'MongoDB',
+  'Python', 'Java', 'Spring Boot', 'AWS', 'Docker', 'Kubernetes', 'REST API', 'GraphQL'
+];
+const LOCATION_SUGGESTIONS = ['Gurugram', 'Noida', 'Delhi', 'Bengaluru', 'Hyderabad', 'Pune', 'Mumbai', 'Remote'];
+const QUALIFICATION_SUGGESTIONS = ['B.Tech', 'B.E.', 'M.Tech', 'BCA', 'MCA', 'B.Sc', 'MBA', 'Diploma'];
+
+const STATUS_META = {
+  COMPLETED: { label: 'All scored', variant: 'success' },
+  READY_FOR_ANALYSIS: { label: 'Ready to score', variant: 'warning' },
+  IMPORTING: { label: 'Importing', variant: 'info' },
+  NEW: { label: 'New', variant: 'neutral' }
 };
 
-/** Chip list with inline add/remove, used for every array-valued criterion. */
-const CriteriaChips = ({ id, label, description, icon: Icon, items, onAdd, onRemove, suggestions = [], placeholder, tone = 'neutral' }) => {
-  const [adding, setAdding] = useState(false);
-  const [value, setValue] = useState('');
-  const [error, setError] = useState('');
-
-  const submit = (raw) => {
-    const candidate = String(raw ?? value).trim();
-    if (!candidate) {
-      setError('Enter a value first.');
-      return;
-    }
-    if (items.some((item) => item.toLowerCase() === candidate.toLowerCase())) {
-      setError('That entry has already been added.');
-      return;
-    }
-    onAdd(candidate);
-    setValue('');
-    setError('');
-    setAdding(false);
+/** Compact KPI tile for the candidate snapshot. */
+const SnapshotTile = ({ label, value, icon: Icon, tone = 'slate', to, hint }) => {
+  const tones = {
+    brand: 'bg-brand-50 text-brand-600',
+    emerald: 'bg-emerald-50 text-emerald-600',
+    amber: 'bg-amber-50 text-amber-600',
+    violet: 'bg-violet-50 text-violet-600',
+    slate: 'bg-slate-100 text-slate-600'
   };
 
+  const body = (
+    <>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-label uppercase text-slate-500">{label}</p>
+        {Icon && (
+          <span className={cx('w-7 h-7 rounded-control flex items-center justify-center shrink-0', tones[tone])}>
+            <Icon className="w-3.5 h-3.5" aria-hidden="true" />
+          </span>
+        )}
+      </div>
+      <p className="text-xl font-bold text-slate-900 mt-1.5 tabular-nums">{value}</p>
+      {hint && <p className="text-xs text-slate-400 mt-0.5">{hint}</p>}
+    </>
+  );
+
+  if (!to) return <div className="rounded-card border border-slate-200 bg-white px-4 py-3">{body}</div>;
+
   return (
-    <div className="rounded-card border border-slate-200 bg-slate-50/70 p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="text-meta font-semibold text-slate-900 inline-flex items-center gap-1.5">
-            {Icon && <Icon className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />}
-            {label}
-            <span className="text-slate-400 font-normal">({items.length})</span>
-          </h3>
-          {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
-        </div>
-
-        {!adding && (
-          <Button variant="secondary" size="sm" icon={Plus} onClick={() => setAdding(true)} aria-label={`Add ${label.toLowerCase()}`}>
-            Add
-          </Button>
-        )}
-      </div>
-
-      {adding && (
-        <div className="mt-3 rounded-control border border-slate-300 bg-white p-3 animate-slide-up">
-          <div className="flex gap-2">
-            <label htmlFor={`${id}-input`} className="sr-only">
-              {label}
-            </label>
-            <input
-              id={`${id}-input`}
-              type="text"
-              className={cx('input h-9', error && 'input-error')}
-              placeholder={placeholder}
-              value={value}
-              onChange={(e) => {
-                setValue(e.target.value);
-                setError('');
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  submit();
-                } else if (e.key === 'Escape') {
-                  setAdding(false);
-                  setValue('');
-                  setError('');
-                }
-              }}
-              autoFocus
-            />
-            <Button variant="primary" size="sm" onClick={() => submit()}>
-              Add
-            </Button>
-            <Button
-              variant="ghost"
-              size="iconSm"
-              icon={X}
-              onClick={() => {
-                setAdding(false);
-                setValue('');
-                setError('');
-              }}
-              aria-label="Cancel"
-            />
-          </div>
-
-          {suggestions.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
-              <span className="text-[11px] font-semibold text-slate-400">Suggestions:</span>
-              {suggestions.map((suggestion) => (
-                <button
-                  key={suggestion}
-                  type="button"
-                  onClick={() => submit(suggestion)}
-                  className="text-[11px] px-2 py-0.5 rounded-pill border border-slate-200 bg-slate-50 text-slate-600 hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors duration-fast"
-                >
-                  + {suggestion}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {error && <p className="text-xs text-rose-600 mt-2 font-medium">{error}</p>}
-        </div>
-      )}
-
-      <div className="mt-3">
-        {items.length === 0 ? (
-          <p className="text-xs text-slate-400 italic">None defined yet.</p>
-        ) : (
-          <ul className="flex flex-wrap gap-1.5">
-            {items.map((item, index) => (
-              <li key={`${item}-${index}`} className={cx('chip', tone === 'brand' && 'bg-brand-50 border-brand-200 text-brand-800')}>
-                {item}
-                <button
-                  type="button"
-                  onClick={() => onRemove(index)}
-                  className="text-slate-400 hover:text-rose-600 transition-colors duration-fast rounded"
-                  aria-label={`Remove ${item}`}
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
+    <Link
+      to={to}
+      className="rounded-card border border-slate-200 bg-white px-4 py-3 transition duration-fast
+                 hover:border-slate-300 focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2
+                 focus-visible:ring-offset-slate-50 block"
+      aria-label={`${label}: ${value}`}
+    >
+      {body}
+    </Link>
   );
 };
 
+/** Read-only criterion row used by the view state. */
+const CriterionRow = ({ icon: Icon, label, children, empty }) => (
+  <div className="py-2.5">
+    <p className="text-label uppercase text-slate-500 inline-flex items-center gap-1.5">
+      {Icon && <Icon className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />}
+      {label}
+    </p>
+    <div className="mt-1.5">
+      {empty ? <p className="text-meta text-slate-400 italic">Not set</p> : children}
+    </div>
+  </div>
+);
+
 /**
- * Job workspace: metrics, the search criteria that drive scoring, and the
- * extracted job-description text.
+ * Job control centre.
+ *
+ * The operational home for one vacancy: what the role is, how its pipeline is
+ * doing, who the strongest candidates are, what it screens for, and what to do
+ * next. Screening criteria are read-only until explicitly edited, so the page
+ * reads as a dashboard rather than a permanently open form.
  */
 const JobDetails = () => {
   const { id } = useParams();
-  const navigate = useNavigate();
   const toast = useToast();
 
-  const { data, error, loading, refetch } = useApiResource((config) => getJobById(id, config), [id]);
-  const job = data?.data;
+  const { data: jobData, error, loading, refetch } = useApiResource((config) => getJobById(id, config), [id]);
+  const { data: summaryData, refetch: refetchSummary } = useApiResource(
+    (config) => getJobSummary(id, config),
+    [id]
+  );
+  const { data: topData } = useApiResource(
+    (config) => getCandidates(id, { sort: 'score_desc', limit: 5, minScore: 0 }, config),
+    [id]
+  );
 
-  const [criteria, setCriteria] = useState(null);
-  const [isDirty, setIsDirty] = useState(false);
+  const job = jobData?.data;
+  const stats = summaryData?.data?.stats;
+  const threshold = summaryData?.data?.strongMatchThreshold ?? 80;
+
+  const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [validationError, setValidationError] = useState('');
+  const [draft, setDraft] = useState(null);
 
-  // Load the server state into the editable form whenever the job is (re)fetched.
+  // The editable copy is seeded from the server whenever the job (re)loads.
   useEffect(() => {
     if (!job) return;
     const reqs = job.requirements || {};
-    setCriteria({
+    setDraft({
       requiredSkills: reqs.requiredSkills || [],
       preferredSkills: reqs.preferredSkills || [],
       searchKeywords: reqs.searchKeywords || [],
@@ -204,69 +161,58 @@ const JobDetails = () => {
       salaryMax: reqs.salaryMax ?? '',
       salaryCurrency: reqs.salaryCurrency || 'INR'
     });
-    setIsDirty(false);
   }, [job]);
 
-  const metrics = job?.metrics || {};
-  const tiers = metrics.scoreTiers || {};
+  const reqs = job?.requirements || {};
+  const status = STATUS_META[summaryData?.data ? deriveStatus(stats) : 'NEW'] || STATUS_META.NEW;
 
-  const updateCriteria = (changes) => {
-    setCriteria((prev) => ({ ...prev, ...changes }));
-    setIsDirty(true);
+  const topCandidates = useMemo(
+    () => (topData?.data || []).filter((c) => c.matchAnalysis?.overallScore !== undefined),
+    [topData]
+  );
+
+  const update = (changes) => {
+    setDraft((prev) => ({ ...prev, ...changes }));
     setValidationError('');
   };
 
-  const addTo = (key) => (value) => updateCriteria({ [key]: [...criteria[key], value] });
-  const removeFrom = (key) => (index) => updateCriteria({ [key]: criteria[key].filter((_, i) => i !== index) });
-
   const handleSave = async () => {
-    const minExp = parseFloat(criteria.minimumExperience);
-    const maxExp = criteria.maximumExperience === '' ? null : parseFloat(criteria.maximumExperience);
-    const salMin = criteria.salaryMin === '' ? null : parseFloat(criteria.salaryMin);
-    const salMax = criteria.salaryMax === '' ? null : parseFloat(criteria.salaryMax);
+    const minE = draft.minimumExperience === '' ? 0 : parseFloat(draft.minimumExperience);
+    const maxE = draft.maximumExperience === '' ? null : parseFloat(draft.maximumExperience);
+    const salMin = draft.salaryMin === '' ? null : parseFloat(draft.salaryMin);
+    const salMax = draft.salaryMax === '' ? null : parseFloat(draft.salaryMax);
 
-    if (Number.isNaN(minExp) || minExp < 0) {
-      setValidationError('Minimum experience must be zero or greater.');
-      return;
-    }
-    if (maxExp !== null && (Number.isNaN(maxExp) || maxExp < minExp)) {
-      setValidationError('Maximum experience cannot be less than the minimum.');
-      return;
+    if (Number.isNaN(minE) || minE < 0) return setValidationError('Minimum experience must be zero or greater.');
+    if (maxE !== null && (Number.isNaN(maxE) || maxE < minE)) {
+      return setValidationError('Maximum experience cannot be less than the minimum.');
     }
     if (salMin !== null && (Number.isNaN(salMin) || salMin < 0)) {
-      setValidationError('Minimum salary cannot be negative.');
-      return;
+      return setValidationError('Minimum salary cannot be negative.');
     }
-    if (salMax !== null && (Number.isNaN(salMax) || salMax < 0)) {
-      setValidationError('Maximum salary cannot be negative.');
-      return;
-    }
-    if (salMin !== null && salMax !== null && salMax < salMin) {
-      setValidationError('Maximum salary cannot be less than the minimum.');
-      return;
+    if (salMax !== null && salMin !== null && salMax < salMin) {
+      return setValidationError('Maximum salary cannot be less than the minimum.');
     }
 
     setSaving(true);
-    setValidationError('');
     try {
       await updateJobCriteria(id, {
-        requiredSkills: criteria.requiredSkills,
-        preferredSkills: criteria.preferredSkills,
-        searchKeywords: criteria.searchKeywords,
-        preferredLocations: criteria.preferredLocations,
-        qualifications: criteria.qualifications,
-        minimumExperience: minExp,
-        maximumExperience: maxExp,
+        requiredSkills: draft.requiredSkills,
+        preferredSkills: draft.preferredSkills,
+        searchKeywords: draft.searchKeywords,
+        preferredLocations: draft.preferredLocations,
+        qualifications: draft.qualifications,
+        minimumExperience: minE,
+        maximumExperience: maxE,
         salaryMin: salMin,
         salaryMax: salMax,
-        salaryCurrency: criteria.salaryCurrency
+        salaryCurrency: draft.salaryCurrency
       });
       await refetch();
-      setIsDirty(false);
+      setEditing(false);
       toast.success(
-        metrics.analyzedCount > 0
+        stats?.analyzedCount > 0
           ? 'Criteria saved. Re-score candidates to apply the new requirements.'
-          : 'Search criteria saved.'
+          : 'Screening criteria saved.'
       );
     } catch (err) {
       setValidationError(toApiError(err).message);
@@ -279,7 +225,7 @@ const JobDetails = () => {
     setAnalyzing(true);
     try {
       const response = await analyzeAllCandidates(id);
-      await refetch();
+      await Promise.all([refetch(), refetchSummary()]);
       toast.success(`Re-scored ${response.data?.analyzed ?? 0} candidate${response.data?.analyzed === 1 ? '' : 's'}.`);
     } catch (err) {
       toast.error(toApiError(err).message);
@@ -288,18 +234,16 @@ const JobDetails = () => {
     }
   };
 
-  const jdPreview = useMemo(() => (job?.jdText || '').trim(), [job]);
-
   /* -------------------------------------------------------------- states --- */
 
   if (loading) {
     return (
       <div className="space-y-5">
-        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-3 w-48" />
         <Skeleton className="h-8 w-72" />
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {Array.from({ length: 4 }, (_, i) => (
-            <Skeleton key={i} className="h-28 rounded-card" />
+            <Skeleton key={i} className="h-20 rounded-card" />
           ))}
         </div>
         <Skeleton className="h-64 rounded-card" />
@@ -311,7 +255,7 @@ const JobDetails = () => {
     return (
       <div className="space-y-5">
         <Link to="/jobs" className="text-meta font-medium text-slate-500 hover:text-slate-900">
-          ← Jobs
+          ← All jobs
         </Link>
         {error.status === 404 ? (
           <EmptyState
@@ -331,22 +275,50 @@ const JobDetails = () => {
     );
   }
 
-  if (!job || !criteria) return null;
+  if (!job || !draft) return null;
+
+  const hasCandidates = (stats?.candidateCount ?? 0) > 0;
 
   return (
     <div className="space-y-5">
+      {/* Breadcrumb */}
+      <nav aria-label="Breadcrumb" className="text-meta text-slate-500">
+        <ol className="flex flex-wrap items-center gap-1.5">
+          <li>
+            <Link to="/jobs" className="hover:text-slate-900 transition-colors duration-fast font-medium">
+              Jobs
+            </Link>
+          </li>
+          <li aria-hidden="true" className="text-slate-300">/</li>
+          <li className="text-slate-900 font-semibold truncate max-w-[20rem]" aria-current="page">
+            {job.title}
+          </li>
+        </ol>
+      </nav>
+
       <PageHeader
-        backTo="/jobs"
-        backLabel="Jobs"
-        eyebrow="Job workspace"
+        eyebrow="Job control centre"
         title={job.title}
+        description={
+          <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="inline-flex items-center gap-1.5">
+              <FileText className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
+              {job.jdFileName}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
+              Created {formatDate(job.createdAt)}
+            </span>
+            <Badge variant={status.variant}>{status.label}</Badge>
+          </span>
+        }
         actions={
           <>
             <Link to={`/jobs/${id}/import`} className="btn btn-md btn-secondary">
               <DownloadCloud className="w-4 h-4" aria-hidden="true" />
               Import candidates
             </Link>
-            <Link to={`/candidates?jobId=${id}&sort=score_desc`} className="btn btn-md btn-primary">
+            <Link to={`/jobs/${id}/candidates`} className="btn btn-md btn-primary">
               <Users className="w-4 h-4" aria-hidden="true" />
               View candidates
             </Link>
@@ -354,259 +326,395 @@ const JobDetails = () => {
         }
       />
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-500">
-        <span className="inline-flex items-center gap-1.5">
-          <FileText className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
-          <span className="font-mono truncate max-w-[18rem]" title={job.jdFileName}>
-            {job.jdFileName}
-          </span>
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <Calendar className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
-          Created {formatDate(job.createdAt)}
-        </span>
-        {isDirty && <Badge variant="warning">Unsaved changes</Badge>}
-      </div>
-
-      {/* Metrics — each card links to the matching candidate view */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
+      {/* Candidate snapshot — values come from the job summary API */}
+      <section aria-label="Candidate snapshot" className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <SnapshotTile
           label="Candidates"
-          value={metrics.candidatesCount || 0}
+          value={stats?.candidateCount ?? '—'}
           icon={Users}
           tone="brand"
-          to={`/candidates?jobId=${id}&sort=score_desc`}
-          subtitle="Parsed for this role"
+          to={`/jobs/${id}/candidates`}
         />
-        <StatCard
-          label="Scored"
-          value={metrics.analyzedCount || 0}
+        <SnapshotTile
+          label={`${threshold}%+ matches`}
+          value={stats?.strongMatchCount ?? '—'}
+          icon={Award}
+          tone="emerald"
+          to={`/jobs/${id}/candidates?minScore=${threshold}&sort=score_desc`}
+          hint="Strong alignment"
+        />
+        <SnapshotTile
+          label="Shortlisted"
+          value={stats?.shortlistedCount ?? '—'}
+          icon={UserCheck}
+          tone="emerald"
+          to={`/jobs/${id}/candidates?hrStatus=SHORTLISTED`}
+        />
+        <SnapshotTile
+          label="Best match"
+          value={stats?.bestMatchScore === null || stats?.bestMatchScore === undefined ? '—' : `${stats.bestMatchScore}%`}
           icon={Sparkles}
           tone="violet"
-          subtitle={
-            metrics.candidatesCount > 0
-              ? `${Math.round(((metrics.analyzedCount || 0) / metrics.candidatesCount) * 100)}% of applicants`
-              : 'No candidates yet'
-          }
+          hint={stats?.averageMatchScore !== null && stats?.averageMatchScore !== undefined ? `Average ${stats.averageMatchScore}%` : 'Not scored yet'}
         />
-        <StatCard
-          label="90%+ match"
-          value={tiers.tier90 || 0}
-          icon={Sparkles}
-          tone="emerald"
-          to={`/candidates?jobId=${id}&minScore=90&sort=score_desc`}
-          subtitle="Excellent alignment"
+      </section>
+
+      {/* Stale-analysis prompt */}
+      {hasCandidates && stats.analyzedCount < stats.candidateCount && (
+        <InlineAlert
+          tone="warning"
+          title="Some candidates are not scored"
+          message={`${stats.candidateCount - stats.analyzedCount} candidate(s) on this role have not been scored against the current criteria.`}
         />
-        <StatCard
-          label="80–89% match"
-          value={tiers.tier80_89 || 0}
-          icon={Sparkles}
-          tone="amber"
-          to={`/candidates?jobId=${id}&minScore=80&maxScore=89&sort=score_desc`}
-          subtitle="Strong alignment"
-        />
-      </div>
+      )}
 
-      {validationError && <InlineAlert tone="error" title="Check the criteria" message={validationError} onDismiss={() => setValidationError('')} />}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* Main column */}
+        <div className="lg:col-span-2 space-y-5">
+          {/* Screening criteria — view state by default */}
+          <Card padding="p-0">
+            <div className="px-5 py-4 border-b border-slate-100">
+              <CardHeader
+                title="Screening criteria"
+                description="What this role screens for. Drives every candidate's relevance score."
+                actions={
+                  editing ? (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={X}
+                        onClick={() => {
+                          setEditing(false);
+                          setValidationError('');
+                          // Discard the draft by re-seeding from the server copy.
+                          const r = job.requirements || {};
+                          setDraft({
+                            requiredSkills: r.requiredSkills || [],
+                            preferredSkills: r.preferredSkills || [],
+                            searchKeywords: r.searchKeywords || [],
+                            preferredLocations: r.preferredLocations || [],
+                            qualifications: r.qualifications || [],
+                            minimumExperience: r.minimumExperience ?? 0,
+                            maximumExperience: r.maximumExperience ?? '',
+                            salaryMin: r.salaryMin ?? '',
+                            salaryMax: r.salaryMax ?? '',
+                            salaryCurrency: r.salaryCurrency || 'INR'
+                          });
+                        }}
+                        disabled={saving}
+                      >
+                        Cancel
+                      </Button>
+                      <Button variant="primary" size="sm" icon={Save} loading={saving} onClick={handleSave}>
+                        Save changes
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button variant="secondary" size="sm" icon={Pencil} onClick={() => setEditing(true)}>
+                      Edit criteria
+                    </Button>
+                  )
+                }
+              />
+            </div>
 
-      {/* Criteria editor */}
-      <Card padding="p-0">
-        <div className="px-5 py-4 border-b border-slate-100">
-          <CardHeader
-            title="Screening criteria"
-            description="These requirements drive the relevance score for every candidate on this role."
-            actions={
-              <Button variant="primary" size="md" icon={Save} loading={saving} onClick={handleSave} disabled={!isDirty}>
-                {isDirty ? 'Save criteria' : 'Saved'}
-              </Button>
-            }
-          />
-        </div>
+            <div className="p-5">
+              {validationError && <InlineAlert tone="error" message={validationError} className="mb-4" />}
 
-        <div className="p-5 space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <CriteriaChips
-              id="required-skills"
-              label="Required skills"
-              description="Mandatory skills. Worth 40 of the 100 score points."
-              icon={Sparkles}
-              items={criteria.requiredSkills}
-              onAdd={addTo('requiredSkills')}
-              onRemove={removeFrom('requiredSkills')}
-              suggestions={SUGGESTIONS.skill}
-              placeholder="e.g. React"
-              tone="brand"
-            />
-            <CriteriaChips
-              id="preferred-skills"
-              label="Preferred skills"
-              description="Nice to have. Worth 10 points."
-              icon={Sparkles}
-              items={criteria.preferredSkills}
-              onAdd={addTo('preferredSkills')}
-              onRemove={removeFrom('preferredSkills')}
-              suggestions={SUGGESTIONS.skill}
-              placeholder="e.g. Docker"
-            />
-            <CriteriaChips
-              id="search-keywords"
-              label="Domain keywords"
-              description="Free-text terms searched across resume content."
-              icon={Search}
-              items={criteria.searchKeywords}
-              onAdd={addTo('searchKeywords')}
-              onRemove={removeFrom('searchKeywords')}
-              placeholder="e.g. EV charging, OCPP"
-            />
-            <CriteriaChips
-              id="locations"
-              label="Preferred locations"
-              description="Used for the location compatibility flag."
-              icon={MapPin}
-              items={criteria.preferredLocations}
-              onAdd={addTo('preferredLocations')}
-              onRemove={removeFrom('preferredLocations')}
-              suggestions={SUGGESTIONS.location}
-              placeholder="e.g. Gurugram"
-            />
-            <CriteriaChips
-              id="qualifications"
-              label="Qualifications"
-              description="Accepted degrees for this role."
-              icon={GraduationCap}
-              items={criteria.qualifications}
-              onAdd={addTo('qualifications')}
-              onRemove={removeFrom('qualifications')}
-              suggestions={SUGGESTIONS.qualification}
-              placeholder="e.g. B.Tech"
-            />
+              {editing ? (
+                <div className="space-y-6 animate-fade-in">
+                  <TokenInput
+                    id="jd-required"
+                    label="Required skills"
+                    description="Worth 40 of the 100 score points."
+                    values={draft.requiredSkills}
+                    onChange={(v) => update({ requiredSkills: v })}
+                    suggestions={SKILL_SUGGESTIONS}
+                    addLabel="Add skill"
+                    disabled={saving}
+                  />
+                  <TokenInput
+                    id="jd-preferred"
+                    label="Preferred skills"
+                    description="Worth 10 points."
+                    values={draft.preferredSkills}
+                    onChange={(v) => update({ preferredSkills: v })}
+                    suggestions={SKILL_SUGGESTIONS}
+                    addLabel="Add skill"
+                    disabled={saving}
+                  />
+                  <TokenInput
+                    id="jd-keywords"
+                    label="Domain keywords"
+                    description="Searched across resume content."
+                    values={draft.searchKeywords}
+                    onChange={(v) => update({ searchKeywords: v })}
+                    addLabel="Add keyword"
+                    tone="keyword"
+                    disabled={saving}
+                  />
 
-            {/* Experience & salary bands */}
-            <div className="rounded-card border border-slate-200 bg-slate-50/70 p-4 space-y-4">
-              <div>
-                <h3 className="text-meta font-semibold text-slate-900 inline-flex items-center gap-1.5">
-                  <Briefcase className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
-                  Experience (years)
-                </h3>
-                <div className="grid grid-cols-2 gap-3 mt-2">
-                  <div>
-                    <label htmlFor="min-exp" className="field-label">Minimum</label>
-                    <input
-                      id="min-exp"
-                      type="number"
-                      min="0"
-                      step="0.5"
-                      className="input h-9"
-                      value={criteria.minimumExperience}
-                      onChange={(e) => updateCriteria({ minimumExperience: e.target.value })}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-2 divider">
+                    <TokenInput
+                      id="jd-locations"
+                      label="Preferred locations"
+                      values={draft.preferredLocations}
+                      onChange={(v) => update({ preferredLocations: v })}
+                      suggestions={LOCATION_SUGGESTIONS}
+                      addLabel="Add location"
+                      disabled={saving}
+                    />
+                    <TokenInput
+                      id="jd-qualifications"
+                      label="Qualifications"
+                      values={draft.qualifications}
+                      onChange={(v) => update({ qualifications: v })}
+                      suggestions={QUALIFICATION_SUGGESTIONS}
+                      addLabel="Add qualification"
+                      disabled={saving}
                     />
                   </div>
-                  <div>
-                    <label htmlFor="max-exp" className="field-label">Maximum</label>
-                    <input
-                      id="max-exp"
-                      type="number"
-                      min="0"
-                      step="0.5"
-                      className="input h-9"
-                      placeholder="No limit"
-                      value={criteria.maximumExperience}
-                      onChange={(e) => updateCriteria({ maximumExperience: e.target.value })}
-                    />
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 divider">
+                    <div>
+                      <p className="text-meta font-semibold text-slate-900">Experience (years)</p>
+                      <div className="grid grid-cols-2 gap-3 mt-2.5">
+                        <div>
+                          <label htmlFor="min-exp" className="field-label">Minimum</label>
+                          <input
+                            id="min-exp"
+                            type="number"
+                            min="0"
+                            step="0.5"
+                            className="input h-9"
+                            value={draft.minimumExperience}
+                            onChange={(e) => update({ minimumExperience: e.target.value })}
+                            disabled={saving}
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="max-exp" className="field-label">Maximum</label>
+                          <input
+                            id="max-exp"
+                            type="number"
+                            min="0"
+                            step="0.5"
+                            className="input h-9"
+                            placeholder="No limit"
+                            value={draft.maximumExperience}
+                            onChange={(e) => update({ maximumExperience: e.target.value })}
+                            disabled={saving}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="text-meta font-semibold text-slate-900">Annual salary band</p>
+                      <div className="grid grid-cols-2 gap-3 mt-2.5">
+                        <div>
+                          <label htmlFor="sal-min" className="field-label">Minimum</label>
+                          <input
+                            id="sal-min"
+                            type="number"
+                            min="0"
+                            step="50000"
+                            className="input h-9"
+                            placeholder="600000"
+                            value={draft.salaryMin}
+                            onChange={(e) => update({ salaryMin: e.target.value })}
+                            disabled={saving}
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="sal-max" className="field-label">Maximum</label>
+                          <input
+                            id="sal-max"
+                            type="number"
+                            min="0"
+                            step="50000"
+                            className="input h-9"
+                            placeholder="1200000"
+                            value={draft.salaryMax}
+                            onChange={(e) => update({ salaryMax: e.target.value })}
+                            disabled={saving}
+                          />
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                /* View state — a readable summary, not a form */
+                <div className="divide-y divide-slate-100">
+                  <CriterionRow icon={Sparkles} label="Required skills" empty={!reqs.requiredSkills?.length}>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(reqs.requiredSkills || []).map((s) => (
+                        <SkillChip key={s}>{s}</SkillChip>
+                      ))}
+                    </div>
+                  </CriterionRow>
 
-              <div>
-                <h3 className="text-meta font-semibold text-slate-900 inline-flex items-center gap-1.5">
-                  <IndianRupee className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
-                  Annual salary band
-                </h3>
-                <div className="grid grid-cols-3 gap-2 mt-2">
-                  <div>
-                    <label htmlFor="sal-min" className="field-label">Minimum</label>
-                    <input
-                      id="sal-min"
-                      type="number"
-                      min="0"
-                      step="50000"
-                      className="input h-9"
-                      placeholder="600000"
-                      value={criteria.salaryMin}
-                      onChange={(e) => updateCriteria({ salaryMin: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="sal-max" className="field-label">Maximum</label>
-                    <input
-                      id="sal-max"
-                      type="number"
-                      min="0"
-                      step="50000"
-                      className="input h-9"
-                      placeholder="1200000"
-                      value={criteria.salaryMax}
-                      onChange={(e) => updateCriteria({ salaryMax: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="sal-currency" className="field-label">Currency</label>
-                    <select
-                      id="sal-currency"
-                      className="select h-9"
-                      value={criteria.salaryCurrency}
-                      onChange={(e) => updateCriteria({ salaryCurrency: e.target.value })}
+                  <CriterionRow icon={Sparkles} label="Preferred skills" empty={!reqs.preferredSkills?.length}>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(reqs.preferredSkills || []).map((s) => (
+                        <SkillChip key={s}>{s}</SkillChip>
+                      ))}
+                    </div>
+                  </CriterionRow>
+
+                  <CriterionRow icon={Search} label="Domain keywords" empty={!reqs.searchKeywords?.length}>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(reqs.searchKeywords || []).map((k) => (
+                        <SkillChip key={k} keyword>
+                          {k}
+                        </SkillChip>
+                      ))}
+                    </div>
+                  </CriterionRow>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
+                    <CriterionRow icon={Briefcase} label="Experience">
+                      <p className="text-body text-slate-900 font-medium">
+                        {reqs.maximumExperience
+                          ? `${reqs.minimumExperience ?? 0} – ${reqs.maximumExperience} years`
+                          : `${reqs.minimumExperience ?? 0}+ years`}
+                      </p>
+                    </CriterionRow>
+
+                    <CriterionRow
+                      icon={IndianRupee}
+                      label="Salary band"
+                      empty={reqs.salaryMin === null && reqs.salaryMax === null}
                     >
-                      <option value="INR">INR</option>
-                      <option value="USD">USD</option>
-                      <option value="EUR">EUR</option>
-                    </select>
+                      <p className="text-body text-slate-900 font-medium">
+                        {formatSalary(reqs.salaryMin, reqs.salaryCurrency, 'Any')} –{' '}
+                        {formatSalary(reqs.salaryMax, reqs.salaryCurrency, 'Any')}
+                      </p>
+                    </CriterionRow>
+
+                    <CriterionRow icon={MapPin} label="Preferred locations" empty={!reqs.preferredLocations?.length}>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(reqs.preferredLocations || []).map((l) => (
+                          <SkillChip key={l}>{l}</SkillChip>
+                        ))}
+                      </div>
+                    </CriterionRow>
+
+                    <CriterionRow icon={GraduationCap} label="Qualifications" empty={!reqs.qualifications?.length}>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(reqs.qualifications || []).map((q) => (
+                          <SkillChip key={q}>{q}</SkillChip>
+                        ))}
+                      </div>
+                    </CriterionRow>
                   </div>
                 </div>
-                <p className="text-xs text-slate-500 mt-2">
-                  {criteria.salaryMin || criteria.salaryMax
-                    ? `${formatSalary(criteria.salaryMin || null, criteria.salaryCurrency, 'Unspecified')} – ${formatSalary(criteria.salaryMax || null, criteria.salaryCurrency, 'Unspecified')}`
-                    : 'No salary band set — the salary compatibility flag stays inconclusive.'}
+              )}
+            </div>
+
+            {hasCandidates && stats.analyzedCount > 0 && !editing && (
+              <div className="px-5 py-4 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <p className="text-meta text-slate-600">
+                  Changed the criteria? Re-score so rankings reflect the current requirements.
                 </p>
+                <Button variant="secondary" size="sm" icon={RefreshCw} loading={analyzing} onClick={handleReanalyze}>
+                  Re-score all
+                </Button>
               </div>
-            </div>
-          </div>
+            )}
+          </Card>
 
-          {metrics.analyzedCount > 0 && (
-            <div className="rounded-card border border-amber-200 bg-amber-50 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <p className="text-meta text-amber-900">
-                {metrics.analyzedCount} candidate{metrics.analyzedCount === 1 ? '' : 's'} already scored. Re-score them
-                after changing criteria so rankings reflect the current requirements.
-              </p>
-              <Button variant="secondary" size="sm" icon={RefreshCw} loading={analyzing} onClick={handleReanalyze}>
-                Re-score all
-              </Button>
+          {/* Job description */}
+          <Card padding="p-0">
+            <div className="px-5 py-4 border-b border-slate-100">
+              <CardHeader
+                title="Job description"
+                description="Text extracted from the uploaded document."
+                actions={
+                  <Badge variant="neutral">{(job.jdText || '').length.toLocaleString('en-IN')} characters</Badge>
+                }
+              />
             </div>
-          )}
+            <div className="p-5">
+              {job.jdText ? (
+                <div className="rounded-control border border-slate-200 bg-slate-50 p-4 max-h-80 overflow-y-auto scroll-slim">
+                  <pre className="text-xs text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">
+                    {job.jdText}
+                  </pre>
+                </div>
+              ) : (
+                <p className="text-meta text-slate-400 italic">No text could be extracted from this job description.</p>
+              )}
+            </div>
+          </Card>
         </div>
-      </Card>
 
-      {/* Job description text */}
-      <Card padding="p-0">
-        <div className="px-5 py-4 border-b border-slate-100">
-          <CardHeader
-            title="Job description"
-            description="Text extracted from the uploaded document, in memory."
-            actions={<Badge variant="neutral">{jdPreview.length.toLocaleString('en-IN')} characters</Badge>}
+        {/* Contextual side panel */}
+        <div className="space-y-5">
+          <TopCandidates
+            candidates={topCandidates.slice(0, 5)}
+            jobTitle={job.title}
+            viewAllTo={`/jobs/${id}/candidates?sort=score_desc`}
           />
-        </div>
-        <div className="p-5">
-          {jdPreview ? (
-            <div className="rounded-control border border-slate-200 bg-slate-50 p-4 max-h-96 overflow-y-auto scroll-slim">
-              <pre className="text-xs text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">{jdPreview}</pre>
+
+          {/* Next action */}
+          <Card>
+            <CardHeader title="Next steps" />
+            <div className="mt-3 space-y-2">
+              {!hasCandidates ? (
+                <>
+                  <p className="text-meta text-slate-600">
+                    No candidates yet. Import resumes to start screening for this role.
+                  </p>
+                  <Link to={`/jobs/${id}/import`} className="btn btn-md btn-primary w-full">
+                    <DownloadCloud className="w-4 h-4" aria-hidden="true" />
+                    Import candidates
+                  </Link>
+                </>
+              ) : stats.pendingReviewCount > 0 ? (
+                <>
+                  <p className="text-meta text-slate-600">
+                    {stats.pendingReviewCount} candidate{stats.pendingReviewCount === 1 ? '' : 's'} waiting on your
+                    review.
+                  </p>
+                  <Link
+                    to={`/jobs/${id}/candidates?hrStatus=REVIEW,NEEDS_REVIEW&sort=score_desc`}
+                    className="btn btn-md btn-primary w-full"
+                  >
+                    <Clock className="w-4 h-4" aria-hidden="true" />
+                    Review candidates
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <p className="text-meta text-slate-600">Every candidate on this role has been screened.</p>
+                  <Link to={`/jobs/${id}/candidates`} className="btn btn-md btn-secondary w-full">
+                    <Users className="w-4 h-4" aria-hidden="true" />
+                    View all candidates
+                  </Link>
+                </>
+              )}
+
+              <Link to={`/jobs/${id}/import`} className="btn btn-md btn-secondary w-full">
+                <DownloadCloud className="w-4 h-4" aria-hidden="true" />
+                Add more resumes
+              </Link>
             </div>
-          ) : (
-            <p className="text-meta text-slate-400 italic">No text could be extracted from this job description.</p>
-          )}
+          </Card>
         </div>
-      </Card>
+      </div>
     </div>
   );
 };
+
+/** Mirrors the backend's derived status from candidate counts. */
+function deriveStatus(stats) {
+  if (!stats || stats.candidateCount === 0) return 'NEW';
+  if (stats.analyzedCount === 0) return 'IMPORTING';
+  if (stats.analyzedCount < stats.candidateCount) return 'READY_FOR_ANALYSIS';
+  return 'COMPLETED';
+}
 
 export default JobDetails;

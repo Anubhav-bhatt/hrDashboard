@@ -1,6 +1,18 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Briefcase, ChevronRight, Github, Linkedin, Mail, MapPin, Phone } from 'lucide-react';
+import {
+  ArrowRight,
+  Briefcase,
+  Check,
+  ChevronRight,
+  Github,
+  HelpCircle,
+  Linkedin,
+  Mail,
+  MapPin,
+  Phone,
+  X as XIcon
+} from 'lucide-react';
 import {
   formatExperience,
   formatPhone,
@@ -32,6 +44,16 @@ const CandidateCard = ({ candidate, actions, showJob = false, className }) => {
   const linkedin = safeExternalUrl(candidate.linkedinUrl);
   const github = safeExternalUrl(candidate.githubUrl);
   const telHref = toTelHref(candidate.phone);
+
+  // Only criteria the job actually defines are shown; a flag the backend could
+  // not evaluate at all is omitted rather than rendered as an empty check.
+  const flags = candidate.compatibilityFlags || {};
+  const compatibility = [
+    { key: 'experienceMatch', label: 'Experience', value: flags.experienceMatch },
+    { key: 'locationMatch', label: 'Location', value: flags.locationMatch },
+    { key: 'qualificationMatch', label: 'Qualification', value: flags.qualificationMatch },
+    { key: 'salaryMatch', label: 'Salary', value: flags.salaryMatch }
+  ].filter((f) => f.value !== undefined);
 
   return (
     <div className={cx('card hover:shadow-card-hover hover:border-slate-300 transition duration-fast', className)}>
@@ -95,6 +117,34 @@ const CandidateCard = ({ candidate, actions, showJob = false, className }) => {
                 {skills.length > 5 && (
                   <span className="chip py-0.5 text-[11px] text-slate-500">+{skills.length - 5} more</span>
                 )}
+              </div>
+            )}
+
+            {/* Requirement compatibility at a glance. A criterion that cannot be
+                assessed is shown as unknown, never as a failure. */}
+            {compatibility.length > 0 && (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2.5">
+                {compatibility.map(({ key, label, value }) => {
+                  const Icon = value === true ? Check : value === false ? XIcon : HelpCircle;
+                  const tone =
+                    value === true ? 'text-emerald-600' : value === false ? 'text-rose-500' : 'text-slate-300';
+                  const title =
+                    value === true
+                      ? `${label}: meets the requirement`
+                      : value === false
+                        ? `${label}: outside the requirement`
+                        : `${label}: not enough data`;
+
+                  return (
+                    <span key={key} className="inline-flex items-center gap-1 text-[11px] text-slate-500" title={title}>
+                      <Icon className={cx('w-3 h-3 shrink-0', tone)} aria-hidden="true" />
+                      {label}
+                      <span className="sr-only">
+                        {value === true ? ' meets requirement' : value === false ? ' outside requirement' : ' unknown'}
+                      </span>
+                    </span>
+                  );
+                })}
               </div>
             )}
 

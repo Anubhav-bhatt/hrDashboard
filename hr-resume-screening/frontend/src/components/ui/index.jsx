@@ -1,6 +1,6 @@
 import React, { forwardRef, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, Check, Copy, Inbox, Loader2, RefreshCw, WifiOff } from 'lucide-react';
+import { AlertCircle, Check, Copy, Inbox, Loader2, RefreshCw, WifiOff, X } from 'lucide-react';
 import { getAvatarClasses, getInitials } from '../../utils/format';
 
 /** Joins class names, dropping falsy entries. */
@@ -474,6 +474,123 @@ export const TabPanel = ({ id, activeId, children, className }) => {
     </div>
   );
 };
+
+/* -------------------------------------------------------------- ProgressBar --- */
+
+/**
+ * Determinate progress bar for long operations such as bulk resume processing.
+ *
+ * Deliberately thin: a batch that runs for minutes should not be represented by
+ * a large spinner that gives no sense of how far along it is.
+ */
+export const ProgressBar = ({ value = 0, max = 100, label, showValue = false, tone = 'brand', className }) => {
+  const pct = max > 0 ? Math.min(Math.max((Number(value) / max) * 100, 0), 100) : 0;
+  const tones = {
+    brand: 'bg-brand-600',
+    success: 'bg-emerald-500',
+    warning: 'bg-amber-500',
+    danger: 'bg-rose-500'
+  };
+
+  return (
+    <div className={className}>
+      {(label || showValue) && (
+        <div className="flex items-center justify-between gap-2 mb-1.5">
+          {label && <span className="text-meta text-slate-600">{label}</span>}
+          {showValue && (
+            <span className="text-meta font-semibold text-slate-800 tabular-nums">
+              {Math.round(value)} / {max}
+            </span>
+          )}
+        </div>
+      )}
+      <div
+        className="h-1.5 w-full rounded-pill bg-slate-200 overflow-hidden"
+        role="progressbar"
+        aria-valuenow={Math.round(Number(value) || 0)}
+        aria-valuemin={0}
+        aria-valuemax={max}
+        aria-label={label || 'Progress'}
+      >
+        <div
+          className={cx('h-full rounded-pill transition-all duration-slow', tones[tone])}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+};
+
+/* -------------------------------------------------------------- StatusBadge --- */
+
+/**
+ * HR review status as a subdued badge. Status is conveyed by both a colour and
+ * its label, never colour alone.
+ */
+export const StatusBadge = ({ status, className }) => {
+  const META = {
+    REVIEW: { label: 'Review', variant: 'neutral' },
+    NEEDS_REVIEW: { label: 'Needs Review', variant: 'warning' },
+    SHORTLISTED: { label: 'Shortlisted', variant: 'success' },
+    NOT_SUITABLE: { label: 'Not Suitable', variant: 'neutral' }
+  };
+  const meta = META[status] || { label: status || 'Unknown', variant: 'neutral' };
+  return (
+    <Badge variant={meta.variant} className={className}>
+      {meta.label}
+    </Badge>
+  );
+};
+
+/* ----------------------------------------------------------------- SkillChip --- */
+
+/**
+ * Skill chip. `matched` marks a skill the job asked for; `missing` marks a
+ * requirement the resume did not evidence; `keyword` distinguishes free-text
+ * domain terms from formal skills.
+ */
+export const SkillChip = ({ children, matched = false, missing = false, keyword = false, onRemove, title, className }) => (
+  <span
+    className={cx(
+      'chip',
+      matched && 'bg-emerald-50 border-emerald-200 text-emerald-800 font-semibold',
+      missing && 'bg-rose-50 border-rose-200 text-rose-700',
+      keyword && 'bg-violet-50 border-violet-200 text-violet-800',
+      className
+    )}
+    title={title}
+  >
+    {matched && <Check className="w-3 h-3 shrink-0" aria-hidden="true" />}
+    {children}
+    {onRemove && (
+      <button
+        type="button"
+        onClick={onRemove}
+        className="text-current/50 hover:text-rose-600 transition-colors duration-fast rounded shrink-0"
+        aria-label={`Remove ${typeof children === 'string' ? children : 'item'}`}
+      >
+        <X className="w-3 h-3" />
+      </button>
+    )}
+  </span>
+);
+
+/* ---------------------------------------------------------------- FilterChip --- */
+
+/** Active-filter chip with a remove affordance. Visually lightweight. */
+export const FilterChip = ({ label, onRemove }) => (
+  <span className="chip">
+    {label}
+    <button
+      type="button"
+      onClick={onRemove}
+      className="text-slate-400 hover:text-rose-600 transition-colors duration-fast rounded"
+      aria-label={`Remove filter: ${label}`}
+    >
+      <X className="w-3 h-3" />
+    </button>
+  </span>
+);
 
 /* ------------------------------------------------------------------ Spinner --- */
 

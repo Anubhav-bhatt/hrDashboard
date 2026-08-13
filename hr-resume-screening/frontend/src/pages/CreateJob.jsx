@@ -1,29 +1,59 @@
 import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Sparkles, UploadCloud, X } from 'lucide-react';
-import { createJob, toApiError } from '../services/api';
+import { Briefcase, FileText, GraduationCap, IndianRupee, MapPin, Search, Sparkles } from 'lucide-react';
+import { createJob, updateJobCriteria, toApiError } from '../services/api';
 import { useToast } from '../components/ToastProvider';
-import { Button, Card, InlineAlert, PageHeader, cx } from '../components/ui';
-import { formatFileSize } from '../utils/format';
+import { Button, InlineAlert, PageHeader } from '../components/ui';
+import FormSection from '../components/ui/FormSection';
+import FileDropZone from '../components/ui/FileDropZone';
+import TokenInput from '../components/ui/TokenInput';
 
 const ALLOWED_EXTENSIONS = ['.pdf', '.docx', '.txt'];
 const MAX_SIZE_BYTES = 5 * 1024 * 1024;
 
+const SKILL_SUGGESTIONS = [
+  'React', 'TypeScript', 'JavaScript', 'Node.js', 'Express', 'PostgreSQL', 'MongoDB',
+  'Python', 'Java', 'Spring Boot', 'AWS', 'Docker', 'Kubernetes', 'REST API', 'GraphQL',
+  'Next.js', 'Redux', 'Tailwind CSS', 'Git', 'CI/CD', 'Jest'
+];
+
+const LOCATION_SUGGESTIONS = [
+  'Gurugram', 'Noida', 'Delhi', 'Bengaluru', 'Hyderabad', 'Pune', 'Mumbai', 'Chennai', 'Remote'
+];
+
+const QUALIFICATION_SUGGESTIONS = ['B.Tech', 'B.E.', 'M.Tech', 'BCA', 'MCA', 'B.Sc', 'MBA', 'Diploma', 'Any Graduate'];
+
 /**
- * Job creation. The uploaded job description is parsed server-side into
- * structured requirements, which then drive candidate scoring.
+ * Job creation.
+ *
+ * One route, three numbered sections: identify the role, upload its description,
+ * then describe the ideal candidate. The job is created from the first two
+ * sections; any criteria supplied in section three are saved immediately
+ * afterwards, so the recruiter reaches a fully configured job in one pass
+ * instead of creating a job and then editing it.
  */
 const CreateJob = () => {
   const navigate = useNavigate();
   const toast = useToast();
-  const inputRef = useRef(null);
 
   const [title, setTitle] = useState('');
   const [file, setFile] = useState(null);
-  const [dragActive, setDragActive] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState('');
+
+  // Section 3 — every field optional; the JD parser fills gaps on creation.
+  const [requiredSkills, setRequiredSkills] = useState([]);
+  const [preferredSkills, setPreferredSkills] = useState([]);
+  const [searchKeywords, setSearchKeywords] = useState([]);
+  const [preferredLocations, setPreferredLocations] = useState([]);
+  const [qualifications, setQualifications] = useState([]);
+  const [minExp, setMinExp] = useState('');
+  const [maxExp, setMaxExp] = useState('');
+  const [salaryMin, setSalaryMin] = useState('');
+  const [salaryMax, setSalaryMax] = useState('');
+
+  const titleRef = useRef(null);
 
   const validateFile = (selected) => {
     if (!selected) return;
@@ -43,12 +73,16 @@ const CreateJob = () => {
     setFile(selected);
   };
 
-  const handleDrop = (event) => {
-    event.preventDefault();
-    setDragActive(false);
-    const dropped = event.dataTransfer?.files?.[0];
-    if (dropped) validateFile(dropped);
-  };
+  const hasCriteria =
+    requiredSkills.length ||
+    preferredSkills.length ||
+    searchKeywords.length ||
+    preferredLocations.length ||
+    qualifications.length ||
+    minExp !== '' ||
+    maxExp !== '' ||
+    salaryMin !== '' ||
+    salaryMax !== '';
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -57,8 +91,25 @@ const CreateJob = () => {
     const nextErrors = {};
     if (!title.trim()) nextErrors.title = 'Enter the job title candidates are applying for.';
     if (!file) nextErrors.file = 'Attach the job description document.';
+
+    // Numeric ranges are checked before anything is created.
+    const minE = minExp === '' ? null : parseFloat(minExp);
+    const maxE = maxExp === '' ? null : parseFloat(maxExp);
+    const salMin = salaryMin === '' ? null : parseFloat(salaryMin);
+    const salMax = salaryMax === '' ? null : parseFloat(salaryMax);
+
+    if (maxE !== null && minE !== null && maxE < minE) {
+      nextErrors.experience = 'Maximum experience cannot be less than the minimum.';
+    }
+    if (salMax !== null && salMin !== null && salMax < salMin) {
+      nextErrors.salary = 'Maximum salary cannot be less than the minimum.';
+    }
+
     setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) return;
+    if (Object.keys(nextErrors).length > 0) {
+      if (nextErrors.title) titleRef.current?.focus();
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -69,12 +120,37 @@ const CreateJob = () => {
       const response = await createJob(formData);
       const jobId = response.data?._id || response.data?.id;
 
-      if (jobId) {
-        toast.success(`"${response.data.title}" created. Requirements extracted from the job description.`);
-        navigate(`/jobs/${jobId}`);
-      } else {
+      if (!jobId) {
         setFormError(response.message || 'The job could not be created.');
+        return;
       }
+
+      // Apply any criteria the recruiter set here, so they do not have to open
+      // the job afterwards just to save them.
+      if (hasCriteria) {
+        try {
+          await updateJobCriteria(jobId, {
+            ...(requiredSkills.length ? { requiredSkills } : {}),
+            ...(preferredSkills.length ? { preferredSkills } : {}),
+            ...(searchKeywords.length ? { searchKeywords } : {}),
+            ...(preferredLocations.length ? { preferredLocations } : {}),
+            ...(qualifications.length ? { qualifications } : {}),
+            ...(minE !== null ? { minimumExperience: minE } : {}),
+            ...(maxE !== null ? { maximumExperience: maxE } : {}),
+            ...(salMin !== null ? { salaryMin: salMin } : {}),
+            ...(salMax !== null ? { salaryMax: salMax } : {})
+          });
+        } catch (criteriaError) {
+          // The job exists; only the extra criteria failed. Say so plainly and
+          // still take the recruiter to the job rather than losing their work.
+          toast.error(`Job created, but the criteria could not be saved: ${toApiError(criteriaError).message}`);
+          navigate(`/jobs/${jobId}`);
+          return;
+        }
+      }
+
+      toast.success(`"${response.data.title}" created. Requirements extracted from the job description.`);
+      navigate(`/jobs/${jobId}`);
     } catch (error) {
       setFormError(toApiError(error).message);
     } finally {
@@ -88,117 +164,240 @@ const CreateJob = () => {
         backTo="/jobs"
         backLabel="Jobs"
         eyebrow="New role"
-        title="Create a recruitment job"
-        description="Upload the job description. Its requirements are extracted automatically and used to score every candidate you import."
+        title="Create job"
+        description="Set up the role, upload the job description, and define what an ideal candidate looks like."
       />
 
       {formError && <InlineAlert tone="error" title="Could not create job" message={formError} />}
 
-      <Card padding="card-pad-lg">
-        <form onSubmit={handleSubmit} className="space-y-6" noValidate>
-          <div>
-            <label htmlFor="jobTitle" className="field-label">
-              Job title <span className="text-rose-500" aria-hidden="true">*</span>
-            </label>
-            <input
-              id="jobTitle"
-              type="text"
-              className={cx('input', errors.title && 'input-error')}
-              placeholder="e.g. Senior React Developer"
-              value={title}
-              onChange={(e) => {
-                setTitle(e.target.value);
-                if (errors.title) setErrors((p) => ({ ...p, title: undefined }));
-              }}
+      <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+        {/* ------------------------------------------------ 01 Job information */}
+        <FormSection
+          step="01"
+          title="Job information"
+          description="How this role appears across the dashboard."
+        >
+          <label htmlFor="jobTitle" className="field-label">
+            Job title <span className="text-rose-500" aria-hidden="true">*</span>
+          </label>
+          <input
+            ref={titleRef}
+            id="jobTitle"
+            type="text"
+            className={`input ${errors.title ? 'input-error' : ''}`}
+            placeholder="e.g. Senior React Developer"
+            value={title}
+            onChange={(e) => {
+              setTitle(e.target.value);
+              if (errors.title) setErrors((p) => ({ ...p, title: undefined }));
+            }}
+            disabled={submitting}
+            aria-invalid={Boolean(errors.title)}
+            aria-describedby={errors.title ? 'title-error' : 'title-hint'}
+          />
+          {errors.title ? (
+            <p id="title-error" className="text-xs text-rose-600 mt-1.5 font-medium">
+              {errors.title}
+            </p>
+          ) : (
+            <p id="title-hint" className="text-xs text-slate-500 mt-1.5">
+              Used for role-relevance scoring, so match it to the advertised title.
+            </p>
+          )}
+        </FormSection>
+
+        {/* ----------------------------------------------- 02 Job description */}
+        <FormSection
+          step="02"
+          title="Job description"
+          description="Requirements are extracted from this document automatically."
+        >
+          <FileDropZone
+            id="jdFile"
+            accept=".pdf,.docx,.txt"
+            title="Drag and drop the job description, or choose a file"
+            hint="PDF, DOCX or TXT · up to 5 MB · processed in memory, never written to disk"
+            files={file ? [file] : []}
+            onFiles={(files) => validateFile(files[0])}
+            onClear={() => {
+              setFile(null);
+              setErrors((p) => ({ ...p, file: undefined }));
+            }}
+            error={errors.file}
+            disabled={submitting}
+          />
+        </FormSection>
+
+        {/* --------------------------------------- 03 Candidate search criteria */}
+        <FormSection
+          step="03"
+          title="Candidate search criteria"
+          description="Leave anything blank and it will be taken from the job description instead."
+          optional
+        >
+          <div className="space-y-6">
+            <TokenInput
+              id="required-skills"
+              label="Required skills"
+              description="Core skills, worth 40 of the 100 score points."
+              values={requiredSkills}
+              onChange={setRequiredSkills}
+              suggestions={SKILL_SUGGESTIONS}
+              placeholder="e.g. React"
+              addLabel="Add skill"
               disabled={submitting}
-              aria-invalid={Boolean(errors.title)}
-              aria-describedby={errors.title ? 'title-error' : 'title-hint'}
             />
-            {errors.title ? (
-              <p id="title-error" className="text-xs text-rose-600 mt-1.5 font-medium">
-                {errors.title}
-              </p>
-            ) : (
-              <p id="title-hint" className="text-xs text-slate-500 mt-1.5">
-                Used for role-relevance scoring, so match it to the advertised title.
-              </p>
-            )}
-          </div>
 
-          <div>
-            <span className="field-label">
-              Job description file <span className="text-rose-500" aria-hidden="true">*</span>
-            </span>
+            <TokenInput
+              id="preferred-skills"
+              label="Preferred skills"
+              description="Nice to have, worth 10 points."
+              values={preferredSkills}
+              onChange={setPreferredSkills}
+              suggestions={SKILL_SUGGESTIONS}
+              placeholder="e.g. Docker"
+              addLabel="Add skill"
+              disabled={submitting}
+            />
 
-            {!file ? (
-              <div
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setDragActive(true);
-                }}
-                onDragLeave={(e) => {
-                  e.preventDefault();
-                  setDragActive(false);
-                }}
-                onDrop={handleDrop}
-                className={cx(
-                  'border-2 border-dashed rounded-card p-8 text-center transition-colors duration-fast',
-                  dragActive ? 'border-brand-500 bg-brand-50/60' : 'border-slate-300 bg-slate-50/60 hover:bg-slate-100/60',
-                  errors.file && 'border-rose-300 bg-rose-50/40'
-                )}
-              >
-                <input
-                  ref={inputRef}
-                  id="fileUpload"
-                  type="file"
-                  accept=".pdf,.docx,.txt"
-                  onChange={(e) => validateFile(e.target.files?.[0])}
-                  className="sr-only"
-                  aria-describedby={errors.file ? 'file-error' : 'file-hint'}
-                />
-                <label htmlFor="fileUpload" className="cursor-pointer block">
-                  <span className="mx-auto w-11 h-11 bg-white rounded-pill border border-slate-200 flex items-center justify-center shadow-card mb-3">
-                    <UploadCloud className="w-5 h-5 text-brand-600" aria-hidden="true" />
-                  </span>
-                  <span className="text-card-title text-slate-900 block">Click to upload, or drag the file here</span>
-                  <span id="file-hint" className="text-xs text-slate-500 mt-1 block">
-                    PDF, DOCX or TXT · up to 5 MB · processed in memory, never written to disk
-                  </span>
-                </label>
-              </div>
-            ) : (
-              <div className="rounded-card border border-slate-200 bg-slate-50 p-4 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className="w-9 h-9 rounded-control bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">
-                    <FileText className="w-4 h-4" aria-hidden="true" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="text-meta font-semibold text-slate-900 truncate">{file.name}</p>
-                    <p className="text-xs text-slate-500">{formatFileSize(file.size)}</p>
+            <TokenInput
+              id="search-keywords"
+              label="Domain keywords"
+              description="Free-text terms searched across resume content."
+              values={searchKeywords}
+              onChange={setSearchKeywords}
+              placeholder="e.g. OCPP, EV charging"
+              addLabel="Add keyword"
+              tone="keyword"
+              disabled={submitting}
+            />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-2 divider">
+              <TokenInput
+                id="locations"
+                label="Preferred locations"
+                values={preferredLocations}
+                onChange={setPreferredLocations}
+                suggestions={LOCATION_SUGGESTIONS}
+                placeholder="e.g. Gurugram"
+                addLabel="Add location"
+                disabled={submitting}
+              />
+
+              <TokenInput
+                id="qualifications"
+                label="Qualifications"
+                values={qualifications}
+                onChange={setQualifications}
+                suggestions={QUALIFICATION_SUGGESTIONS}
+                placeholder="e.g. B.Tech"
+                addLabel="Add qualification"
+                disabled={submitting}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 divider">
+              <div>
+                <p className="text-meta font-semibold text-slate-900 inline-flex items-center gap-1.5">
+                  <Briefcase className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
+                  Experience
+                </p>
+                <div className="grid grid-cols-2 gap-3 mt-2.5">
+                  <div>
+                    <label htmlFor="min-exp" className="field-label">Minimum (years)</label>
+                    <input
+                      id="min-exp"
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      className="input h-9"
+                      placeholder="2"
+                      value={minExp}
+                      onChange={(e) => {
+                        setMinExp(e.target.value);
+                        setErrors((p) => ({ ...p, experience: undefined }));
+                      }}
+                      disabled={submitting}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="max-exp" className="field-label">Maximum</label>
+                    <input
+                      id="max-exp"
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      className="input h-9"
+                      placeholder="No limit"
+                      value={maxExp}
+                      onChange={(e) => {
+                        setMaxExp(e.target.value);
+                        setErrors((p) => ({ ...p, experience: undefined }));
+                      }}
+                      disabled={submitting}
+                    />
                   </div>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="iconSm"
-                  icon={X}
-                  onClick={() => {
-                    setFile(null);
-                    if (inputRef.current) inputRef.current.value = '';
-                  }}
-                  disabled={submitting}
-                  aria-label="Remove selected file"
-                />
+                {errors.experience && (
+                  <p className="text-xs text-rose-600 mt-1.5 font-medium">{errors.experience}</p>
+                )}
               </div>
-            )}
 
-            {errors.file && (
-              <p id="file-error" className="text-xs text-rose-600 mt-1.5 font-medium">
-                {errors.file}
-              </p>
-            )}
+              <div>
+                <p className="text-meta font-semibold text-slate-900 inline-flex items-center gap-1.5">
+                  <IndianRupee className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
+                  Annual salary band
+                </p>
+                <div className="grid grid-cols-2 gap-3 mt-2.5">
+                  <div>
+                    <label htmlFor="sal-min" className="field-label">Minimum (₹)</label>
+                    <input
+                      id="sal-min"
+                      type="number"
+                      min="0"
+                      step="50000"
+                      className="input h-9"
+                      placeholder="600000"
+                      value={salaryMin}
+                      onChange={(e) => {
+                        setSalaryMin(e.target.value);
+                        setErrors((p) => ({ ...p, salary: undefined }));
+                      }}
+                      disabled={submitting}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="sal-max" className="field-label">Maximum (₹)</label>
+                    <input
+                      id="sal-max"
+                      type="number"
+                      min="0"
+                      step="50000"
+                      className="input h-9"
+                      placeholder="1200000"
+                      value={salaryMax}
+                      onChange={(e) => {
+                        setSalaryMax(e.target.value);
+                        setErrors((p) => ({ ...p, salary: undefined }));
+                      }}
+                      disabled={submitting}
+                    />
+                  </div>
+                </div>
+                {errors.salary && <p className="text-xs text-rose-600 mt-1.5 font-medium">{errors.salary}</p>}
+              </div>
+            </div>
           </div>
+        </FormSection>
 
-          <div className="pt-5 divider flex items-center justify-end gap-2">
+        {/* Actions */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <p className="text-xs text-slate-500">
+            {hasCriteria
+              ? 'Your criteria will be saved with the job.'
+              : 'Requirements will be extracted from the job description.'}
+          </p>
+          <div className="flex items-center justify-end gap-2">
             <Button variant="ghost" size="md" onClick={() => navigate('/jobs')} disabled={submitting}>
               Cancel
             </Button>
@@ -206,8 +405,8 @@ const CreateJob = () => {
               {submitting ? 'Extracting requirements…' : 'Create job'}
             </Button>
           </div>
-        </form>
-      </Card>
+        </div>
+      </form>
     </div>
   );
 };

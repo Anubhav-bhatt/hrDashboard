@@ -1,0 +1,257 @@
+/**
+ * Colour tokens
+ * -------------
+ * Every colour in the application resolves through these variables (see
+ * tailwind.config.js). Redefining them under `.dark` re-themes the whole app,
+ * so components never carry a second set of `dark:` classes.
+ *
+ * Values are space-separated RGB channels so Tailwind's opacity modifiers
+ * (`bg-white/60`) keep working.
+ *
+ * In dark mode the neutral ramp is deliberately INVERTED: `slate-50` becomes the
+ * darkest surface and `slate-900` the lightest text. The app's markup already
+ * reads "light surface, dark text", so inverting the ramp flips it coherently
+ * rather than requiring every element to be revisited.
+ */
+
+@layer base {
+  :root {
+    /* ---------------------------------------------------------- surfaces --- */
+    /* The card/panel surface. Not literal white — it is the elevated surface. */
+    --c-white: 255 255 255;
+
+    /* Neutral ramp: 50 lightest → 950 darkest. */
+    --c-slate-50: 248 250 252;
+    --c-slate-100: 241 245 249;
+    --c-slate-200: 226 232 240;
+    --c-slate-300: 203 213 225;
+    --c-slate-400: 148 163 184;
+    --c-slate-500: 100 116 139;
+    --c-slate-600: 71 85 105;
+    --c-slate-700: 51 65 85;
+    --c-slate-800: 30 41 59;
+    --c-slate-900: 15 23 42;
+    --c-slate-950: 2 6 23;
+
+    /* ------------------------------------------------------------- brand --- */
+    --c-brand-50: 240 247 255;
+    --c-brand-100: 224 239 254;
+    --c-brand-200: 186 224 253;
+    --c-brand-300: 125 200 251;
+    --c-brand-400: 56 170 245;
+    --c-brand-500: 14 140 230;
+    --c-brand-600: 2 112 196;
+    --c-brand-700: 2 89 158;
+    --c-brand-800: 6 75 130;
+    --c-brand-900: 11 63 108;
+    --c-brand-950: 7 40 71;
+
+    /* --------------------------------------------------------- semantics --- */
+    --c-emerald-50: 236 253 245;
+    --c-emerald-100: 209 250 229;
+    --c-emerald-200: 167 243 208;
+    --c-emerald-300: 110 231 183;
+    --c-emerald-400: 52 211 153;
+    --c-emerald-500: 16 185 129;
+    --c-emerald-600: 5 150 105;
+    --c-emerald-700: 4 120 87;
+    --c-emerald-800: 6 95 70;
+    --c-emerald-900: 6 78 59;
+    --c-emerald-950: 2 44 34;
+
+    --c-amber-50: 255 251 235;
+    --c-amber-100: 254 243 199;
+    --c-amber-200: 253 230 138;
+    --c-amber-300: 252 211 77;
+    --c-amber-400: 251 191 36;
+    --c-amber-500: 245 158 11;
+    --c-amber-600: 217 119 6;
+    --c-amber-700: 180 83 9;
+    --c-amber-800: 146 64 14;
+    --c-amber-900: 120 53 15;
+    --c-amber-950: 69 26 3;
+
+    --c-rose-50: 255 241 242;
+    --c-rose-100: 255 228 230;
+    --c-rose-200: 254 205 211;
+    --c-rose-300: 253 164 175;
+    --c-rose-400: 251 113 133;
+    --c-rose-500: 244 63 94;
+    --c-rose-600: 225 29 72;
+    --c-rose-700: 190 18 60;
+    --c-rose-800: 159 18 57;
+    --c-rose-900: 136 19 55;
+    --c-rose-950: 76 5 25;
+
+    --c-violet-50: 245 243 255;
+    --c-violet-100: 237 233 254;
+    --c-violet-200: 221 214 254;
+    --c-violet-300: 196 181 253;
+    --c-violet-400: 167 139 250;
+    --c-violet-500: 139 92 246;
+    --c-violet-600: 124 58 237;
+    --c-violet-700: 109 40 217;
+    --c-violet-800: 91 33 182;
+    --c-violet-900: 76 29 149;
+    --c-violet-950: 46 16 101;
+
+    --c-sky-50: 240 249 255;
+    --c-sky-100: 224 242 254;
+    --c-sky-200: 186 230 253;
+    --c-sky-300: 125 211 252;
+    --c-sky-400: 56 189 248;
+    --c-sky-500: 14 165 233;
+    --c-sky-600: 2 132 199;
+    --c-sky-700: 3 105 161;
+    --c-sky-800: 7 89 133;
+    --c-sky-900: 12 74 110;
+    --c-sky-950: 8 47 73;
+
+    --c-teal-50: 240 253 250;
+    --c-teal-100: 204 251 241;
+    --c-teal-200: 153 246 228;
+    --c-teal-300: 94 234 212;
+    --c-teal-400: 45 212 191;
+    --c-teal-500: 20 184 166;
+    --c-teal-600: 13 148 136;
+    --c-teal-700: 15 118 110;
+    --c-teal-800: 17 94 89;
+    --c-teal-900: 19 78 74;
+    --c-teal-950: 4 47 46;
+
+    /* ------------------------------------------------ derived app tokens --- */
+    --app-background: var(--c-slate-50);
+    --skeleton-base: 226 232 240;
+    --skeleton-sheen: 255 255 255;
+    --skeleton-sheen-opacity: 0.55;
+    --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06);
+    --shadow-card-hover: 0 4px 8px -2px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.06);
+    --shadow-overlay: 0 12px 32px -8px rgb(15 23 42 / 0.18), 0 4px 12px -4px rgb(15 23 42 / 0.10);
+    --scrollbar-thumb: 203 213 225;
+    --overlay-scrim: 15 23 42;
+    --overlay-scrim-opacity: 0.3;
+  }
+
+  .dark {
+    /* ---------------------------------------------------------- surfaces --- */
+    /* Card surface: one step lighter than the page, never pure black. */
+    --c-white: 26 32 44;
+
+    /* Inverted neutral ramp. 50 is now the deepest surface, 900 the brightest
+       text, so existing "bg-slate-50 / text-slate-900" markup still reads right. */
+    --c-slate-50: 17 22 31; /* page background */
+    --c-slate-100: 32 39 51; /* muted surface, hover */
+    --c-slate-200: 45 54 68; /* borders */
+    --c-slate-300: 62 73 90; /* stronger borders, disabled text */
+    --c-slate-400: 113 126 146; /* muted text, icons */
+    --c-slate-500: 148 160 178; /* secondary text */
+    --c-slate-600: 183 193 208; /* body text */
+    --c-slate-700: 209 216 227; /* strong body text */
+    --c-slate-800: 225 231 240; /* near-heading text */
+    --c-slate-900: 241 245 249; /* headings */
+    --c-slate-950: 248 250 252; /* highest-contrast text */
+
+    /* ------------------------------------------------------------- brand --- */
+    /* Lifted and slightly desaturated so it reads on a dark surface without
+       glowing, while staying recognisably the same brand blue. */
+    --c-brand-50: 16 32 48; /* tinted wash */
+    --c-brand-100: 20 44 66;
+    --c-brand-200: 26 62 94;
+    --c-brand-300: 38 96 143;
+    --c-brand-400: 56 148 214;
+    --c-brand-500: 74 172 240;
+    --c-brand-600: 56 150 226; /* primary action */
+    --c-brand-700: 130 196 246; /* text on dark */
+    --c-brand-800: 168 214 250;
+    --c-brand-900: 205 232 253;
+    --c-brand-950: 232 245 255;
+
+    /* --------------------------------------------------------- semantics --- */
+    /* Each accent keeps -50/-100 as a dark tint and lifts -700/-800 into
+       readable foreground values, matching how the app uses them. */
+    --c-emerald-50: 12 36 30;
+    --c-emerald-100: 15 48 39;
+    --c-emerald-200: 20 68 55;
+    --c-emerald-300: 28 100 80;
+    --c-emerald-400: 45 160 125;
+    --c-emerald-500: 52 190 145;
+    --c-emerald-600: 46 178 136;
+    --c-emerald-700: 110 231 183;
+    --c-emerald-800: 152 240 205;
+    --c-emerald-900: 190 246 224;
+    --c-emerald-950: 226 252 241;
+
+    --c-amber-50: 43 32 12;
+    --c-amber-100: 56 41 14;
+    --c-amber-200: 78 56 18;
+    --c-amber-300: 112 80 24;
+    --c-amber-400: 200 145 40;
+    --c-amber-500: 228 168 52;
+    --c-amber-600: 220 158 45;
+    --c-amber-700: 252 211 120;
+    --c-amber-800: 253 227 165;
+    --c-amber-900: 254 240 205;
+    --c-amber-950: 255 250 235;
+
+    --c-rose-50: 48 20 26;
+    --c-rose-100: 62 24 32;
+    --c-rose-200: 86 32 44;
+    --c-rose-300: 122 44 60;
+    --c-rose-400: 210 80 105;
+    --c-rose-500: 232 100 124;
+    --c-rose-600: 224 88 113;
+    --c-rose-700: 253 164 175;
+    --c-rose-800: 254 195 202;
+    --c-rose-900: 255 222 226;
+    --c-rose-950: 255 241 242;
+
+    --c-violet-50: 34 26 56;
+    --c-violet-100: 44 33 72;
+    --c-violet-200: 60 45 98;
+    --c-violet-300: 86 64 142;
+    --c-violet-400: 148 118 236;
+    --c-violet-500: 165 140 245;
+    --c-violet-600: 156 128 242;
+    --c-violet-700: 196 181 253;
+    --c-violet-800: 214 204 254;
+    --c-violet-900: 233 227 255;
+    --c-violet-950: 245 243 255;
+
+    --c-sky-50: 14 32 46;
+    --c-sky-100: 18 44 62;
+    --c-sky-200: 24 62 88;
+    --c-sky-300: 34 92 130;
+    --c-sky-400: 60 160 220;
+    --c-sky-500: 78 182 240;
+    --c-sky-600: 62 166 228;
+    --c-sky-700: 125 211 252;
+    --c-sky-800: 170 228 253;
+    --c-sky-900: 208 240 254;
+    --c-sky-950: 240 249 255;
+
+    --c-teal-50: 10 36 35;
+    --c-teal-100: 13 47 45;
+    --c-teal-200: 18 66 63;
+    --c-teal-300: 25 96 92;
+    --c-teal-400: 42 158 150;
+    --c-teal-500: 50 186 175;
+    --c-teal-600: 44 174 164;
+    --c-teal-700: 94 234 212;
+    --c-teal-800: 140 242 226;
+    --c-teal-900: 190 248 240;
+    --c-teal-950: 240 253 250;
+
+    /* ------------------------------------------------ derived app tokens --- */
+    --app-background: var(--c-slate-50);
+    /* Skeletons must not flash near-white against a dark page. */
+    --skeleton-base: 38 46 60;
+    --skeleton-sheen: 255 255 255;
+    --skeleton-sheen-opacity: 0.06;
+    --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.5), 0 1px 3px 0 rgb(0 0 0 / 0.4);
+    --shadow-card-hover: 0 6px 14px -4px rgb(0 0 0 / 0.6), 0 2px 6px -2px rgb(0 0 0 / 0.5);
+    --shadow-overlay: 0 16px 40px -10px rgb(0 0 0 / 0.7), 0 6px 16px -6px rgb(0 0 0 / 0.5);
+    --scrollbar-thumb: 62 73 90;
+    --overlay-scrim: 0 0 0;
+    --overlay-scrim-opacity: 0.6;
+  }
+}

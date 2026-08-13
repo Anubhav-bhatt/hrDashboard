@@ -1,6 +1,8 @@
 const prisma = require('../config/prisma');
 const { formatCandidateForApi } = require('../utils/candidateSerializer');
 const { LIST_SELECT } = require('../utils/candidateQuery');
+const { getJobSummaries, getCandidateStatsByJob, emptyStats } = require('../services/jobSummaryService');
+const { STRONG_MATCH_MIN, PENDING_REVIEW_STATUSES, SCORE_BANDS } = require('../utils/scoreThresholds');
 
 /**
  * Recruitment pipeline stages. These mirror the HR statuses the application
@@ -14,6 +16,12 @@ const PIPELINE_STAGES = [
   { key: 'NOT_SUITABLE', label: 'Not Suitable', description: 'Declined after screening' }
 ];
 
+/** Number of highest-scoring candidates returned for the dashboard. */
+const TOP_CANDIDATE_LIMIT = 5;
+
+/** Jobs shown in the dashboard's overview section before "view all". */
+const OVERVIEW_JOB_LIMIT = 6;
+
 const startOfMonth = (date = new Date()) => new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
 
 const daysAgo = (days) => {
@@ -24,15 +32,37 @@ const daysAgo = (days) => {
 };
 
 /**
- * @desc    Dashboard KPI metrics, hiring pipeline and recent activity
- * @route   GET /api/analytics/overview
+ * @desc    Dashboard KPI metrics, hiring pipeline and recent activity.
+ *          Pass ?jobId=<id> to scope every figure to a single job.
+ * @route   GET /api/dashboard/overview
+ * @route   GET /api/analytics/overview  (original path, retained)
  * @access  Private
  *
- * Every number is a live aggregate. Counts are produced with grouped queries
- * rather than per-status round trips, so adding stages does not add queries.
+ * Every number is a live aggregate produced by grouped queries. Candidate rows
+ * are never loaded to be counted in JavaScript.
  */
 const getOverview = async (req, res, next) => {
   try {
+    const requestedJobId = typeof req.query.jobId === 'string' ? req.query.jobId.trim() : '';
+
+    // A job filter is enforced in PostgreSQL, not by filtering in the client.
+    let job = null;
+    if (requestedJobId) {
+      job = await prisma.job.findUnique({
+        where: { id: requestedJobId },
+        select: { id: true, title: true, createdAt: true, requiredSkills: true, preferredSkills: true }
+      });
+
+      if (!job) {
+        return res.status(404).json({
+          success: false,
+          code: 'JOB_NOT_FOUND',
+          message: 'That job could not be found, so its dashboard cannot be shown.'
+        });
+      }
+    }
+
+    const scope = job ? { jobId: job.id } : {};
     const monthStart = startOfMonth();
     const weekStart = daysAgo(7);
 
@@ -41,35 +71,52 @@ const getOverview = async (req, res, next) => {
       totalJobs,
       statusGroups,
       analyzedCount,
-      highMatchCount,
+      strongMatchCount,
       candidatesThisMonth,
       candidatesThisWeek,
       jobsThisMonth,
       scoreAggregate,
       recentCandidates,
-      recentJobs,
-      pendingReview
+      topCandidates,
+      scoreBandCounts,
+      trendRows
     ] = await Promise.all([
-      prisma.candidate.count(),
-      prisma.job.count(),
-      prisma.candidate.groupBy({ by: ['hrStatus'], _count: { _all: true } }),
-      prisma.candidate.count({ where: { overallScore: { not: null } } }),
-      prisma.candidate.count({ where: { overallScore: { gte: 80 } } }),
-      prisma.candidate.count({ where: { createdAt: { gte: monthStart } } }),
-      prisma.candidate.count({ where: { createdAt: { gte: weekStart } } }),
-      prisma.job.count({ where: { createdAt: { gte: monthStart } } }),
-      prisma.candidate.aggregate({ _avg: { overallScore: true }, _max: { overallScore: true } }),
+      prisma.candidate.count({ where: scope }),
+      job ? Promise.resolve(1) : prisma.job.count(),
+      prisma.candidate.groupBy({ by: ['hrStatus'], where: scope, _count: { _all: true } }),
+      prisma.candidate.count({ where: { ...scope, overallScore: { not: null } } }),
+      prisma.candidate.count({ where: { ...scope, overallScore: { gte: STRONG_MATCH_MIN } } }),
+      prisma.candidate.count({ where: { ...scope, createdAt: { gte: monthStart } } }),
+      prisma.candidate.count({ where: { ...scope, createdAt: { gte: weekStart } } }),
+      job ? Promise.resolve(0) : prisma.job.count({ where: { createdAt: { gte: monthStart } } }),
+      prisma.candidate.aggregate({ where: scope, _avg: { overallScore: true }, _max: { overallScore: true } }),
       prisma.candidate.findMany({
+        where: scope,
         orderBy: { createdAt: 'desc' },
         take: 8,
         select: { ...LIST_SELECT, job: { select: { id: true, title: true } } }
       }),
-      prisma.job.findMany({
-        orderBy: { createdAt: 'desc' },
-        take: 5,
-        select: { id: true, title: true, jdFileName: true, createdAt: true, requiredSkills: true }
+      // Highest scoring candidates. Unscored candidates are excluded rather than
+      // treated as zero, so a "top candidates" list never surfaces a candidate
+      // that has not been evaluated.
+      prisma.candidate.findMany({
+        where: { ...scope, overallScore: { not: null } },
+        orderBy: [{ overallScore: 'desc' }, { createdAt: 'desc' }],
+        take: TOP_CANDIDATE_LIMIT,
+        select: { ...LIST_SELECT, job: { select: { id: true, title: true } } }
       }),
-      prisma.candidate.count({ where: { hrStatus: { in: ['REVIEW', 'NEEDS_REVIEW'] } } })
+      // One count per band, in parallel, instead of loading every scored row.
+      Promise.all(
+        SCORE_BANDS.map((band) =>
+          prisma.candidate.count({
+            where: { ...scope, overallScore: { gte: band.min, lte: band.max } }
+          })
+        )
+      ),
+      prisma.candidate.findMany({
+        where: { ...scope, createdAt: { gte: daysAgo(13) } },
+        select: { createdAt: true }
+      })
     ]);
 
     const statusCounts = statusGroups.reduce((acc, row) => {
@@ -77,37 +124,15 @@ const getOverview = async (req, res, next) => {
       return acc;
     }, {});
 
+    const pendingReview = PENDING_REVIEW_STATUSES.reduce((sum, status) => sum + (statusCounts[status] || 0), 0);
+
     const pipeline = PIPELINE_STAGES.map((stage) => ({
       ...stage,
       count: statusCounts[stage.key] || 0,
       percentage: totalCandidates > 0 ? Math.round(((statusCounts[stage.key] || 0) / totalCandidates) * 100) : 0
     }));
 
-    // Score bands, computed in one grouped pass over scored candidates.
-    const scored = await prisma.candidate.findMany({
-      where: { overallScore: { not: null } },
-      select: { overallScore: true }
-    });
-
-    const scoreBands = [
-      { key: 'excellent', label: '90-100%', min: 90, max: 100, count: 0 },
-      { key: 'strong', label: '80-89%', min: 80, max: 89.999, count: 0 },
-      { key: 'good', label: '70-79%', min: 70, max: 79.999, count: 0 },
-      { key: 'partial', label: '60-69%', min: 60, max: 69.999, count: 0 },
-      { key: 'low', label: 'Below 60%', min: 0, max: 59.999, count: 0 }
-    ];
-
-    for (const { overallScore } of scored) {
-      const band = scoreBands.find((b) => overallScore >= b.min && overallScore <= b.max);
-      if (band) band.count++;
-    }
-
-    // Applications per day for the last 14 days, for the trend chart.
-    const trendStart = daysAgo(13);
-    const trendRows = await prisma.candidate.findMany({
-      where: { createdAt: { gte: trendStart } },
-      select: { createdAt: true }
-    });
+    const scoreBands = SCORE_BANDS.map((band, index) => ({ ...band, count: scoreBandCounts[index] }));
 
     const trend = [];
     for (let i = 13; i >= 0; i--) {
@@ -116,13 +141,24 @@ const getOverview = async (req, res, next) => {
       next.setDate(next.getDate() + 1);
       trend.push({
         date: day.toISOString().slice(0, 10),
-        count: trendRows.filter((r) => r.createdAt >= day && r.createdAt < next).length
+        count: trendRows.filter((row) => row.createdAt >= day && row.createdAt < next).length
       });
     }
+
+    // The jobs overview is only meaningful when looking across jobs.
+    const jobsOverview = job ? [] : await getJobSummaries({ sort: 'candidates', limit: OVERVIEW_JOB_LIMIT });
+    const jobsOverviewTotal = job ? 1 : await prisma.job.count();
 
     return res.status(200).json({
       success: true,
       data: {
+        // Echoes the active filter so the UI can state plainly what is being shown.
+        scope: {
+          type: job ? 'JOB' : 'ALL_JOBS',
+          jobId: job ? job.id : null,
+          jobTitle: job ? job.title : null,
+          requiredSkills: job ? job.requiredSkills || [] : []
+        },
         metrics: {
           totalCandidates,
           totalJobs,
@@ -133,7 +169,9 @@ const getOverview = async (req, res, next) => {
           pendingReview,
           analyzed: analyzedCount,
           unanalyzed: Math.max(totalCandidates - analyzedCount, 0),
-          highMatch: highMatchCount,
+          strongMatch: strongMatchCount,
+          // Retained under its original name for existing consumers.
+          highMatch: strongMatchCount,
           candidatesThisMonth,
           candidatesThisWeek,
           jobsThisMonth,
@@ -141,23 +179,23 @@ const getOverview = async (req, res, next) => {
             scoreAggregate._avg.overallScore !== null && scoreAggregate._avg.overallScore !== undefined
               ? Math.round(scoreAggregate._avg.overallScore * 10) / 10
               : null,
-          topScore: scoreAggregate._max.overallScore ?? null
+          topScore: scoreAggregate._max.overallScore ?? null,
+          bestMatchScore: scoreAggregate._max.overallScore ?? null
         },
         pipeline,
         scoreBands,
         trend,
+        topCandidates: topCandidates.map((c) => ({
+          ...formatCandidateForApi(c, null),
+          jobTitle: c.job ? c.job.title : null
+        })),
         recentCandidates: recentCandidates.map((c) => ({
           ...formatCandidateForApi(c, null),
           jobTitle: c.job ? c.job.title : null
         })),
-        recentJobs: recentJobs.map((j) => ({
-          _id: j.id,
-          id: j.id,
-          title: j.title,
-          jdFileName: j.jdFileName,
-          createdAt: j.createdAt,
-          requiredSkillCount: (j.requiredSkills || []).length
-        })),
+        jobsOverview,
+        jobsOverviewTotal,
+        strongMatchThreshold: STRONG_MATCH_MIN,
         generatedAt: new Date().toISOString()
       }
     });
@@ -166,4 +204,70 @@ const getOverview = async (req, res, next) => {
   }
 };
 
-module.exports = { getOverview, PIPELINE_STAGES };
+/**
+ * @desc    Candidate statistics for one job, used by the job workspace header
+ *          and the job-scoped candidate list's KPI row
+ * @route   GET /api/jobs/:jobId/summary
+ * @access  Private
+ */
+const getJobSummary = async (req, res, next) => {
+  try {
+    const { jobId } = req.params;
+
+    const job = await prisma.job.findUnique({
+      where: { id: jobId },
+      select: {
+        id: true,
+        title: true,
+        jdFileName: true,
+        createdAt: true,
+        requiredSkills: true,
+        preferredSkills: true,
+        searchKeywords: true,
+        minimumExperience: true,
+        maximumExperience: true,
+        preferredLocations: true,
+        qualifications: true
+      }
+    });
+
+    if (!job) {
+      return res.status(404).json({ success: false, code: 'JOB_NOT_FOUND', message: 'Job not found.' });
+    }
+
+    const stats = (await getCandidateStatsByJob([job.id])).get(job.id) || emptyStats();
+
+    const scoreBandCounts = await Promise.all(
+      SCORE_BANDS.map((band) =>
+        prisma.candidate.count({ where: { jobId: job.id, overallScore: { gte: band.min, lte: band.max } } })
+      )
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        job: {
+          _id: job.id,
+          id: job.id,
+          title: job.title,
+          jdFileName: job.jdFileName,
+          createdAt: job.createdAt,
+          requiredSkills: job.requiredSkills || [],
+          preferredSkills: job.preferredSkills || [],
+          searchKeywords: job.searchKeywords || [],
+          minimumExperience: job.minimumExperience ?? 0,
+          maximumExperience: job.maximumExperience ?? null,
+          preferredLocations: job.preferredLocations || [],
+          qualifications: job.qualifications || []
+        },
+        stats,
+        scoreBands: SCORE_BANDS.map((band, index) => ({ ...band, count: scoreBandCounts[index] })),
+        strongMatchThreshold: STRONG_MATCH_MIN
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = { getOverview, getJobSummary, PIPELINE_STAGES };

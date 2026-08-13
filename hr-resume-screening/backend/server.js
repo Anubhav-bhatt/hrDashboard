@@ -155,6 +155,9 @@ app.use('/api/auth', require('./routes/authRoutes'));
 // Every route below serves candidate or recruitment data and requires a session.
 const { requireAuth } = require('./middleware/auth');
 
+// The dashboard overview is mounted at both paths: /api/dashboard is the
+// documented name, /api/analytics is retained so existing clients keep working.
+app.use('/api/dashboard', requireAuth, require('./routes/analyticsRoutes'));
 app.use('/api/analytics', requireAuth, require('./routes/analyticsRoutes'));
 app.use('/api/candidates', requireAuth, require('./routes/globalCandidateRoutes'));
 app.use('/api/jobs', requireAuth, require('./routes/jobRoutes'));

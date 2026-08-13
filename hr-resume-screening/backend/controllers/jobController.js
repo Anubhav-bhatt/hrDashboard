@@ -2,6 +2,8 @@ const prisma = require('../config/prisma');
 const { extractJDText } = require('../services/jdParser');
 const { extractJDRequirements } = require('../services/jdRequirementExtractor');
 const outlookService = require('../services/outlookService');
+const { getJobSummaries } = require('../services/jobSummaryService');
+const { STRONG_MATCH_MIN } = require('../utils/scoreThresholds');
 
 /**
  * @desc    Create a new recruitment job with uploaded JD using Prisma
@@ -73,61 +75,53 @@ const createJob = async (req, res, next) => {
 };
 
 /**
- * @desc    Get all recruitment jobs with summary metrics & computed status using Prisma
+ * @desc    Get all recruitment jobs with aggregated candidate statistics
  * @route   GET /api/jobs
- * @access  Public
+ * @access  Private
+ *
+ * Supports ?search, ?sort (newest | oldest | candidates | best_match | title)
+ * and ?limit. Statistics come from grouped PostgreSQL queries — the previous
+ * implementation ran three counts per job, so this no longer scales with the
+ * number of jobs.
  */
 const getAllJobs = async (req, res, next) => {
   try {
-    const jobs = await prisma.job.findMany({
-      orderBy: { createdAt: 'desc' }
+    const jobs = await getJobSummaries({
+      sort: req.query.sort,
+      search: req.query.search,
+      limit: req.query.limit
     });
-
-    const jobSummaries = await Promise.all(
-      jobs.map(async (job) => {
-        const candidatesCount = await prisma.candidate.count({ where: { jobId: job.id } });
-        const analyzedCount = await prisma.candidate.count({
-          where: {
-            jobId: job.id,
-            overallScore: { not: null }
-          }
-        });
-        const highMatchCount = await prisma.candidate.count({
-          where: {
-            jobId: job.id,
-            overallScore: { gte: 90 }
-          }
-        });
-
-        let status = 'NEW';
-        if (candidatesCount > 0 && analyzedCount === 0) status = 'IMPORTING';
-        else if (candidatesCount > 0 && analyzedCount < candidatesCount) status = 'READY_FOR_ANALYSIS';
-        else if (candidatesCount > 0 && analyzedCount === candidatesCount) status = 'COMPLETED';
-
-        return {
-          _id: job.id,
-          id: job.id,
-          title: job.title,
-          jdFileName: job.jdFileName,
-          createdAt: job.createdAt,
-          requirements: {
-            requiredSkills: job.requiredSkills,
-            preferredSkills: job.preferredSkills,
-            minimumExperience: job.minimumExperience,
-            preferredEducation: job.preferredEducation,
-            roleKeywords: job.roleKeywords
-          },
-          candidatesCount,
-          analyzedCount,
-          highMatchCount,
-          status
-        };
-      })
-    );
 
     return res.status(200).json({
       success: true,
-      data: jobSummaries
+      data: jobs,
+      meta: { total: jobs.length, strongMatchThreshold: STRONG_MATCH_MIN }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Aggregated job statistics for the jobs portal
+ * @route   GET /api/jobs/summary
+ * @access  Private
+ *
+ * Identical payload to GET /api/jobs; exposed under an explicit name so the
+ * portal's intent is clear at the call site.
+ */
+const getJobsSummary = async (req, res, next) => {
+  try {
+    const jobs = await getJobSummaries({
+      sort: req.query.sort,
+      search: req.query.search,
+      limit: req.query.limit
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: jobs,
+      meta: { total: jobs.length, strongMatchThreshold: STRONG_MATCH_MIN }
     });
   } catch (error) {
     next(error);
@@ -469,6 +463,7 @@ const searchOutlookEmailsForJob = async (req, res, next) => {
 module.exports = {
   createJob,
   getAllJobs,
+  getJobsSummary,
   getJobById,
   updateJobSearchCriteria,
   searchOutlookEmailsForJob
