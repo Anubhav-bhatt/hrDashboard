@@ -1,0 +1,223 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --surface: 255 255 255;
+    --surface-muted: 248 250 252;
+    --border-subtle: 226 232 240;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 font-sans text-body antialiased;
+  }
+
+  /* A single, consistent focus ring for every interactive element. Removing the
+     default outline without replacing it is what makes keyboard use impossible,
+     so focus-visible is styled globally instead. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand-500 ring-offset-2 ring-offset-white;
+  }
+
+  /* Headings inherit weight from the type scale rather than browser defaults. */
+  h1, h2, h3, h4, h5, h6 {
+    @apply text-slate-900;
+    text-wrap: pretty;
+  }
+
+  ::selection {
+    @apply bg-brand-100 text-brand-900;
+  }
+
+  /* Slimmer scrollbars inside scrollable panels (resume text, tables). */
+  .scroll-slim {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(203 213 225) transparent;
+  }
+
+  .scroll-slim::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scroll-slim::-webkit-scrollbar-thumb {
+    @apply rounded-pill bg-slate-300;
+  }
+
+  .scroll-slim::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer components {
+  /* ---------------------------------------------------------------- buttons */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-control text-meta font-semibold
+           transition-colors duration-fast select-none whitespace-nowrap
+           disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  .btn-sm { @apply h-8 px-3 text-xs; }
+  .btn-md { @apply h-10 px-4; }
+  .btn-lg { @apply h-11 px-5 text-body; }
+  .btn-icon { @apply h-9 w-9 px-0 shrink-0; }
+  .btn-icon-sm { @apply h-8 w-8 px-0 shrink-0; }
+
+  .btn-primary {
+    @apply bg-brand-600 text-white shadow-sm hover:bg-brand-700 active:bg-brand-800;
+  }
+
+  .btn-secondary {
+    @apply bg-white text-slate-700 border border-slate-300 shadow-sm
+           hover:bg-slate-50 hover:text-slate-900 active:bg-slate-100;
+  }
+
+  .btn-ghost {
+    @apply bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900 active:bg-slate-200;
+  }
+
+  .btn-destructive {
+    @apply bg-rose-600 text-white shadow-sm hover:bg-rose-700 active:bg-rose-800;
+  }
+
+  .btn-destructive-soft {
+    @apply bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 active:bg-rose-200;
+  }
+
+  .btn-success-soft {
+    @apply bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 active:bg-emerald-200;
+  }
+
+  /* ------------------------------------------------------------------ cards */
+  .card {
+    @apply bg-white border border-slate-200 rounded-card shadow-card;
+  }
+
+  /* Interactive card: the entire surface is the target, and it advertises that
+     with cursor, hover elevation and a focus ring. */
+  .card-interactive {
+    @apply card text-left w-full cursor-pointer transition duration-fast
+           hover:shadow-card-hover hover:border-slate-300
+           focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2;
+  }
+
+  .card-pad { @apply p-5; }
+  .card-pad-sm { @apply p-4; }
+  .card-pad-lg { @apply p-6; }
+
+  /* ----------------------------------------------------------------- inputs */
+  .field-label {
+    @apply block text-label uppercase text-slate-500 mb-1.5;
+  }
+
+  .input {
+    @apply w-full h-10 px-3 bg-white border border-slate-300 rounded-control text-body text-slate-900
+           placeholder:text-slate-400 transition-colors duration-fast
+           hover:border-slate-400
+           focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20
+           disabled:bg-slate-50 disabled:text-slate-500;
+  }
+
+  .input-error {
+    @apply border-rose-400 focus:border-rose-500 focus:ring-rose-500/20;
+  }
+
+  .select {
+    @apply input pr-8 cursor-pointer appearance-none bg-no-repeat;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%2364748b' stroke-width='1.75'%3E%3Cpath d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+    background-position: right 0.5rem center;
+    background-size: 1.125rem;
+  }
+
+  .textarea {
+    @apply w-full px-3 py-2.5 bg-white border border-slate-300 rounded-control text-body text-slate-900
+           placeholder:text-slate-400 transition-colors duration-fast resize-y
+           focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20;
+  }
+
+  /* ----------------------------------------------------------------- badges */
+  .badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-xs font-semibold whitespace-nowrap;
+  }
+
+  .badge-neutral { @apply bg-slate-100 text-slate-700 border-slate-200; }
+  .badge-brand   { @apply bg-brand-50 text-brand-700 border-brand-200; }
+  .badge-success { @apply bg-emerald-50 text-emerald-700 border-emerald-200; }
+  .badge-warning { @apply bg-amber-50 text-amber-800 border-amber-200; }
+  .badge-danger  { @apply bg-rose-50 text-rose-700 border-rose-200; }
+  .badge-info    { @apply bg-sky-50 text-sky-700 border-sky-200; }
+  .badge-violet  { @apply bg-violet-50 text-violet-700 border-violet-200; }
+
+  /* ------------------------------------------------------------------ chips */
+  .chip {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-pill border border-slate-200
+           bg-slate-50 text-slate-700 text-xs font-medium;
+  }
+
+  /* ---------------------------------------------------------------- skeleton */
+  .skeleton {
+    @apply relative overflow-hidden bg-slate-200/70 rounded;
+  }
+
+  .skeleton::after {
+    content: '';
+    @apply absolute inset-0 -translate-x-full;
+    background-image: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.55) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+    animation: shimmer 1.4s infinite;
+  }
+
+  /* ------------------------------------------------------------------ table */
+  .data-table {
+    @apply w-full text-left border-collapse;
+  }
+
+  .data-table thead th {
+    @apply sticky top-0 z-10 bg-slate-50/95 backdrop-blur px-4 py-2.5
+           text-label uppercase text-slate-500 border-b border-slate-200 whitespace-nowrap;
+  }
+
+  .data-table tbody td {
+    @apply px-4 py-3 border-b border-slate-100 align-middle;
+  }
+
+  .data-table tbody tr:last-child td {
+    @apply border-b-0;
+  }
+
+  /* -------------------------------------------------------------------- misc */
+  .link {
+    @apply text-brand-700 font-medium underline decoration-brand-200 underline-offset-2
+           hover:text-brand-800 hover:decoration-brand-400 transition-colors duration-fast;
+  }
+
+  .section-title {
+    @apply text-section text-slate-900;
+  }
+
+  .divider {
+    @apply border-t border-slate-200;
+  }
+}
+
+@layer utilities {
+  /* Respect users who ask for reduced motion. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}

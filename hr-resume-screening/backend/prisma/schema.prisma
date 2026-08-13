@@ -1,0 +1,195 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+/// Recruiter / HR administrator account used for dashboard authentication.
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  name         String    @default("Recruiter")
+  role         String    @default("RECRUITER") // RECRUITER | ADMIN
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  notes        CandidateNote[]
+  activities   CandidateActivity[]
+}
+
+model Job {
+  id                 String          @id @default(uuid())
+  title              String
+  jdFileName         String
+  jdMimeType         String
+  jdText             String          @db.Text
+  requiredSkills     String[]
+  preferredSkills    String[]
+  roleKeywords       String[]
+  minimumExperience  Float?          @default(0)
+  maximumExperience  Float?
+  salaryMin          Float?
+  salaryMax          Float?
+  salaryCurrency     String?         @default("INR")
+  preferredLocations String[]
+  qualifications     String[]
+  searchKeywords     String[]
+  preferredEducation String[]
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  candidates         Candidate[]
+  importSessions     ImportSession[]
+}
+
+model Candidate {
+  id                     String    @id @default(uuid())
+  jobId                  String
+  job                    Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  name                   String?   @default("Unknown Candidate")
+  nameSource             String?   @default("unknown")
+  email                  String?
+  phone                  String?
+  currentRole            String?
+  totalExperience        Float?
+  currentLocation        String?
+  preferredLocations     String[]
+  currentSalary          Float?
+  expectedSalary         Float?
+  qualification          String?
+
+  // Contact & web presence parsed from the resume (null when the resume does not provide it)
+  alternateEmail         String?
+  alternatePhone         String?
+  linkedinUrl            String?
+  githubUrl              String?
+  portfolioUrl           String?
+
+  // Professional headline & summary text taken verbatim from the resume
+  headline               String?
+  summary                String?   @db.Text
+
+  skills                 String[]
+  education              String[]
+  projects               String[]
+  resumeText             String?   @db.Text
+
+  /// Structured resume sections (experience, education, projects, certifications,
+  /// languages, achievements) produced by services/resumeProfileParser.js.
+  parsedProfile          Json?
+
+  source                 String    @default("OUTLOOK")
+  sourceRelativePath     String?
+  outlookMessageId       String
+  outlookAttachmentId    String
+  resumeFileName         String?   @default("resume.pdf")
+  resumeMimeType         String?   @default("application/pdf")
+  resumeHash             String?
+  receivedAt             DateTime? @default(now())
+
+  /// Original resume bytes. Required so recruiters can open/download the real
+  /// document for candidates that were uploaded directly (not fetched live from
+  /// Outlook). Excluded from every list query — only streamed by the resume route.
+  resumeData             Bytes?
+  resumeSize             Int?
+
+  extractionStatus       String    @default("SUCCESS")
+  extractionWarnings     String[]
+
+  overallScore           Float?
+  alignmentLabel         String?
+  requiredSkillScore     Float?
+  experienceScore        Float?
+  roleScore              Float?
+  preferredSkillScore    Float?
+  projectScore           Float?
+  educationScore         Float?
+
+  matchedSkills          String[]
+  missingRequiredSkills  String[]
+  matchedPreferredSkills String[]
+  matchedKeywords        String[]
+  strengths              String[]
+  gaps                   String[]
+  analysisSummary        String?   @db.Text
+  analyzedAt             DateTime?
+
+  hrStatus               String    @default("REVIEW")
+  notes                  String?   @db.Text
+
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  noteEntries            CandidateNote[]
+  activities             CandidateActivity[]
+
+  @@unique([jobId, outlookMessageId, outlookAttachmentId])
+  @@unique([jobId, resumeHash])
+  @@index([jobId])
+  @@index([jobId, overallScore])
+  @@index([hrStatus])
+  @@index([createdAt])
+}
+
+/// Timestamped recruiter note attached to a candidate.
+model CandidateNote {
+  id          String    @id @default(uuid())
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  authorId    String?
+  author      User?     @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  authorName  String    @default("Recruiter")
+  body        String    @db.Text
+  createdAt   DateTime  @default(now())
+
+  @@index([candidateId, createdAt])
+}
+
+/// Append-only recruitment activity trail (status changes, notes, analysis runs,
+/// resume access). Never stores resume contents or full contact details.
+model CandidateActivity {
+  id          String    @id @default(uuid())
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  actorId     String?
+  actor       User?     @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  actorName   String    @default("System")
+  type        String // IMPORTED | STATUS_CHANGED | NOTE_ADDED | ANALYZED | RESUME_VIEWED
+  description String
+  metadata    Json?
+  createdAt   DateTime  @default(now())
+
+  @@index([candidateId, createdAt])
+}
+
+model OutlookConnection {
+  id              String    @id @default(uuid())
+  microsoftUserId String    @unique
+  email           String
+  displayName     String?   @default("")
+  accessToken     String?   @db.Text
+  refreshToken    String?   @db.Text
+  expiresAt       DateTime?
+  connectedAt     DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model ImportSession {
+  id           String   @id @default(uuid())
+  jobId        String
+  job          Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  folderId     String
+  folderName   String?
+  fromDate     DateTime
+  toDate       DateTime
+  emailsFound  Int      @default(0)
+  resumesFound Int      @default(0)
+  createdAt    DateTime @default(now())
+}

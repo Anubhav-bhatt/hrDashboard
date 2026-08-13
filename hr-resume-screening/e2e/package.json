@@ -1,0 +1,11 @@
+{
+  "name": "hr-resume-screening-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node scenarios.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.62.1"
+  }
+}

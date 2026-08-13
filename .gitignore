@@ -1,0 +1,75 @@
+# ---------------------------------------------------------------------------
+# Secrets — never commit these.
+# backend/.env holds the database password, JWT signing secret and the seeded
+# admin password. The .example files are the templates that are safe to share.
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# ---------------------------------------------------------------------------
+# Dependencies
+# ---------------------------------------------------------------------------
+node_modules/
+.pnp
+.pnp.js
+.yarn/
+
+# ---------------------------------------------------------------------------
+# Build output
+# ---------------------------------------------------------------------------
+dist/
+build/
+.vite/
+*.tsbuildinfo
+
+# ---------------------------------------------------------------------------
+# Prisma generated client (regenerated with `npx prisma generate`)
+# ---------------------------------------------------------------------------
+**/.prisma/
+**/@prisma/client/
+
+# ---------------------------------------------------------------------------
+# Logs & diagnostics
+# ---------------------------------------------------------------------------
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+*.cpuprofile
+*.heapsnapshot
+
+# ---------------------------------------------------------------------------
+# Candidate data — resumes and job descriptions contain personal information
+# and must never enter version control.
+# ---------------------------------------------------------------------------
+uploads/
+resumes/
+*.resume.pdf
+candidate-data/
+
+# ---------------------------------------------------------------------------
+# Test artefacts
+# ---------------------------------------------------------------------------
+coverage/
+playwright-report/
+test-results/
+screenshots/
+e2e/shots/
+
+# ---------------------------------------------------------------------------
+# Editors & OS
+# ---------------------------------------------------------------------------
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
