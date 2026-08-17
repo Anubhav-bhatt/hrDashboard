@@ -8,6 +8,7 @@
     "dev": "nodemon server.js",
     "test": "node tests/runAll.js",
     "test:unit": "node tests/unit.test.js",
+    "test:scoring": "node tests/scoringBaseline.test.js",
     "test:api": "node tests/api.test.js",
     "test:jobs": "node tests/jobPortal.test.js",
     "test:closure": "node tests/jobClosure.test.js",

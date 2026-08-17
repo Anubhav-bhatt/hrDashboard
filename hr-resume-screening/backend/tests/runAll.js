@@ -13,6 +13,7 @@ const path = require('path');
 
 const SUITES = [
   { name: 'Unit', file: 'unit.test.js', requiresDatabase: false },
+  { name: 'Scoring & ranking baseline', file: 'scoringBaseline.test.js', requiresDatabase: false },
   { name: 'Scoring & parsing (legacy phase 4)', file: 'phase4.test.js', requiresDatabase: false },
   { name: 'Outlook & matching (legacy phase 5)', file: 'phase5.test.js', requiresDatabase: false },
   { name: 'API integration', file: 'api.test.js', requiresDatabase: true },
