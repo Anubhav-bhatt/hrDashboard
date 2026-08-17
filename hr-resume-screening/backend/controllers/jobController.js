@@ -2,8 +2,14 @@ const prisma = require('../config/prisma');
 const { extractJDText } = require('../services/jdParser');
 const { extractJDRequirements } = require('../services/jdRequirementExtractor');
 const outlookService = require('../services/outlookService');
-const { getJobSummaries } = require('../services/jobSummaryService');
+const { getJobSummaries, getJobStatusCounts } = require('../services/jobSummaryService');
 const { STRONG_MATCH_MIN } = require('../utils/scoreThresholds');
+const {
+  closeJob,
+  getShortlistedCandidates,
+  JobClosureError,
+  SELECTED_CANDIDATE_SELECT
+} = require('../services/jobClosureService');
 
 /**
  * @desc    Create a new recruitment job with uploaded JD using Prisma
@@ -86,16 +92,28 @@ const createJob = async (req, res, next) => {
  */
 const getAllJobs = async (req, res, next) => {
   try {
-    const jobs = await getJobSummaries({
-      sort: req.query.sort,
-      search: req.query.search,
-      limit: req.query.limit
-    });
+    const [result, statusCounts] = await Promise.all([
+      getJobSummaries({
+        sort: req.query.sort,
+        search: req.query.search,
+        status: req.query.status,
+        limit: req.query.limit,
+        page: req.query.page
+      }),
+      // Counts for the All / Active / Closed selector, under the same search
+      // term but ignoring the current lifecycle filter.
+      getJobStatusCounts({ search: req.query.search })
+    ]);
 
     return res.status(200).json({
       success: true,
-      data: jobs,
-      meta: { total: jobs.length, strongMatchThreshold: STRONG_MATCH_MIN }
+      data: result.jobs,
+      meta: {
+        total: result.pagination.total,
+        pagination: result.pagination,
+        statusCounts,
+        strongMatchThreshold: STRONG_MATCH_MIN
+      }
     });
   } catch (error) {
     next(error);
@@ -112,16 +130,26 @@ const getAllJobs = async (req, res, next) => {
  */
 const getJobsSummary = async (req, res, next) => {
   try {
-    const jobs = await getJobSummaries({
-      sort: req.query.sort,
-      search: req.query.search,
-      limit: req.query.limit
-    });
+    const [result, statusCounts] = await Promise.all([
+      getJobSummaries({
+        sort: req.query.sort,
+        search: req.query.search,
+        status: req.query.status,
+        limit: req.query.limit,
+        page: req.query.page
+      }),
+      getJobStatusCounts({ search: req.query.search })
+    ]);
 
     return res.status(200).json({
       success: true,
-      data: jobs,
-      meta: { total: jobs.length, strongMatchThreshold: STRONG_MATCH_MIN }
+      data: result.jobs,
+      meta: {
+        total: result.pagination.total,
+        pagination: result.pagination,
+        statusCounts,
+        strongMatchThreshold: STRONG_MATCH_MIN
+      }
     });
   } catch (error) {
     next(error);
@@ -178,10 +206,24 @@ const getJobById = async (req, res, next) => {
     const importSessions = await prisma.importSession.findMany({ where: { jobId: job.id } });
     const applicationsFound = importSessions.reduce((acc, sess) => acc + (sess.emailsFound || 0), 0);
 
-    let status = 'NEW';
-    if (candidatesCount > 0 && analyzedCount === 0) status = 'IMPORTING';
-    else if (candidatesCount > 0 && analyzedCount < candidatesCount) status = 'READY_FOR_ANALYSIS';
-    else if (candidatesCount > 0 && analyzedCount === candidatesCount) status = 'COMPLETED';
+    // Operational processing badge, distinct from the persisted OPEN/CLOSED
+    // lifecycle returned as `status` below.
+    let processingStatus = 'NEW';
+    if (candidatesCount > 0 && analyzedCount === 0) processingStatus = 'IMPORTING';
+    else if (candidatesCount > 0 && analyzedCount < candidatesCount) processingStatus = 'READY_FOR_ANALYSIS';
+    else if (candidatesCount > 0 && analyzedCount === candidatesCount) processingStatus = 'COMPLETED';
+
+    const shortlistedCount = await prisma.candidate.count({
+      where: { jobId: job.id, hrStatus: 'SHORTLISTED' }
+    });
+
+    // Projection only: enough to render the closed-job banner, never the resume.
+    const selectedCandidate = job.selectedCandidateId
+      ? await prisma.candidate.findUnique({
+          where: { id: job.selectedCandidateId },
+          select: SELECTED_CANDIDATE_SELECT
+        })
+      : null;
 
     return res.status(200).json({
       success: true,
@@ -189,6 +231,14 @@ const getJobById = async (req, res, next) => {
         _id: job.id,
         id: job.id,
         title: job.title,
+        status: job.status,
+        isClosed: job.status === 'CLOSED',
+        closedAt: job.closedAt,
+        selectedCandidateId: job.selectedCandidateId,
+        selectedCandidate,
+        // Drives whether the Close Job action is offered.
+        canClose: job.status === 'OPEN' && shortlistedCount > 0,
+        shortlistedCount,
         jdFileName: job.jdFileName,
         jdMimeType: job.jdMimeType,
         jdText: job.jdText,
@@ -212,7 +262,8 @@ const getJobById = async (req, res, next) => {
           applicationsFound: applicationsFound || candidatesCount,
           candidatesCount,
           analyzedCount,
-          status,
+          shortlistedCount,
+          processingStatus,
           scoreTiers: {
             tier90,
             tier80_89,
@@ -460,11 +511,89 @@ const searchOutlookEmailsForJob = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Shortlisted candidates eligible to be selected as the hire
+ * @route   GET /api/jobs/:jobId/shortlist
+ * @access  Private
+ *
+ * Populates the close-job dialog. Returns only SHORTLISTED candidates of this
+ * job, as a projection — enough to identify a person, nothing more.
+ */
+const getJobShortlist = async (req, res, next) => {
+  try {
+    const { jobId } = req.params;
+
+    const job = await prisma.job.findUnique({
+      where: { id: jobId },
+      select: { id: true, title: true, status: true }
+    });
+
+    if (!job) {
+      return res.status(404).json({ success: false, code: 'JOB_NOT_FOUND', message: 'Job not found.' });
+    }
+
+    const candidates = await getShortlistedCandidates(jobId);
+
+    return res.status(200).json({
+      success: true,
+      data: candidates,
+      meta: {
+        jobId: job.id,
+        jobTitle: job.title,
+        jobStatus: job.status,
+        total: candidates.length,
+        canClose: job.status === 'OPEN' && candidates.length > 0
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Record the hired candidate and close the job
+ * @route   POST /api/jobs/:jobId/close
+ * @access  Private
+ *
+ * The recruiter chooses the candidate; the request carries only their id. Score
+ * plays no part — it is decision support, not the decision. All validation and
+ * the state change happen in one transaction inside jobClosureService.
+ */
+const closeJobById = async (req, res, next) => {
+  try {
+    const { jobId } = req.params;
+    const { selectedCandidateId } = req.body || {};
+
+    const job = await closeJob({
+      jobId,
+      selectedCandidateId,
+      actor: req.user || null
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `${job.title} closed. ${job.selectedCandidate?.name || 'The selected candidate'} was selected.`,
+      data: job
+    });
+  } catch (error) {
+    if (error instanceof JobClosureError) {
+      return res.status(error.statusCode).json({
+        success: false,
+        code: error.code,
+        message: error.message
+      });
+    }
+    next(error);
+  }
+};
+
 module.exports = {
   createJob,
   getAllJobs,
   getJobsSummary,
   getJobById,
+  getJobShortlist,
+  closeJobById,
   updateJobSearchCriteria,
   searchOutlookEmailsForJob
 };

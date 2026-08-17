@@ -83,10 +83,19 @@ try {
   let page = await openApp(context);
   await page.waitForTimeout(600);
 
-  // Open the account menu and choose Dark.
+  // Appearance now lives in Settings rather than the account menu, so that daily
+  // navigation carries only the four destinations a recruiter actually works in.
+  // The account menu still routes there.
   await page.click('button[aria-haspopup="menu"]');
   await page.waitForTimeout(400);
-  check((await page.getByRole('radiogroup', { name: /colour theme/i }).count()) === 1, 'the account menu exposes an Appearance control');
+  check(
+    (await page.locator('a[role="menuitem"][href="/settings"]').count()) === 1,
+    'the account menu links to Settings'
+  );
+
+  await page.goto(`${BASE}/settings`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('radiogroup', { name: /colour theme/i }).waitFor({ state: 'visible', timeout: 20000 });
+  check((await page.getByRole('radiogroup', { name: /colour theme/i }).count()) === 1, 'Settings exposes the Appearance control');
 
   await page.getByRole('radio', { name: 'Dark' }).click();
   await page.waitForTimeout(600);
@@ -155,7 +164,7 @@ try {
 
   await page.evaluate(() => window.localStorage.setItem('hr-dashboard-theme', 'light'));
   await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
-  await page.locator('a[aria-label^="Total candidates"]').waitFor({ state: 'visible', timeout: 20000 });
+  await page.locator('a[aria-label^="Candidates"]').waitFor({ state: 'visible', timeout: 20000 });
 
   const railWidth = () => page.evaluate(() => document.querySelector('aside')?.getBoundingClientRect().width ?? 0);
   const expandedWidth = await railWidth();

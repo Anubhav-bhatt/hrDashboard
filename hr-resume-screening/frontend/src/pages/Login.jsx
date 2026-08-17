@@ -84,7 +84,7 @@ const Login = () => {
             <div className="w-10 h-10 rounded-control bg-brand-600 flex items-center justify-center">
               <Sparkles className="w-5 h-5" aria-hidden="true" />
             </div>
-            <span className="text-lg font-bold tracking-tight">Resume Screening</span>
+            <span className="text-lg font-bold tracking-tight">HR Screening</span>
           </div>
         </div>
 
@@ -121,9 +121,9 @@ const Login = () => {
         <div className="w-full max-w-sm">
           <div className="lg:hidden flex items-center gap-2.5 mb-8">
             <div className="w-9 h-9 rounded-control bg-brand-600 flex items-center justify-center text-white">
-              <Sparkles className="w-4.5 h-4.5" aria-hidden="true" />
+              <Sparkles className="w-[18px] h-[18px]" aria-hidden="true" />
             </div>
-            <span className="text-base font-bold tracking-tight text-slate-900">Resume Screening</span>
+            <span className="text-base font-bold tracking-tight text-slate-900">HR Screening</span>
           </div>
 
           <h1 className="text-page-title">Sign in</h1>

@@ -1,5 +1,5 @@
-import React from 'react';
-import { AlertTriangle, CheckCircle2, HelpCircle, Sparkles, XCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { Check, CheckCircle2, ChevronDown, HelpCircle, Sparkles, XCircle } from 'lucide-react';
 import { Badge, Button, Card, CardHeader, Meter, cx } from '../ui';
 import { getScoreMeta } from '../../utils/format';
 
@@ -51,6 +51,7 @@ const CompatibilityFlag = ({ label, value }) => {
  */
 const CandidateMatchPanel = ({ candidate, onReanalyze, analyzing }) => {
   const analysis = candidate.matchAnalysis;
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
 
   if (!analysis) {
     return (
@@ -104,31 +105,90 @@ const CandidateMatchPanel = ({ candidate, onReanalyze, analyzing }) => {
           className="mt-3 h-2"
         />
 
-        {/* Weighted breakdown */}
-        <div className="mt-5 space-y-3">
-          <h3 className="text-label uppercase text-slate-500">Score breakdown</h3>
-          {SCORE_COMPONENTS.map((component) => {
-            const value = analysis[component.key] ?? 0;
-            const pct = component.max > 0 ? (value / component.max) * 100 : 0;
-
-            return (
-              <div key={component.key}>
-                <div className="flex items-center justify-between gap-2 text-xs">
-                  <span className="text-slate-600">{component.label}</span>
-                  <span className="tabular-nums font-semibold text-slate-700">
-                    {Math.round(value * 10) / 10}
-                    <span className="text-slate-400 font-normal"> / {component.max}</span>
-                  </span>
-                </div>
-                <Meter
-                  value={pct}
-                  barClass={pct >= 75 ? 'bg-emerald-500' : pct >= 40 ? 'bg-amber-500' : 'bg-slate-300'}
-                  label={`${component.label}: ${value} out of ${component.max}`}
-                  className="mt-1"
-                />
+        {/* Why this candidate matches — the first thing a recruiter should read,
+            ahead of the arithmetic that produced the number. */}
+        {(analysis.strengths?.length > 0 || analysis.gaps?.length > 0) && (
+          <div className="mt-5 pt-4 divider space-y-4">
+            {analysis.strengths?.length > 0 && (
+              <div>
+                <h3 className="text-card-title text-slate-900 mb-2">Why this candidate matches</h3>
+                <ul className="space-y-1.5">
+                  {analysis.strengths.map((item, index) => (
+                    <li key={index} className="text-meta text-slate-700 flex gap-2">
+                      <Check className="w-3.5 h-3.5 text-emerald-600 mt-1 shrink-0" aria-hidden="true" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
               </div>
-            );
-          })}
+            )}
+
+            {analysis.gaps?.length > 0 && (
+              <div>
+                <h3 className="text-card-title text-slate-900 mb-2">Potential gaps</h3>
+                <ul className="space-y-1.5">
+                  {analysis.gaps.map((item, index) => (
+                    <li key={index} className="text-meta text-slate-700 flex gap-2">
+                      <span className="text-slate-400 mt-0.5 shrink-0" aria-hidden="true">•</span>
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-slate-400 mt-2">
+                  Based on what the resume states. A gap is something the document did not evidence, not a judgement.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+
+        {/*
+          The weighted arithmetic is available but not the first thing a recruiter
+          reads. Most of the time "94%" plus the matched skills and gaps below is
+          the whole answer; the component-by-component maths is for the times it
+          is questioned.
+        */}
+        <div className="mt-5">
+          <button
+            type="button"
+            onClick={() => setBreakdownOpen((open) => !open)}
+            aria-expanded={breakdownOpen}
+            aria-controls="score-breakdown"
+            className="inline-flex items-center gap-1.5 text-meta font-semibold text-brand-700 hover:text-brand-800
+                       rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+          >
+            {breakdownOpen ? 'Hide score breakdown' : `Why ${Math.round(analysis.overallScore)}%?`}
+            <ChevronDown
+              className={cx('w-3.5 h-3.5 transition-transform duration-fast', breakdownOpen && 'rotate-180')}
+              aria-hidden="true"
+            />
+          </button>
+
+          <div id="score-breakdown" hidden={!breakdownOpen} className="mt-3 space-y-3">
+            {SCORE_COMPONENTS.map((component) => {
+              const value = analysis[component.key] ?? 0;
+              const pct = component.max > 0 ? (value / component.max) * 100 : 0;
+
+              return (
+                <div key={component.key}>
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <span className="text-slate-600">{component.label}</span>
+                    <span className="tabular-nums font-semibold text-slate-700">
+                      {Math.round(value * 10) / 10}
+                      <span className="text-slate-400 font-normal"> / {component.max}</span>
+                    </span>
+                  </div>
+                  <Meter
+                    value={pct}
+                    barClass={pct >= 75 ? 'bg-emerald-500' : pct >= 40 ? 'bg-amber-500' : 'bg-slate-300'}
+                    label={`${component.label}: ${value} out of ${component.max}`}
+                    className="mt-1"
+                  />
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {/* Requirement compatibility */}
@@ -140,45 +200,6 @@ const CandidateMatchPanel = ({ candidate, onReanalyze, analyzing }) => {
             ))}
           </ul>
         </div>
-
-        {/* Strengths & gaps */}
-        {(analysis.strengths?.length > 0 || analysis.gaps?.length > 0) && (
-          <div className="mt-5 pt-4 divider grid grid-cols-1 gap-4">
-            {analysis.strengths?.length > 0 && (
-              <div>
-                <h3 className="text-label uppercase text-slate-500 mb-2 inline-flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" aria-hidden="true" />
-                  Strengths
-                </h3>
-                <ul className="space-y-1.5">
-                  {analysis.strengths.map((item, index) => (
-                    <li key={index} className="text-meta text-slate-600 flex gap-2">
-                      <span className="text-emerald-500 mt-1.5 shrink-0" aria-hidden="true">•</span>
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {analysis.gaps?.length > 0 && (
-              <div>
-                <h3 className="text-label uppercase text-slate-500 mb-2 inline-flex items-center gap-1.5">
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-500" aria-hidden="true" />
-                  Considerations
-                </h3>
-                <ul className="space-y-1.5">
-                  {analysis.gaps.map((item, index) => (
-                    <li key={index} className="text-meta text-slate-600 flex gap-2">
-                      <span className="text-amber-500 mt-1.5 shrink-0" aria-hidden="true">•</span>
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
 
         {analysis.summary && (
           <div className="mt-5 pt-4 divider">

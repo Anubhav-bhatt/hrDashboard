@@ -103,7 +103,7 @@ try {
   /* ------------------------------------------------------- dashboard ---- */
   section('Dashboard');
   await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
-  await page.locator('a[aria-label^="Total candidates"]').waitFor({ state: 'visible', timeout: 20000 });
+  await page.locator('a[aria-label^="Candidates"]').waitFor({ state: 'visible', timeout: 20000 });
 
   const dashAudit = await page.evaluate(() => {
     const interactive = Array.from(document.querySelectorAll('a, button, select, input, [role="tab"]'));
@@ -150,12 +150,12 @@ try {
 
   // KPI cards are real links: focusable, and Enter activates them.
   const cardIsLink = await page.evaluate(() => {
-    const card = document.querySelector('a[aria-label^="Total candidates"]');
+    const card = document.querySelector('a[aria-label^="Candidates"]');
     return card ? card.tagName === 'A' && card.hasAttribute('href') : false;
   });
   check(cardIsLink, 'the KPI card is an anchor with an href, so Enter works natively');
 
-  await page.locator('a[aria-label^="Total candidates"]').focus();
+  await page.locator('a[aria-label^="Candidates"]').focus();
   const focusVisible = await page.evaluate(() => {
     const el = document.activeElement;
     if (!el) return false;
@@ -309,10 +309,10 @@ try {
 
   // Switch via the app's own control so the persisted preference is exercised.
   await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
-  await page.locator('a[aria-label^="Total candidates"]').waitFor({ state: 'visible', timeout: 20000 });
+  await page.locator('a[aria-label^="Candidates"]').waitFor({ state: 'visible', timeout: 20000 });
   await page.evaluate(() => window.localStorage.setItem('hr-dashboard-theme', 'dark'));
   await page.reload({ waitUntil: 'networkidle' });
-  await page.locator('a[aria-label^="Total candidates"]').waitFor({ state: 'visible', timeout: 20000 });
+  await page.locator('a[aria-label^="Candidates"]').waitFor({ state: 'visible', timeout: 20000 });
   await page.waitForTimeout(700);
 
   const darkState = await page.evaluate(() => ({

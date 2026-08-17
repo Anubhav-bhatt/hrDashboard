@@ -58,10 +58,13 @@ export const Card = ({ as: Tag = 'div', className, padding = 'card-pad', childre
   </Tag>
 );
 
-export const CardHeader = ({ title, description, actions, className }) => (
+export const CardHeader = ({ title, description, actions, icon: Icon, className }) => (
   <div className={cx('flex flex-wrap items-start justify-between gap-3', className)}>
     <div className="min-w-0">
-      <h2 className="section-title">{title}</h2>
+      <h2 className="section-title inline-flex items-center gap-2">
+        {Icon && <Icon className="w-4 h-4 text-slate-400 shrink-0" aria-hidden="true" />}
+        {title}
+      </h2>
       {description && <p className="text-meta text-slate-500 mt-0.5">{description}</p>}
     </div>
     {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
@@ -222,7 +225,13 @@ export const ErrorState = ({ title, error, onRetry, action, className }) => {
     <div className={cx('card card-pad-lg border-rose-200 bg-rose-50/40', className)} role="alert">
       <div className="flex items-start gap-3">
         <div className="w-9 h-9 rounded-control bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
-          {isNetwork ? <WifiOff className="w-4.5 h-4.5" aria-hidden="true" /> : <AlertCircle className="w-4.5 h-4.5" aria-hidden="true" />}
+          {/* w-4.5 is not a Tailwind step; these were falling back to Lucide's
+              24px default and overflowing the badge. */}
+          {isNetwork ? (
+            <WifiOff className="w-[18px] h-[18px]" aria-hidden="true" />
+          ) : (
+            <AlertCircle className="w-[18px] h-[18px]" aria-hidden="true" />
+          )}
         </div>
         <div className="min-w-0 flex-1">
           <h3 className="text-card-title text-rose-900">{heading}</h3>
@@ -532,12 +541,38 @@ export const StatusBadge = ({ status, className }) => {
     REVIEW: { label: 'Review', variant: 'neutral' },
     NEEDS_REVIEW: { label: 'Needs Review', variant: 'warning' },
     SHORTLISTED: { label: 'Shortlisted', variant: 'success' },
-    NOT_SUITABLE: { label: 'Not Suitable', variant: 'neutral' }
+    NOT_SUITABLE: { label: 'Not Suitable', variant: 'neutral' },
+    // Filled, not tinted: the hire must not be mistaken for a shortlisted
+    // candidate when both appear in the same list.
+    SELECTED: { label: 'Selected', variant: 'selected' }
   };
   const meta = META[status] || { label: status || 'Unknown', variant: 'neutral' };
   return (
     <Badge variant={meta.variant} className={className}>
       {meta.label}
+    </Badge>
+  );
+};
+
+/* ------------------------------------------------------------ JobStatusBadge --- */
+
+/**
+ * Persisted job lifecycle, in recruiter language: OPEN reads as "Active" and
+ * CLOSED as "Closed".
+ *
+ * Closed is a successfully completed role, so it is muted rather than styled as
+ * an error. The dot is decorative — the label always carries the meaning, so
+ * status is never communicated by colour alone.
+ */
+export const JobStatusBadge = ({ status, className }) => {
+  const closed = status === 'CLOSED';
+  return (
+    <Badge variant={closed ? 'neutral' : 'brand'} className={className}>
+      <span
+        className={cx('w-1.5 h-1.5 rounded-pill shrink-0', closed ? 'bg-slate-400' : 'bg-brand-500')}
+        aria-hidden="true"
+      />
+      {closed ? 'Closed' : 'Active'}
     </Badge>
   );
 };

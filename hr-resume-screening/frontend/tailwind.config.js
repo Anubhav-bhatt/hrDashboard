@@ -47,6 +47,31 @@ export default {
         sky: ramp('sky', ACCENT_STEPS),
         teal: ramp('teal', ACCENT_STEPS),
 
+        /*
+         * Semantic aliases.
+         *
+         * The ramps above are the raw material; these are the names to reach for
+         * when writing new markup, so intent is legible at the call site
+         * (`bg-surface-muted` rather than `bg-slate-100`) and a future palette
+         * change has one place to happen. They resolve to the same variables, so
+         * they are theme-aware and interchangeable with the existing classes —
+         * nothing had to be rewritten to introduce them.
+         */
+        background: withAlpha('--c-slate-50'), // page
+        surface: withAlpha('--c-white'), // cards
+        'surface-muted': withAlpha('--c-slate-100'), // wells, hover
+        'surface-raised': withAlpha('--c-white'), // popovers, dialogs
+        'border-subtle': withAlpha('--c-slate-200'),
+        'border-strong': withAlpha('--c-slate-300'),
+        'text-primary': withAlpha('--c-slate-900'),
+        'text-secondary': withAlpha('--c-slate-600'),
+        'text-muted': withAlpha('--c-slate-500'),
+        'brand-muted': withAlpha('--c-brand-50'),
+        success: withAlpha('--c-emerald-600'),
+        warning: withAlpha('--c-amber-600'),
+        danger: withAlpha('--c-rose-600'),
+        info: withAlpha('--c-sky-600'),
+
         // Fixed colours for surfaces that must stay dark in both themes, such as
         // the sign-in brand panel. These deliberately do NOT invert, so they also
         // carry their own foreground steps for text placed on them.
@@ -73,15 +98,28 @@ export default {
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace']
       },
       fontSize: {
-        // Typography scale — every screen picks from these instead of ad-hoc sizes.
-        display: ['1.75rem', { lineHeight: '2.125rem', letterSpacing: '-0.02em', fontWeight: '700' }],
-        'page-title': ['1.375rem', { lineHeight: '1.75rem', letterSpacing: '-0.015em', fontWeight: '700' }],
-        section: ['1rem', { lineHeight: '1.5rem', letterSpacing: '-0.01em', fontWeight: '600' }],
+        /*
+         * Typography scale — every screen picks from these instead of ad-hoc
+         * sizes. Six steps only, and weight is part of the step so a heading
+         * cannot accidentally be rendered at the wrong weight:
+         *
+         *   display     28px semibold  page titles
+         *   page-title  22px semibold  page titles on narrow screens
+         *   section     18px semibold  section headings
+         *   card-title  15px semibold  card headings
+         *   body        14px regular   default copy
+         *   meta        13px regular   secondary copy
+         *   label       12px semibold  uppercase eyebrows and field labels
+         *   metric      30px semibold  KPI figures
+         */
+        display: ['1.75rem', { lineHeight: '2.125rem', letterSpacing: '-0.02em', fontWeight: '600' }],
+        'page-title': ['1.375rem', { lineHeight: '1.75rem', letterSpacing: '-0.015em', fontWeight: '600' }],
+        section: ['1.125rem', { lineHeight: '1.625rem', letterSpacing: '-0.011em', fontWeight: '600' }],
         'card-title': ['0.9375rem', { lineHeight: '1.375rem', fontWeight: '600' }],
         body: ['0.875rem', { lineHeight: '1.375rem' }],
         meta: ['0.8125rem', { lineHeight: '1.25rem' }],
         label: ['0.75rem', { lineHeight: '1rem', letterSpacing: '0.02em', fontWeight: '600' }],
-        metric: ['1.875rem', { lineHeight: '2.25rem', letterSpacing: '-0.025em', fontWeight: '700' }]
+        metric: ['1.875rem', { lineHeight: '2.25rem', letterSpacing: '-0.025em', fontWeight: '600' }]
       },
       spacing: {
         // 4px-based scale used throughout the app.
@@ -103,8 +141,10 @@ export default {
         'sidebar-collapsed': '4.25rem'
       },
       borderRadius: {
-        card: '0.75rem',
+        // Controls 8px, cards 12px, large panels 14px, pills fully round.
         control: '0.5rem',
+        card: '0.75rem',
+        panel: '0.875rem',
         pill: '9999px'
       },
       boxShadow: {

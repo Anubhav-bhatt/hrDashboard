@@ -7,6 +7,7 @@ const {
   buildCandidateWhere,
   buildPaginationMeta
 } = require('../utils/candidateQuery');
+const { STRONG_MATCH_MIN } = require('../utils/scoreThresholds');
 
 /**
  * Cross-job candidate listing.
@@ -27,7 +28,13 @@ const listCandidates = async (req, res, next) => {
     const orderBy = parseSort(req.query.sort);
     const where = buildCandidateWhere(req.query);
 
-    const [total, candidates, statusGroups] = await Promise.all([
+    // Tab tallies deliberately ignore the status filter: a recruiter looking at
+    // Shortlisted still needs to see how many candidates the other tabs hold.
+    // Every other active filter is respected, so the counts describe what
+    // switching tab would actually show.
+    const tabWhere = buildCandidateWhere({ ...req.query, hrStatus: undefined });
+
+    const [total, candidates, statusGroups, strongMatchCount, tabTotal] = await Promise.all([
       prisma.candidate.count({ where }),
       prisma.candidate.findMany({
         where,
@@ -36,9 +43,9 @@ const listCandidates = async (req, res, next) => {
         take: limit,
         select: { ...LIST_SELECT, job: { select: { id: true, title: true } } }
       }),
-      // Status tallies for the current filter set, so the UI can label its tabs
-      // without issuing a second round of requests.
-      prisma.candidate.groupBy({ by: ['hrStatus'], where, _count: { _all: true } })
+      prisma.candidate.groupBy({ by: ['hrStatus'], where: tabWhere, _count: { _all: true } }),
+      prisma.candidate.count({ where: { ...tabWhere, overallScore: { gte: STRONG_MATCH_MIN } } }),
+      prisma.candidate.count({ where: tabWhere })
     ]);
 
     return res.status(200).json({
@@ -52,7 +59,10 @@ const listCandidates = async (req, res, next) => {
         statusCounts: statusGroups.reduce((acc, row) => {
           acc[row.hrStatus] = row._count._all;
           return acc;
-        }, {})
+        }, {}),
+        strongMatchCount,
+        allCount: tabTotal,
+        strongMatchThreshold: STRONG_MATCH_MIN
       }
     });
   } catch (error) {

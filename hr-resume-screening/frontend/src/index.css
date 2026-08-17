@@ -190,6 +190,10 @@
   .badge-info    { @apply bg-sky-50 text-sky-700 border-sky-200; }
   .badge-violet  { @apply bg-violet-50 text-violet-700 border-violet-200; }
 
+  /* The hiring outcome. Filled rather than tinted so "Selected" cannot be
+     mistaken for the outlined "Shortlisted" badge sitting beside it in a list. */
+  .badge-selected { @apply bg-brand-600 text-white border-brand-600 shadow-sm; }
+
   /* ------------------------------------------------------------------ chips */
   .chip {
     @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-pill border border-slate-200

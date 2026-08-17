@@ -13,7 +13,7 @@ import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { useToast } from '../ToastProvider';
 import CandidateCard from '../CandidateCard';
 import Pagination from '../Pagination';
-import { Button, Card, EmptyState, ErrorState, FilterChip, ListSkeleton, cx } from '../ui';
+import { Button, Card, EmptyState, ErrorState, FilterChip, ListSkeleton, StatusBadge, cx } from '../ui';
 import Drawer from '../ui/Drawer';
 import { HR_STATUS_META } from '../../utils/format';
 
@@ -51,8 +51,16 @@ const STATUS_TABS = [
   { value: 'REVIEW', label: 'In Review' },
   { value: 'NEEDS_REVIEW', label: 'Needs Review' },
   { value: 'SHORTLISTED', label: 'Shortlisted' },
+  { value: 'SELECTED', label: 'Selected' },
   { value: 'NOT_SUITABLE', label: 'Not Suitable' }
 ];
+
+/**
+ * "Best matches" is a score preset rather than a status, so it is expressed as a
+ * minimum score and uses the threshold the server reports. There is deliberately
+ * no second definition of "strong" in the frontend.
+ */
+const BEST_MATCH_TAB = { id: 'best', label: 'Best matches' };
 
 /** Filter keys mirrored into the query string. */
 const FILTER_KEYS = [
@@ -159,6 +167,10 @@ const CandidateBrowser = ({ jobId = null, defaultSort = 'score_desc', extraFilte
   const candidates = data?.data || [];
   const pagination = data?.pagination;
   const statusCounts = data?.facets?.statusCounts || {};
+  const strongMatchCount = data?.facets?.strongMatchCount;
+  const allCount = data?.facets?.allCount;
+  // The strong-match threshold is the server's, never a second frontend constant.
+  const threshold = data?.facets?.strongMatchThreshold ?? 80;
   const skillOptions = filterData?.data?.skills || [];
   const locationOptions = filterData?.data?.locations || [];
   const qualificationOptions = filterData?.data?.qualifications || [];
@@ -295,26 +307,34 @@ const CandidateBrowser = ({ jobId = null, defaultSort = 'score_desc', extraFilte
           </div>
         </div>
 
-        {/* Status tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto scroll-slim -mx-1 px-1 pb-0.5">
-          {STATUS_TABS.map((tab) => {
-            const active = (params.hrStatus || '') === tab.value;
-            const count = tab.value ? statusCounts[tab.value] : pagination?.total;
-
-            return (
+        {/*
+          Quick presets. These cover what a recruiter wants nine times out of ten,
+          which is what lets the rest of the filters live behind the drawer.
+          Counts come from the API and ignore the active preset, so they always
+          say how many candidates the other tabs hold.
+        */}
+        <div
+          role="group"
+          aria-label="Filter candidates"
+          className="flex items-center gap-1.5 overflow-x-auto scroll-slim -mx-1 px-1 pb-0.5"
+        >
+          {(() => {
+            const bestActive = !params.hrStatus && String(params.minScore || '') === String(threshold);
+            const tabButton = (key, label, count, active, onClick) => (
               <button
-                key={tab.value || 'all'}
+                key={key}
                 type="button"
-                onClick={() => updateParams({ hrStatus: tab.value })}
+                onClick={onClick}
                 aria-pressed={active}
                 className={cx(
                   'px-3 py-1.5 rounded-pill text-xs font-semibold whitespace-nowrap transition-colors duration-fast border',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1',
                   active
                     ? 'bg-brand-600 text-white border-brand-600'
                     : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-slate-900'
                 )}
               >
-                {tab.label}
+                {label}
                 {count !== undefined && count !== null && (
                   <span className={cx('ml-1.5 tabular-nums', active ? 'text-white/80' : 'text-slate-400')}>
                     {count}
@@ -322,85 +342,23 @@ const CandidateBrowser = ({ jobId = null, defaultSort = 'score_desc', extraFilte
                 )}
               </button>
             );
-          })}
+
+            return [
+              tabButton('all', 'All', allCount ?? pagination?.total, !params.hrStatus && !bestActive, () =>
+                updateParams({ hrStatus: '', minScore: '' })
+              ),
+              tabButton(BEST_MATCH_TAB.id, BEST_MATCH_TAB.label, strongMatchCount, bestActive, () =>
+                updateParams({ hrStatus: '', minScore: String(threshold), sort: 'score_desc' })
+              ),
+              ...STATUS_TABS.filter((tab) => tab.value).map((tab) =>
+                tabButton(tab.value, tab.label, statusCounts[tab.value] ?? 0, params.hrStatus === tab.value, () =>
+                  updateParams({ hrStatus: tab.value, minScore: '' })
+                )
+              )
+            ];
+          })()}
         </div>
 
-        {/* Primary filters stay inline — these are the ones used constantly. */}
-        <div className="pt-3 divider grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-          <div>
-            <label htmlFor="filter-score" className="field-label">
-              Match score
-            </label>
-            <select
-              id="filter-score"
-              className="select h-9"
-              value={params.minScore || ''}
-              onChange={(e) => updateParams({ minScore: e.target.value, maxScore: '' })}
-            >
-              {SCORE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label htmlFor="filter-experience" className="field-label">
-              Experience
-            </label>
-            <select
-              id="filter-experience"
-              className="select h-9"
-              value={params.experienceRange || ''}
-              onChange={(e) => updateParams({ experienceRange: e.target.value })}
-            >
-              {EXPERIENCE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label htmlFor="filter-location" className="field-label">
-              Location
-            </label>
-            <select
-              id="filter-location"
-              className="select h-9"
-              value={params.location || ''}
-              onChange={(e) => updateParams({ location: e.target.value })}
-            >
-              <option value="">Any location</option>
-              {locationOptions.map((l) => (
-                <option key={l.value} value={l.value}>
-                  {l.value} ({l.count})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label htmlFor="filter-skill" className="field-label">
-              Skill
-            </label>
-            <select
-              id="filter-skill"
-              className="select h-9"
-              value={params.skill || ''}
-              onChange={(e) => updateParams({ skill: e.target.value })}
-            >
-              <option value="">Any skill</option>
-              {skillOptions.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.value} ({s.count})
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
 
         {hasActiveFilters && (
           <div className="flex flex-wrap items-center gap-2 pt-3 divider">
@@ -446,6 +404,85 @@ const CandidateBrowser = ({ jobId = null, defaultSort = 'score_desc', extraFilte
             expanded relationship is announced correctly. */}
         <div id="candidate-filters" className="space-y-4">
           {extraFilters}
+
+          {/* The four filters recruiters reach for most. They used to sit in the
+              toolbar; behind the drawer the list opens with search and sort only,
+              and nothing has been taken away. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="drawer-filter-score" className="field-label">
+                Match score
+              </label>
+              <select
+                id="drawer-filter-score"
+                className="select"
+                value={params.minScore || ''}
+                onChange={(e) => updateParams({ minScore: e.target.value, maxScore: '' })}
+              >
+                {SCORE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="drawer-filter-experience" className="field-label">
+                Experience
+              </label>
+              <select
+                id="drawer-filter-experience"
+                className="select"
+                value={params.experienceRange || ''}
+                onChange={(e) => updateParams({ experienceRange: e.target.value })}
+              >
+                {EXPERIENCE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="drawer-filter-location" className="field-label">
+                Location
+              </label>
+              <select
+                id="drawer-filter-location"
+                className="select"
+                value={params.location || ''}
+                onChange={(e) => updateParams({ location: e.target.value })}
+              >
+                <option value="">Any location</option>
+                {locationOptions.map((l) => (
+                  <option key={l.value} value={l.value}>
+                    {l.value} ({l.count})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="drawer-filter-skill" className="field-label">
+                Skill
+              </label>
+              <select
+                id="drawer-filter-skill"
+                className="select"
+                value={params.skill || ''}
+                onChange={(e) => updateParams({ skill: e.target.value })}
+              >
+                <option value="">Any skill</option>
+                {skillOptions.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.value} ({s.count})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
 
           <div>
             <label htmlFor="drawer-filter-qualification" className="field-label">
@@ -541,7 +578,7 @@ const CandidateBrowser = ({ jobId = null, defaultSort = 'score_desc', extraFilte
               </Button>
             ) : jobId ? (
               <Link to={`/jobs/${jobId}/import`} className="btn btn-sm btn-primary">
-                Import candidates
+                Add candidates
               </Link>
             ) : (
               <Link to="/jobs/new" className="btn btn-sm btn-primary">
@@ -562,21 +599,32 @@ const CandidateBrowser = ({ jobId = null, defaultSort = 'score_desc', extraFilte
                 candidate={candidate}
                 showJob={!jobId}
                 actions={
-                  <label className="sm:mt-1">
-                    <span className="sr-only">Change status for {candidate.name}</span>
-                    <select
-                      value={candidate.hrStatus || 'REVIEW'}
-                      onChange={(e) => handleStatusChange(candidate, e.target.value)}
-                      disabled={statusUpdating === candidate._id}
-                      className="select h-8 py-0 pl-2.5 text-xs w-auto max-w-[8.5rem]"
-                    >
-                      {Object.entries(HR_STATUS_META).map(([value, meta]) => (
-                        <option key={value} value={value}>
-                          {meta.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  // A hired candidate's status is final, so the control becomes
+                  // a read-only badge rather than a dropdown the server rejects.
+                  candidate.hrStatus === 'SELECTED' ? (
+                    <div className="sm:mt-1">
+                      <StatusBadge status="SELECTED" />
+                    </div>
+                  ) : (
+                    <label className="sm:mt-1">
+                      <span className="sr-only">Change status for {candidate.name}</span>
+                      <select
+                        value={candidate.hrStatus || 'REVIEW'}
+                        onChange={(e) => handleStatusChange(candidate, e.target.value)}
+                        disabled={statusUpdating === candidate._id}
+                        className="select h-8 py-0 pl-2.5 text-xs w-auto max-w-[8.5rem]"
+                      >
+                        {/* Selection happens by closing the job, not here. */}
+                        {Object.entries(HR_STATUS_META)
+                          .filter(([value]) => value !== 'SELECTED')
+                          .map(([value, meta]) => (
+                            <option key={value} value={value}>
+                              {meta.label}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                  )
                 }
               />
             ))}

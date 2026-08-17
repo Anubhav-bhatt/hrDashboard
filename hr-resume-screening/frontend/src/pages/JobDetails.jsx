@@ -1,11 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
   Award,
   Briefcase,
   Calendar,
   Clock,
-  DownloadCloud,
   FileText,
   GraduationCap,
   IndianRupee,
@@ -15,22 +14,29 @@ import {
   Save,
   Search,
   Sparkles,
+  CheckCircle2,
+  Lock,
   UserCheck,
+  UserPlus,
   Users,
   X
 } from 'lucide-react';
 import {
   analyzeAllCandidates,
+  closeJob,
   getCandidates,
   getJobById,
+  getJobShortlist,
   getJobSummary,
   toApiError,
   updateJobCriteria
 } from '../services/api';
+import CloseJobDialog from '../components/jobs/CloseJobDialog';
 import { useApiResource } from '../hooks/useApiResource';
 import { useToast } from '../components/ToastProvider';
 import TopCandidates from '../components/dashboard/TopCandidates';
 import {
+  Avatar,
   Badge,
   Button,
   Card,
@@ -38,13 +44,24 @@ import {
   EmptyState,
   ErrorState,
   InlineAlert,
+  JobStatusBadge,
   PageHeader,
   Skeleton,
   SkillChip,
+  TabPanel,
+  Tabs,
   cx
 } from '../components/ui';
 import TokenInput from '../components/ui/TokenInput';
+import CandidateBrowser from '../components/candidate/CandidateBrowser';
 import { formatDate, formatExperience, formatSalary } from '../utils/format';
+
+/** The three things a recruiter comes to a job page for. */
+const JOB_TABS = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'candidates', label: 'Candidates' },
+  { id: 'criteria', label: 'Job criteria' }
+];
 
 const SKILL_SUGGESTIONS = [
   'React', 'TypeScript', 'JavaScript', 'Node.js', 'Express', 'PostgreSQL', 'MongoDB',
@@ -144,6 +161,78 @@ const JobDetails = () => {
   const [analyzing, setAnalyzing] = useState(false);
   const [validationError, setValidationError] = useState('');
   const [draft, setDraft] = useState(null);
+
+  // The active tab and the JD disclosure. The tab is mirrored into the URL so a
+  // link can point at a job's criteria or candidates directly.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get('tab');
+  const activeTab = JOB_TABS.some((tab) => tab.id === requestedTab) ? requestedTab : 'overview';
+  const [jdOpen, setJdOpen] = useState(false);
+
+  const setTab = (next) => {
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        if (next === 'overview') params.delete('tab');
+        else params.set('tab', next);
+        return params;
+      },
+      { replace: true }
+    );
+  };
+
+  // Job closure
+  const isClosed = job?.status === 'CLOSED';
+  const shortlistedCount = stats?.shortlistedCount ?? job?.shortlistedCount ?? 0;
+  const canClose = !isClosed && shortlistedCount > 0;
+  const [closeDialogOpen, setCloseDialogOpen] = useState(false);
+  const [shortlist, setShortlist] = useState([]);
+  const [loadingShortlist, setLoadingShortlist] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const [closeError, setCloseError] = useState('');
+
+  /** Loads the shortlist on demand, so an unopened dialog costs nothing. */
+  const openCloseDialog = async () => {
+    setCloseError('');
+    setLoadingShortlist(true);
+    try {
+      const response = await getJobShortlist(id);
+      const candidates = response?.data || [];
+      if (candidates.length === 0) {
+        toast.error('Shortlist at least one candidate before closing this job.');
+        return;
+      }
+      setShortlist(candidates);
+      setCloseDialogOpen(true);
+    } catch (err) {
+      toast.error(toApiError(err).message);
+    } finally {
+      setLoadingShortlist(false);
+    }
+  };
+
+  const confirmClose = async (selectedCandidateId) => {
+    setClosing(true);
+    setCloseError('');
+    try {
+      const response = await closeJob(id, selectedCandidateId);
+      const hire = response?.data?.selectedCandidate;
+      setCloseDialogOpen(false);
+      toast.success(
+        hire?.name
+          ? `Job closed. ${hire.name} was selected for ${job.title}.`
+          : 'Job closed successfully.'
+      );
+      // Reload so the page renders its closed state from the server rather than
+      // from an assumption about what the write did.
+      refetch();
+      refetchSummary();
+    } catch (err) {
+      setCloseError(toApiError(err).message);
+    } finally {
+      setClosing(false);
+    }
+  };
 
   // The editable copy is seeded from the server whenever the job (re)loads.
   useEffect(() => {
@@ -309,22 +398,115 @@ const JobDetails = () => {
               <Calendar className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
               Created {formatDate(job.createdAt)}
             </span>
-            <Badge variant={status.variant}>{status.label}</Badge>
+            <JobStatusBadge status={job.status} />
+            {!isClosed && <Badge variant={status.variant}>{status.label}</Badge>}
           </span>
         }
         actions={
-          <>
-            <Link to={`/jobs/${id}/import`} className="btn btn-md btn-secondary">
-              <DownloadCloud className="w-4 h-4" aria-hidden="true" />
-              Import candidates
-            </Link>
-            <Link to={`/jobs/${id}/candidates`} className="btn btn-md btn-primary">
-              <Users className="w-4 h-4" aria-hidden="true" />
-              View candidates
-            </Link>
-          </>
+          /*
+            One dominant action, chosen from the job's real state:
+            no candidates yet -> add some; a shortlist exists -> make the hiring
+            decision; otherwise -> look at the candidates. A closed job offers
+            nothing operational at all.
+          */
+          isClosed ? (
+            job.selectedCandidate && (
+              <Link to={`/jobs/${id}/candidates/${job.selectedCandidate.id}`} className="btn btn-md btn-primary">
+                <Users className="w-4 h-4" aria-hidden="true" />
+                View selected candidate
+              </Link>
+            )
+          ) : (
+            <>
+              {!hasCandidates ? (
+                <Link to={`/jobs/${id}/import`} className="btn btn-md btn-primary">
+                  <UserPlus className="w-4 h-4" aria-hidden="true" />
+                  Add candidates
+                </Link>
+              ) : (
+                <>
+                  <Link to={`/jobs/${id}/import`} className="btn btn-md btn-secondary">
+                    <UserPlus className="w-4 h-4" aria-hidden="true" />
+                    Add candidates
+                  </Link>
+                  {canClose ? (
+                    // Phrased as the decision the recruiter is making, not as the
+                    // administrative act of closing a record.
+                    <Button variant="primary" onClick={openCloseDialog} loading={loadingShortlist} icon={CheckCircle2}>
+                      Select final candidate
+                    </Button>
+                  ) : (
+                    <Link to={`/jobs/${id}/candidates`} className="btn btn-md btn-primary">
+                      <Users className="w-4 h-4" aria-hidden="true" />
+                      View candidates
+                    </Link>
+                  )}
+                </>
+              )}
+            </>
+          )
         }
       />
+
+      {!isClosed && hasCandidates && shortlistedCount === 0 && (
+        <p className="text-meta text-slate-500 -mt-2">
+          Shortlist candidates you want to consider, then select the one you hire.
+        </p>
+      )}
+
+      {/* Closed-job banner: what happened, who was hired, and a way to them. */}
+      {isClosed && (
+        <section
+          aria-label="Job closed"
+          className="rounded-card border border-brand-200 bg-brand-50 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-4"
+        >
+          <div className="min-w-0 flex-1">
+            <p className="inline-flex items-center gap-2 text-meta font-semibold text-brand-700">
+              <Lock className="w-4 h-4 shrink-0" aria-hidden="true" />
+              This job is closed
+            </p>
+            <p className="text-body text-slate-700 mt-1">
+              Filled on {formatDate(job.closedAt)}. Candidate imports and re-analysis are disabled; all history
+              remains available.
+            </p>
+          </div>
+
+          {job.selectedCandidate && (
+            <div className="shrink-0 flex items-center gap-3 rounded-control bg-white border border-brand-200 p-3">
+              <Avatar name={job.selectedCandidate.name} size="md" />
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-700">Selected candidate</p>
+                <p className="text-body font-medium text-slate-900 truncate">{job.selectedCandidate.name}</p>
+                {job.selectedCandidate.overallScore !== null && job.selectedCandidate.overallScore !== undefined && (
+                  <p className="text-meta text-slate-600 tabular-nums">
+                    {Math.round(job.selectedCandidate.overallScore)}% job match
+                  </p>
+                )}
+              </div>
+              <Link
+                to={`/jobs/${id}/candidates/${job.selectedCandidate.id}`}
+                className="btn btn-sm btn-secondary shrink-0"
+              >
+                View candidate
+              </Link>
+            </div>
+          )}
+        </section>
+      )}
+
+      {closeDialogOpen && (
+        <CloseJobDialog
+          jobTitle={job.title}
+          candidates={shortlist}
+          submitting={closing}
+          error={closeError}
+          onConfirm={confirmClose}
+          onClose={() => {
+            setCloseDialogOpen(false);
+            setCloseError('');
+          }}
+        />
+      )}
 
       {/* Candidate snapshot — values come from the job summary API */}
       <section aria-label="Candidate snapshot" className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -368,9 +550,19 @@ const JobDetails = () => {
         />
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Main column */}
-        <div className="lg:col-span-2 space-y-5">
+      {/*
+        Three tabs, and only three.
+        Everything this page can do belongs to one of them: what is happening
+        (Overview), who applied (Candidates), or what the role screens for (Job
+        Criteria). The active tab lives in the URL so a particular view of a job
+        can be refreshed and shared.
+      */}
+      <Tabs tabs={JOB_TABS} activeId={activeTab} onChange={setTab} />
+
+      {/* ------------------------------------------------------- Job criteria --- */}
+      <TabPanel id="criteria" activeId={activeTab}>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div className="lg:col-span-2 space-y-5">
           {/* Screening criteria — view state by default */}
           <Card padding="p-0">
             <div className="px-5 py-4 border-b border-slate-100">
@@ -614,7 +806,9 @@ const JobDetails = () => {
               )}
             </div>
 
-            {hasCandidates && stats.analyzedCount > 0 && !editing && (
+            {/* Re-scoring is withheld on a closed job: the scores that informed
+                the hiring decision must stay as they were. */}
+            {hasCandidates && stats.analyzedCount > 0 && !editing && !isClosed && (
               <div className="px-5 py-4 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <p className="text-meta text-slate-600">
                   Changed the criteria? Re-score so rankings reflect the current requirements.
@@ -624,53 +818,108 @@ const JobDetails = () => {
                 </Button>
               </div>
             )}
+
+            {isClosed && (
+              <div className="px-5 py-4 border-t border-slate-200 bg-slate-50">
+                <p className="text-meta text-slate-600">
+                  This job is closed. Scores are preserved as they were when the hiring decision was made.
+                </p>
+              </div>
+            )}
           </Card>
 
-          {/* Job description */}
+          </div>
+
+          {/* Reference material for whoever is editing the criteria. */}
+          <div className="space-y-5">
+            <Card>
+              <CardHeader title="What this affects" />
+              <p className="text-meta text-slate-600 mt-2">
+                These criteria decide every candidate's job match. Changing them does not re-score anyone
+                automatically — use Re-score all when you are happy with the changes.
+              </p>
+            </Card>
+          </div>
+        </div>
+      </TabPanel>
+
+      {/* --------------------------------------------------------- Candidates --- */}
+      <TabPanel id="candidates" activeId={activeTab}>
+        {/* The same browser the dedicated candidates route uses, scoped to this
+            job. One implementation of searching, filtering and ranking. */}
+        <CandidateBrowser jobId={id} />
+      </TabPanel>
+
+      {/* ----------------------------------------------------------- Overview --- */}
+      <TabPanel id="overview" activeId={activeTab}>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div className="lg:col-span-2 space-y-5">
+          {/* Job description. Collapsed by default — a recruiter opening a job
+              wants its state, not a wall of extracted text. */}
           <Card padding="p-0">
-            <div className="px-5 py-4 border-b border-slate-100">
+            <div className="px-5 py-4">
               <CardHeader
                 title="Job description"
-                description="Text extracted from the uploaded document."
+                description={job.jdFileName}
                 actions={
-                  <Badge variant="neutral">{(job.jdText || '').length.toLocaleString('en-IN')} characters</Badge>
+                  job.jdText ? (
+                    <Button variant="secondary" size="sm" onClick={() => setJdOpen((open) => !open)} aria-expanded={jdOpen}>
+                      {jdOpen ? 'Hide JD' : 'View JD'}
+                    </Button>
+                  ) : null
                 }
               />
             </div>
-            <div className="p-5">
-              {job.jdText ? (
-                <div className="rounded-control border border-slate-200 bg-slate-50 p-4 max-h-80 overflow-y-auto scroll-slim">
-                  <pre className="text-xs text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">
-                    {job.jdText}
-                  </pre>
-                </div>
-              ) : (
-                <p className="text-meta text-slate-400 italic">No text could be extracted from this job description.</p>
-              )}
-            </div>
+            {jdOpen && (
+              <div className="px-5 pb-5">
+                {job.jdText ? (
+                  <div className="rounded-control border border-slate-200 bg-slate-50 p-4 max-h-80 overflow-y-auto scroll-slim">
+                    <pre className="text-xs text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">
+                      {job.jdText}
+                    </pre>
+                  </div>
+                ) : (
+                  <p className="text-meta text-slate-400 italic">
+                    Text couldn't be read from this job description file.
+                  </p>
+                )}
+              </div>
+            )}
           </Card>
-        </div>
 
-        {/* Contextual side panel */}
-        <div className="space-y-5">
           <TopCandidates
             candidates={topCandidates.slice(0, 5)}
             jobTitle={job.title}
             viewAllTo={`/jobs/${id}/candidates?sort=score_desc`}
           />
+        </div>
+
+        {/* Contextual side panel */}
+        <div className="space-y-5">
 
           {/* Next action */}
           <Card>
             <CardHeader title="Next steps" />
             <div className="mt-3 space-y-2">
-              {!hasCandidates ? (
+              {isClosed ? (
                 <>
                   <p className="text-meta text-slate-600">
-                    No candidates yet. Import resumes to start screening for this role.
+                    This role is filled. Candidate imports are disabled for closed jobs, and the full screening
+                    history stays available below.
+                  </p>
+                  <Link to="/jobs/closed" className="btn btn-md btn-secondary w-full">
+                    <Briefcase className="w-4 h-4" aria-hidden="true" />
+                    View in closed jobs
+                  </Link>
+                </>
+              ) : !hasCandidates ? (
+                <>
+                  <p className="text-meta text-slate-600">
+                    No candidates yet. Add resumes to start comparing candidates against this job.
                   </p>
                   <Link to={`/jobs/${id}/import`} className="btn btn-md btn-primary w-full">
-                    <DownloadCloud className="w-4 h-4" aria-hidden="true" />
-                    Import candidates
+                    <UserPlus className="w-4 h-4" aria-hidden="true" />
+                    Add candidates
                   </Link>
                 </>
               ) : stats.pendingReviewCount > 0 ? (
@@ -697,14 +946,17 @@ const JobDetails = () => {
                 </>
               )}
 
-              <Link to={`/jobs/${id}/import`} className="btn btn-md btn-secondary w-full">
-                <DownloadCloud className="w-4 h-4" aria-hidden="true" />
-                Add more resumes
-              </Link>
+              {!isClosed && (
+                <Link to={`/jobs/${id}/import`} className="btn btn-md btn-secondary w-full">
+                  <UserPlus className="w-4 h-4" aria-hidden="true" />
+                  Add candidates
+                </Link>
+              )}
             </div>
           </Card>
         </div>
-      </div>
+        </div>
+      </TabPanel>
     </div>
   );
 };

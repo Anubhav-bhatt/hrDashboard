@@ -2,19 +2,30 @@ const express = require('express');
 const router = express.Router();
 const candidateController = require('../controllers/candidateController');
 const upload = require('../middleware/upload');
+const { rejectClosedJob } = require('../middleware/jobLifecycle');
+
+// Candidate intake and re-analysis are closed once the job is closed: a filled
+// vacancy must not gain new applicants, and historical scores must stay as they
+// were when the hiring decision was made. `rejectClosedJob` runs before the
+// upload handlers so a closed job never even buffers the incoming files.
 
 // Manual Resume Upload (Single Candidate)
-router.post('/:jobId/candidates/upload', upload.single('resume'), candidateController.uploadSingleCandidate);
+router.post('/:jobId/candidates/upload', rejectClosedJob, upload.single('resume'), candidateController.uploadSingleCandidate);
 
 // Manual Resume Upload (Bulk & Folder Candidates in Chunks)
-router.post('/:jobId/candidates/bulk-upload', upload.array('resumes', 50), candidateController.uploadBulkCandidates);
+router.post(
+  '/:jobId/candidates/bulk-upload',
+  rejectClosedJob,
+  upload.array('resumes', 50),
+  candidateController.uploadBulkCandidates
+);
 
 // Batch process candidate applications retrieved from Outlook
-router.post('/:jobId/candidates/process', candidateController.processApplications);
+router.post('/:jobId/candidates/process', rejectClosedJob, candidateController.processApplications);
 
 // Analyze candidate job relevance
-router.post('/:jobId/candidates/analyze-all', candidateController.analyzeAllCandidates);
-router.post('/:jobId/candidates/:candidateId/analyze', candidateController.analyzeCandidate);
+router.post('/:jobId/candidates/analyze-all', rejectClosedJob, candidateController.analyzeAllCandidates);
+router.post('/:jobId/candidates/:candidateId/analyze', rejectClosedJob, candidateController.analyzeCandidate);
 
 // Candidate HR review status & recruiter notes
 router.patch('/:jobId/candidates/:candidateId/status', candidateController.updateCandidateStatus);

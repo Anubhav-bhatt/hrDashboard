@@ -171,7 +171,10 @@ export const HR_STATUS_META = {
   REVIEW: { label: 'In Review', badge: 'badge-neutral', dot: 'bg-slate-400' },
   NEEDS_REVIEW: { label: 'Needs Review', badge: 'badge-warning', dot: 'bg-amber-500' },
   SHORTLISTED: { label: 'Shortlisted', badge: 'badge-success', dot: 'bg-emerald-500' },
-  NOT_SUITABLE: { label: 'Not Suitable', badge: 'badge-danger', dot: 'bg-rose-500' }
+  NOT_SUITABLE: { label: 'Not Suitable', badge: 'badge-danger', dot: 'bg-rose-500' },
+  // The hiring outcome, distinct from Shortlisted: shortlisted means still under
+  // consideration, selected means chosen for the vacancy.
+  SELECTED: { label: 'Selected', badge: 'badge-selected', dot: 'bg-brand-600' }
 };
 
 export const getStatusMeta = (status) =>

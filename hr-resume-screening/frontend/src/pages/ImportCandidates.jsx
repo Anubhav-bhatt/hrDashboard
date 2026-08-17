@@ -14,6 +14,7 @@ import {
   Play,
   FileCheck,
   Eye,
+  Lock,
   Settings2,
   Sparkles
 } from 'lucide-react';
@@ -23,10 +24,9 @@ import {
   getOutlookFolders,
   searchOutlookEmails,
   processCandidates,
-  uploadSingleCandidate,
   uploadBulkCandidates
 } from '../services/api';
-import { PageHeader, ProgressBar, Spinner } from '../components/ui';
+import { Card, EmptyState, PageHeader, ProgressBar, Spinner } from '../components/ui';
 
 const ImportCandidates = () => {
   const { jobId } = useParams();
@@ -35,13 +35,9 @@ const ImportCandidates = () => {
   const [job, setJob] = useState(null);
   const [loadingJob, setLoadingJob] = useState(true);
   const [activeTab, setActiveTab] = useState('manual'); // 'manual' | 'outlook'
+  const [dragActive, setDragActive] = useState(false);
 
   // SINGLE UPLOAD STATE
-  const [singleFile, setSingleFile] = useState(null);
-  const [singleUploading, setSingleUploading] = useState(false);
-  const [singleResult, setSingleResult] = useState(null);
-  const [singleError, setSingleError] = useState('');
-  const singleInputRef = useRef(null);
 
   // BULK & FOLDER UPLOAD STATE
   const [bulkFiles, setBulkFiles] = useState([]); // [{ file, relativePath, status: 'WAITING' | 'PROCESSING' | 'SUCCESS' | 'DUPLICATE' | 'FAILED' | 'UNSUPPORTED', result: null, error: null }]
@@ -122,45 +118,6 @@ const ImportCandidates = () => {
     } finally {
       setLoadingFolders(false);
     }
-  };
-
-  // ----------------------------------------------------
-  // SINGLE RESUME UPLOAD HANDLER
-  // ----------------------------------------------------
-  const handleSingleFileSelect = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setSingleFile(file);
-    setSingleResult(null);
-    setSingleError('');
-  };
-
-  const handleSingleUploadSubmit = async () => {
-    if (!singleFile) return;
-
-    try {
-      setSingleUploading(true);
-      setSingleError('');
-      setSingleResult(null);
-
-      const res = await uploadSingleCandidate(jobId, singleFile);
-      if (res.success) {
-        setSingleResult(res.data);
-      } else {
-        setSingleError(res.message || 'Failed to process candidate resume.');
-      }
-    } catch (err) {
-      setSingleError(err.response?.data?.message || err.message || 'Error processing single resume upload.');
-    } finally {
-      setSingleUploading(false);
-    }
-  };
-
-  const handleResetSingle = () => {
-    setSingleFile(null);
-    setSingleResult(null);
-    setSingleError('');
-    if (singleInputRef.current) singleInputRef.current.value = '';
   };
 
   // ----------------------------------------------------
@@ -425,8 +382,8 @@ const ImportCandidates = () => {
       </nav>
 
       <PageHeader
-        eyebrow="Candidate import"
-        title="Import candidates"
+        eyebrow="Candidates"
+        title="Add candidates"
         description={`Add resumes to ${job?.title || 'this role'}. Each one is parsed and scored against the job's requirements as it arrives.`}
         actions={
           <>
@@ -442,6 +399,30 @@ const ImportCandidates = () => {
         }
       />
 
+      {/* A closed job accepts no new candidates. The server enforces this on
+          every ingestion endpoint; this replaces the form so a recruiter is not
+          left filling in an upload that will be refused. */}
+      {job?.status === 'CLOSED' ? (
+        <Card>
+          <EmptyState
+            icon={Lock}
+            title="This job is closed"
+            description="Candidate imports are disabled for closed jobs. The existing candidates and their scores remain available."
+            action={
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <Link to={`/jobs/${jobId}`} className="btn btn-sm btn-primary">
+                  <Settings2 className="w-3.5 h-3.5" aria-hidden="true" />
+                  View job
+                </Link>
+                <Link to={`/jobs/${jobId}/candidates`} className="btn btn-sm btn-secondary">
+                  <Users className="w-3.5 h-3.5" aria-hidden="true" />
+                  View candidates
+                </Link>
+              </div>
+            }
+          />
+        </Card>
+      ) : (
       <div className="card card-pad-lg">
         {/* Source tabs */}
         <div className="flex border-b border-slate-200 gap-1 -mx-1 px-1 overflow-x-auto scroll-slim">
@@ -473,173 +454,82 @@ const ImportCandidates = () => {
         {/* TAB 1: MANUAL RESUME UPLOAD (SINGLE, BULK & FOLDER) */}
         {activeTab === 'manual' && (
           <div className="mt-6 space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* CARD 1: SINGLE CANDIDATE UPLOAD */}
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 flex flex-col justify-between space-y-4">
-                <div>
-                  <div className="w-10 h-10 bg-brand-100 text-brand-700 rounded-xl flex items-center space-x-0 justify-center mb-3">
-                    <FileText className="w-5 h-5" />
-                  </div>
-                  <h3 className="text-base font-bold text-slate-900">Single Candidate Upload</h3>
-                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                    Upload and analyze one resume immediately. The candidate will be extracted, matched against JD criteria, and scored in real time.
-                  </p>
+            {/*
+              One way to add resumes, whatever the shape of the source.
+              This used to be two cards — "Single Candidate Upload" and "Bulk &
+              Folder Import" — which asked a recruiter to classify their own files
+              before they could upload them. Now one file, fifty files or a whole
+              folder all arrive the same way and the app works out the rest.
+            */}
+            <div className="rounded-card border border-slate-200 bg-slate-50 p-6">
+              <h3 className="text-card-title text-slate-900">Upload resumes</h3>
+              <p className="text-meta text-slate-500 mt-1">
+                One resume, several, or a whole folder. PDF, DOCX or TXT.
+              </p>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept=".pdf,.docx,.txt"
+                onChange={handleBulkFilesSelect}
+                className="hidden"
+                id="resume-files-input"
+              />
+              <input
+                ref={folderInputRef}
+                type="file"
+                webkitdirectory=""
+                directory=""
+                multiple
+                onChange={handleFolderSelect}
+                className="hidden"
+                id="resume-folder-input"
+              />
+
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragActive(true);
+                }}
+                onDragLeave={() => setDragActive(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragActive(false);
+                  if (bulkProcessing) return;
+                  const dropped = Array.from(e.dataTransfer?.files || []);
+                  if (dropped.length) handleBulkFilesSelect({ target: { files: dropped } });
+                }}
+                className={`mt-4 rounded-card border-2 border-dashed bg-white px-6 py-10 text-center transition-colors duration-fast ${
+                  dragActive ? 'border-brand-500 bg-brand-50' : 'border-slate-300'
+                }`}
+              >
+                <Upload className="w-7 h-7 text-slate-400 mx-auto" aria-hidden="true" />
+                <p className="text-body font-medium text-slate-800 mt-3">Drag resumes here</p>
+                <p className="text-meta text-slate-500 mt-0.5">or</p>
+
+                <div className="flex flex-wrap items-center justify-center gap-2 mt-3">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={bulkProcessing}
+                    className="btn btn-md btn-primary"
+                  >
+                    <Upload className="w-4 h-4" aria-hidden="true" />
+                    Choose files
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => folderInputRef.current?.click()}
+                    disabled={bulkProcessing}
+                    className="btn btn-md btn-secondary"
+                  >
+                    <Folder className="w-4 h-4" aria-hidden="true" />
+                    Select folder
+                  </button>
                 </div>
 
-                {!singleResult ? (
-                  <div className="space-y-3 pt-2">
-                    <input
-                      ref={singleInputRef}
-                      type="file"
-                      accept=".pdf,.docx,.txt"
-                      onChange={handleSingleFileSelect}
-                      className="hidden"
-                      id="single-resume-input"
-                    />
-
-                    <label
-                      htmlFor="single-resume-input"
-                      className="w-full py-3 px-4 bg-white border-2 border-dashed border-slate-300 hover:border-brand-500 rounded-xl flex flex-col items-center justify-center cursor-pointer transition-colors"
-                    >
-                      <Upload className="w-6 h-6 text-slate-400 mb-1" />
-                      <span className="text-xs font-bold text-slate-700">
-                        {singleFile ? singleFile.name : 'Choose Single Resume File'}
-                      </span>
-                      <span className="text-[11px] text-slate-400 mt-0.5">PDF, DOCX, TXT up to 10MB</span>
-                    </label>
-
-                    {singleFile && (
-                      <button
-                        type="button"
-                        onClick={handleSingleUploadSubmit}
-                        disabled={singleUploading}
-                        className="w-full py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs rounded-xl shadow transition-colors disabled:opacity-50 flex items-center justify-center space-x-2"
-                      >
-                        {singleUploading ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            <span>Extracting &amp; Scoring...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="w-4 h-4" />
-                            <span>Upload &amp; Analyze Immediately</span>
-                          </>
-                        )}
-                      </button>
-                    )}
-
-                    {singleError && (
-                      <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-start space-x-2 text-red-800 text-xs">
-                        <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-                        <div>
-                          <p className="font-bold">Unable to process resume</p>
-                          <p className="mt-0.5">{singleError}</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  /* SINGLE RESULT CARD */
-                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-3 text-xs text-emerald-950">
-                    <div className="flex items-center justify-between border-b border-emerald-200 pb-2">
-                      <span className="font-bold uppercase tracking-wider text-[11px] text-emerald-800 flex items-center space-x-1">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                        <span>Candidate Added Successfully</span>
-                      </span>
-                      <span className="font-extrabold text-sm text-emerald-800">
-                        {singleResult.score}% Match
-                      </span>
-                    </div>
-
-                    <div className="space-y-1">
-                      <h4 className="text-base font-extrabold text-slate-900">
-                        {singleResult.candidateName || singleResult.candidate?.name}
-                      </h4>
-                      <p className="text-slate-600">
-                        Experience: <strong>{singleResult.candidate?.totalExperience || 'N/A'} Y</strong> | Location: <strong>{singleResult.candidate?.currentLocation || 'N/A'}</strong> | Qualification: <strong>{singleResult.candidate?.qualification || 'N/A'}</strong>
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-2 pt-2">
-                      <Link
-                        to={`/jobs/${jobId}/candidates/${singleResult.candidateId || singleResult.candidate?.id}`}
-                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition-colors inline-flex items-center space-x-1"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        <span>View Candidate</span>
-                      </Link>
-
-                      <button
-                        type="button"
-                        onClick={handleResetSingle}
-                        className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 font-semibold text-xs border border-slate-300 rounded-lg transition-colors"
-                      >
-                        Try Another Resume
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* CARD 2: BULK & FOLDER UPLOAD */}
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 flex flex-col justify-between space-y-4">
-                <div>
-                  <div className="w-10 h-10 bg-emerald-100 text-emerald-700 rounded-xl flex items-center justify-center mb-3">
-                    <FolderPlus className="w-5 h-5" />
-                  </div>
-                  <h3 className="text-base font-bold text-slate-900">Bulk &amp; Folder Candidate Import</h3>
-                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                    Upload multiple resume files or select an entire directory. Files in subdirectories are automatically flattened and processed with bounded memory concurrency.
-                  </p>
-                </div>
-
-                <div className="space-y-3 pt-2">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    accept=".pdf,.docx,.txt"
-                    onChange={handleBulkFilesSelect}
-                    className="hidden"
-                    id="bulk-files-input"
-                  />
-
-                  <input
-                    ref={folderInputRef}
-                    type="file"
-                    webkitdirectory=""
-                    directory=""
-                    multiple
-                    onChange={handleFolderSelect}
-                    className="hidden"
-                    id="folder-input"
-                  />
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={bulkProcessing}
-                      className="py-3 px-3 bg-white border border-slate-300 hover:border-brand-500 rounded-xl flex flex-col items-center justify-center text-xs font-bold text-slate-700 transition-colors disabled:opacity-50"
-                    >
-                      <Upload className="w-5 h-5 text-brand-600 mb-1" />
-                      <span>Select Files</span>
-                      <span className="text-[10px] font-normal text-slate-400">Multiple files</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => folderInputRef.current?.click()}
-                      disabled={bulkProcessing}
-                      className="py-3 px-3 bg-white border border-slate-300 hover:border-emerald-500 rounded-xl flex flex-col items-center justify-center text-xs font-bold text-slate-700 transition-colors disabled:opacity-50"
-                    >
-                      <Folder className="w-5 h-5 text-emerald-600 mb-1" />
-                      <span>Select Folder</span>
-                      <span className="text-[10px] font-normal text-slate-400">Directory scan</span>
-                    </button>
-                  </div>
-                </div>
+                <p className="text-xs text-slate-400 mt-4">PDF · DOCX · TXT</p>
               </div>
             </div>
 
@@ -650,7 +540,7 @@ const ImportCandidates = () => {
                   <div>
                     <h3 className="text-base font-bold text-slate-900 flex items-center space-x-2">
                       <FileCheck className="w-5 h-5 text-brand-600" />
-                      <span>Bulk Batch Import Preview ({bulkFiles.length} Resumes)</span>
+                      <span>{bulkFiles.length} resume{bulkFiles.length === 1 ? '' : 's'} ready to add</span>
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
                       Formats: PDF (<strong>{pdfCount}</strong>) | DOCX (<strong>{docxCount}</strong>) | TXT (<strong>{txtCount}</strong>) | Ignored: <strong>{ignoredCount}</strong> | Total Size: <strong>{totalSizeMB} MB</strong>
@@ -817,7 +707,7 @@ const ImportCandidates = () => {
                                 <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">SUCCESS ({item.result?.score || 0}%)</span>
                               )}
                               {item.status === 'DUPLICATE' && (
-                                <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-bold">DUPLICATE</span>
+                                <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-bold">Already added</span>
                               )}
                               {item.status === 'FAILED' && (
                                 <span className="bg-rose-100 text-rose-800 px-2 py-0.5 rounded font-bold">FAILED</span>
@@ -990,6 +880,7 @@ const ImportCandidates = () => {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 };

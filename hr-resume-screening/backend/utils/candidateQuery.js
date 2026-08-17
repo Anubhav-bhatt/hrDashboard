@@ -6,7 +6,23 @@
  * sorting and pagination behave identically on every screen.
  */
 
-const HR_STATUSES = ['REVIEW', 'SHORTLISTED', 'NOT_SUITABLE', 'NEEDS_REVIEW'];
+/**
+ * Every HR status a candidate row may hold.
+ *
+ * SELECTED is the hiring outcome and is deliberately distinct from SHORTLISTED:
+ * shortlisted means still under consideration, selected means chosen for the
+ * vacancy. It is only ever written by job closure, never by the ordinary status
+ * endpoint, which is why it is excluded from ASSIGNABLE_HR_STATUSES below.
+ */
+const HR_STATUSES = ['REVIEW', 'SHORTLISTED', 'NOT_SUITABLE', 'NEEDS_REVIEW', 'SELECTED'];
+
+/**
+ * Statuses a recruiter may set directly through PATCH .../status.
+ *
+ * Reaching SELECTED requires closing the job so that the candidate flag and the
+ * job's selectedCandidateId can never disagree.
+ */
+const ASSIGNABLE_HR_STATUSES = HR_STATUSES.filter((status) => status !== 'SELECTED');
 
 const SORT_OPTIONS = {
   score_desc: [{ overallScore: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
@@ -75,6 +91,7 @@ const LIST_SELECT = {
   analyzedAt: true,
   hrStatus: true,
   notes: true,
+  selectedAt: true,
   createdAt: true,
   updatedAt: true
 };
@@ -252,6 +269,7 @@ const buildPaginationMeta = ({ page, limit, total }) => ({
 
 module.exports = {
   HR_STATUSES,
+  ASSIGNABLE_HR_STATUSES,
   SORT_OPTIONS,
   DEFAULT_SORT,
   DEFAULT_LIMIT,

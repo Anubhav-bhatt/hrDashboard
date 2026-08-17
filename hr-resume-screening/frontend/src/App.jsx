@@ -8,6 +8,8 @@ import { ProfileSkeleton, Spinner } from './components/ui';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import JobsList from './pages/JobsList';
+import ClosedJobs from './pages/ClosedJobs';
+import Settings from './pages/Settings';
 import CreateJob from './pages/CreateJob';
 import JobDetails from './pages/JobDetails';
 import CandidatesList from './pages/CandidatesList';
@@ -75,12 +77,30 @@ function App() {
                 </RequireAuth>
               }
             />
+            {/* The dashboard is the app root; /dashboard is accepted too so the
+                named URL can be linked and bookmarked. */}
+            <Route
+              path="/dashboard"
+              element={
+                <RequireAuth>
+                  <Dashboard />
+                </RequireAuth>
+              }
+            />
 
             <Route
               path="/candidates"
               element={
                 <RequireAuth>
                   <CandidatesList />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <RequireAuth>
+                  <Settings />
                 </RequireAuth>
               }
             />
@@ -98,6 +118,15 @@ function App() {
               element={
                 <RequireAuth>
                   <JobsList />
+                </RequireAuth>
+              }
+            />
+            {/* Registered before /jobs/:jobId so "closed" is not read as an id. */}
+            <Route
+              path="/jobs/closed"
+              element={
+                <RequireAuth>
+                  <ClosedJobs />
                 </RequireAuth>
               }
             />

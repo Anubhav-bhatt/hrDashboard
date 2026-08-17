@@ -3,13 +3,20 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, ArrowUpRight, Minus, TrendingDown, TrendingUp } from 'lucide-react';
 import { cx } from './ui';
 
+/**
+ * Icon tint per tone.
+ *
+ * A bare glyph rather than a filled block: on a row of four cards, four
+ * saturated squares compete with the very numbers the cards exist to show. The
+ * tone survives as a quiet hue on the icon and nothing else.
+ */
 const TONES = {
-  brand: { icon: 'bg-brand-50 text-brand-600', accent: 'text-brand-700' },
-  emerald: { icon: 'bg-emerald-50 text-emerald-600', accent: 'text-emerald-700' },
-  amber: { icon: 'bg-amber-50 text-amber-600', accent: 'text-amber-700' },
-  rose: { icon: 'bg-rose-50 text-rose-600', accent: 'text-rose-700' },
-  violet: { icon: 'bg-violet-50 text-violet-600', accent: 'text-violet-700' },
-  slate: { icon: 'bg-slate-100 text-slate-600', accent: 'text-slate-700' }
+  brand: 'text-brand-500',
+  emerald: 'text-emerald-500',
+  amber: 'text-amber-500',
+  rose: 'text-rose-500',
+  violet: 'text-violet-500',
+  slate: 'text-slate-400'
 };
 
 /**
@@ -32,7 +39,7 @@ const StatCard = ({
   loading = false,
   emptyValue = '0'
 }) => {
-  const palette = TONES[tone] || TONES.brand;
+  const iconTone = TONES[tone] || TONES.brand;
 
   // NaN / undefined must never reach the screen.
   const displayValue =
@@ -47,18 +54,15 @@ const StatCard = ({
 
   const body = (
     <>
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-label uppercase text-slate-500">{label}</p>
-        {Icon && (
-          <span className={cx('w-8 h-8 rounded-control flex items-center justify-center shrink-0', palette.icon)}>
-            <Icon className="w-4 h-4" aria-hidden="true" />
-          </span>
-        )}
+      {/* Label first, small and quiet; the figure is the thing being read. */}
+      <div className="flex items-center gap-2">
+        {Icon && <Icon className={cx('w-4 h-4 shrink-0', iconTone)} aria-hidden="true" />}
+        <p className="text-label uppercase text-slate-500 truncate">{label}</p>
       </div>
 
-      <p className="text-metric text-slate-900 mt-3 tabular-nums">{loading ? '—' : displayValue}</p>
+      <p className="text-metric text-slate-900 mt-2.5 tabular-nums">{loading ? '—' : displayValue}</p>
 
-      <div className="mt-2.5 flex items-center justify-between gap-2 min-h-[1.25rem]">
+      <div className="mt-1.5 flex items-center justify-between gap-2 min-h-[1.25rem]">
         <div className="flex items-center gap-1.5 min-w-0">
           {trend !== undefined && trend !== null && (
             <span className={cx('inline-flex items-center gap-1 text-xs font-semibold shrink-0', trendTone)}>

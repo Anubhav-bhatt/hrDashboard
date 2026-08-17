@@ -104,7 +104,7 @@ export const getDashboardOverview = async (params = {}, config = {}) => {
 /**
  * Jobs with aggregated candidate statistics for the jobs portal.
  *
- * @param {Object} [params] `{ search, sort, limit }`
+ * @param {Object} [params] `{ search, sort, status, page, limit }`
  */
 export const getJobsSummary = async (params = {}, config = {}) => {
   const response = await api.get('/jobs/summary', { params, ...config });
@@ -245,6 +245,25 @@ export const createJob = async (formData) => {
   const response = await api.post('/jobs', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   });
+  return response.data;
+};
+
+/* ---------------------------------------------------------------- closure -- */
+
+/** Shortlisted candidates eligible to be chosen as the hire. */
+export const getJobShortlist = async (jobId, config = {}) => {
+  const response = await api.get(`/jobs/${jobId}/shortlist`, config);
+  return response.data;
+};
+
+/**
+ * Records the hired candidate and closes the job.
+ *
+ * Only the candidate id is sent: the recruiter's choice is the decision, and the
+ * server already holds the score. Validation is repeated server-side.
+ */
+export const closeJob = async (jobId, selectedCandidateId) => {
+  const response = await api.post(`/jobs/${jobId}/close`, { selectedCandidateId });
   return response.data;
 };
 

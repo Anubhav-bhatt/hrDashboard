@@ -7,41 +7,34 @@ import {
   ChevronRight,
   LayoutDashboard,
   LogOut,
-  Mail,
   Menu,
-  Plus,
+  Settings,
   Sparkles,
   Users,
   X
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { disconnectOutlook, getOutlookConnectUrl, getOutlookStatus, toApiError } from '../services/api';
 import { useToast } from './ToastProvider';
-import ThemeSelector, { ThemeToggleButton } from './ThemeSelector';
+import { ThemeToggleButton } from './ThemeSelector';
 import { Avatar, Button, cx } from './ui';
 
 export const SIDEBAR_STORAGE_KEY = 'hr-dashboard-sidebar-collapsed';
 
 /**
- * Sidebar navigation.
+ * Sidebar navigation — four destinations, one per thing a recruiter works on.
  *
- * "Jobs" groups the two job destinations and stays highlighted for every job
- * route — the portal, a single job, its import screen and its candidate list —
- * so a recruiter always knows which section they are in.
+ * Creating a job, closed jobs, candidate import and the Outlook connection are
+ * all still available, but they live inside the workflow they belong to rather
+ * than competing for space here: creating and closing happen in Jobs, importing
+ * happens inside a job, and the mailbox connection lives in Settings. A section
+ * stays highlighted for every route beneath it, so a recruiter always knows
+ * where they are.
  */
 const NAV_ITEMS = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  {
-    to: '/jobs',
-    label: 'Jobs',
-    icon: Briefcase,
-    matchPrefix: '/jobs',
-    children: [
-      { to: '/jobs', label: 'All jobs', end: true },
-      { to: '/jobs/new', label: 'Create job' }
-    ]
-  },
-  { to: '/candidates', label: 'Candidates', icon: Users, matchPrefix: '/candidates' }
+  { to: '/', label: 'Dashboard', icon: LayoutDashboard, matchPaths: ['/', '/dashboard'] },
+  { to: '/jobs', label: 'Jobs', icon: Briefcase, matchPrefix: '/jobs' },
+  { to: '/candidates', label: 'Candidates', icon: Users, matchPrefix: '/candidates' },
+  { to: '/settings', label: 'Settings', icon: Settings, matchPrefix: '/settings' }
 ];
 
 /** Reads the persisted sidebar preference. */
@@ -75,8 +68,11 @@ const CollapsedTooltip = ({ label }) => (
 
 /**
  * Application chrome: sidebar navigation on desktop (collapsible), a slide-over
- * drawer on mobile, and a top bar carrying the Outlook connection state, theme
- * control and account menu.
+ * drawer on mobile, and a top bar carrying the theme control and account menu.
+ *
+ * The mailbox connection used to be reported here on every screen. It moved to
+ * Settings, which removed an integration status request from every page load and
+ * a panel from a rail that a recruiter reads dozens of times a day.
  */
 const AppShell = ({ children }) => {
   const location = useLocation();
@@ -86,7 +82,6 @@ const AppShell = ({ children }) => {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(readCollapsed);
-  const [outlook, setOutlook] = useState({ loading: true, connected: false, email: '' });
 
   const accountRef = useRef(null);
 
@@ -107,31 +102,6 @@ const AppShell = ({ children }) => {
       return next;
     });
   }, []);
-
-  // Outlook status is re-read after the OAuth redirect adds ?outlook_connected.
-  useEffect(() => {
-    let active = true;
-    const controller = new AbortController();
-
-    (async () => {
-      try {
-        const response = await getOutlookStatus({ signal: controller.signal });
-        if (!active) return;
-        setOutlook({
-          loading: false,
-          connected: Boolean(response.data?.connected),
-          email: response.data?.email || ''
-        });
-      } catch {
-        if (active) setOutlook({ loading: false, connected: false, email: '' });
-      }
-    })();
-
-    return () => {
-      active = false;
-      controller.abort();
-    };
-  }, [location.search]);
 
   // Dismiss the account menu on outside click or Escape.
   useEffect(() => {
@@ -160,16 +130,6 @@ const AppShell = ({ children }) => {
     };
   }, [mobileNavOpen]);
 
-  const handleDisconnect = async () => {
-    try {
-      await disconnectOutlook();
-      setOutlook({ loading: false, connected: false, email: '' });
-      toast.success('Outlook mailbox disconnected.');
-    } catch (error) {
-      toast.error(toApiError(error).message);
-    }
-  };
-
   const handleSignOut = async () => {
     await signOut();
     toast.info('You have been signed out.');
@@ -177,6 +137,8 @@ const AppShell = ({ children }) => {
 
   /** A section is active when the current path sits anywhere beneath it. */
   const isSectionActive = (item) => {
+    // Explicit path list, for a section reachable at more than one exact URL.
+    if (item.matchPaths) return item.matchPaths.includes(location.pathname);
     if (item.end) return location.pathname === item.to;
     if (item.matchPrefix) {
       return location.pathname === item.matchPrefix || location.pathname.startsWith(`${item.matchPrefix}/`);
@@ -195,19 +157,24 @@ const AppShell = ({ children }) => {
           className="flex items-center gap-2.5 py-1 rounded-control min-w-0"
           aria-label="Resume Screening — go to dashboard"
         >
+          {/* w-4.5 is not a Tailwind step, so this icon previously fell back to
+              Lucide's 24px default and overflowed its 36px badge. */}
           <span className="w-9 h-9 rounded-control bg-brand-600 flex items-center justify-center text-white shrink-0">
-            <Sparkles className="w-4.5 h-4.5" aria-hidden="true" />
+            <Sparkles className="w-[18px] h-[18px]" aria-hidden="true" />
           </span>
           {!isCollapsed && (
             <span className="min-w-0">
-              <span className="text-card-title text-slate-900 leading-tight truncate block">Resume Screening</span>
-              <span className="text-[11px] text-slate-500 block">Recruitment dashboard</span>
+              <span className="text-card-title text-slate-900 leading-tight truncate block">HR Screening</span>
+              <span className="text-[11px] text-slate-500 block">Resume screening</span>
             </span>
           )}
         </Link>
       </div>
 
-      <nav className={cx('mt-6 space-y-1', isCollapsed && 'flex flex-col items-center')} aria-label="Main navigation">
+      <nav
+        className={cx('mt-7 space-y-0.5', isCollapsed && 'flex flex-col items-center')}
+        aria-label="Main navigation"
+      >
         {NAV_ITEMS.map((item) => {
           const sectionActive = isSectionActive(item);
 
@@ -217,8 +184,10 @@ const AppShell = ({ children }) => {
                 to={item.to}
                 end={item.end}
                 className={cx(
-                  'group relative flex items-center rounded-control text-meta font-medium transition-colors duration-fast',
-                  isCollapsed ? 'justify-center w-10 h-10' : 'gap-2.5 px-3 py-2',
+                  'group relative flex items-center rounded-control text-body font-medium transition-colors duration-fast',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1',
+                  isCollapsed ? 'justify-center w-10 h-10' : 'gap-2.5 px-3 h-9',
+                  // Subtle brand tint plus a stronger label — never a saturated block.
                   sectionActive
                     ? 'bg-brand-50 text-brand-700 font-semibold'
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
@@ -226,112 +195,26 @@ const AppShell = ({ children }) => {
                 aria-current={sectionActive ? 'page' : undefined}
                 aria-label={isCollapsed ? item.label : undefined}
               >
-                {/* Active marker rather than a large filled block. */}
+                {/* Small accent indicator rather than a large filled block. */}
                 {sectionActive && !isCollapsed && (
-                  <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-r bg-brand-600" aria-hidden="true" />
+                  <span
+                    className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-0.5 rounded-r bg-brand-600"
+                    aria-hidden="true"
+                  />
                 )}
-                <item.icon className="w-4 h-4 shrink-0" aria-hidden="true" />
+                <item.icon
+                  className={cx('w-[18px] h-[18px] shrink-0', sectionActive ? 'text-brand-600' : 'text-slate-400 group-hover:text-slate-600')}
+                  aria-hidden="true"
+                />
                 {!isCollapsed && item.label}
                 {isCollapsed && <CollapsedTooltip label={item.label} />}
               </NavLink>
 
-              {/* Sub-items only while the section is active and the rail is wide.
-                  Collapsed, the parent link navigates instead of exposing an
-                  unusable miniature submenu. */}
-              {item.children && sectionActive && !isCollapsed && (
-                <div className="mt-1 ml-4 pl-3 border-l border-slate-200 space-y-0.5">
-                  {item.children.map((child) => (
-                    <NavLink
-                      key={child.to}
-                      to={child.to}
-                      end={child.end}
-                      className={({ isActive }) =>
-                        cx(
-                          'block px-2.5 py-1.5 rounded-control text-meta transition-colors duration-fast',
-                          isActive
-                            ? 'text-brand-700 font-semibold bg-brand-50/60'
-                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                        )
-                      }
-                    >
-                      {child.label}
-                    </NavLink>
-                  ))}
-                </div>
-              )}
             </div>
           );
         })}
       </nav>
 
-      <div className={cx('mt-6 pt-6 divider', isCollapsed && 'w-full flex justify-center')}>
-        {isCollapsed ? (
-          <Link
-            to="/jobs/new"
-            className="group relative btn btn-icon btn-primary"
-            aria-label="Create job"
-          >
-            <Plus className="w-4 h-4" aria-hidden="true" />
-            <CollapsedTooltip label="Create job" />
-          </Link>
-        ) : (
-          <Link to="/jobs/new" className="btn btn-md btn-primary w-full">
-            <Plus className="w-4 h-4" aria-hidden="true" />
-            Create job
-          </Link>
-        )}
-      </div>
-
-      {/* Outlook connection state */}
-      <div className={cx('mt-auto pt-6', isCollapsed && 'w-full flex justify-center')}>
-        {isCollapsed ? (
-          <span
-            className={cx(
-              'group relative w-10 h-10 rounded-control border flex items-center justify-center',
-              outlook.connected
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-600'
-                : 'border-slate-200 bg-slate-50 text-slate-400'
-            )}
-            tabIndex={0}
-            role="status"
-            aria-label={outlook.connected ? `Outlook connected: ${outlook.email}` : 'Outlook not connected'}
-          >
-            <Mail className="w-4 h-4" aria-hidden="true" />
-            <CollapsedTooltip label={outlook.connected ? 'Outlook connected' : 'Outlook not connected'} />
-          </span>
-        ) : (
-          <div className="rounded-card border border-slate-200 bg-slate-50 p-3">
-            <div className="flex items-center gap-2 text-label uppercase text-slate-500">
-              <Mail className="w-3.5 h-3.5" aria-hidden="true" />
-              Outlook
-            </div>
-
-            {outlook.loading ? (
-              <p className="text-xs text-slate-400 mt-2">Checking…</p>
-            ) : outlook.connected ? (
-              <>
-                <p className="text-xs font-semibold text-emerald-700 mt-2 truncate" title={outlook.email}>
-                  {outlook.email || 'Connected'}
-                </p>
-                <button
-                  type="button"
-                  onClick={handleDisconnect}
-                  className="text-[11px] font-semibold text-slate-500 hover:text-rose-700 mt-1.5 transition-colors duration-fast rounded"
-                >
-                  Disconnect
-                </button>
-              </>
-            ) : (
-              <>
-                <p className="text-xs text-slate-500 mt-2">Not connected. Resume upload still works.</p>
-                <a href={getOutlookConnectUrl()} className="btn btn-sm btn-secondary w-full mt-2.5">
-                  Connect mailbox
-                </a>
-              </>
-            )}
-          </div>
-        )}
-      </div>
     </>
   );
 
@@ -405,7 +288,7 @@ const AppShell = ({ children }) => {
 
       <div className={cx('transition-[padding] duration-slow', collapsed ? 'lg:pl-sidebar-collapsed' : 'lg:pl-sidebar')}>
         {/* Top bar */}
-        <header className="sticky top-0 z-20 h-14 border-b border-slate-200 bg-white/90 backdrop-blur flex items-center gap-3 px-4 sm:px-6">
+        <header className="sticky top-0 z-20 h-14 border-b border-slate-200 bg-white/90 backdrop-blur flex items-center gap-3 px-4 sm:px-6 lg:px-8">
           <Button
             variant="ghost"
             size="iconSm"
@@ -424,19 +307,6 @@ const AppShell = ({ children }) => {
           </div>
 
           <div className="flex-1" />
-
-          {!outlook.loading && (
-            <span
-              className={cx('hidden sm:inline-flex badge', outlook.connected ? 'badge-success' : 'badge-neutral')}
-              title={outlook.connected ? `Outlook connected: ${outlook.email}` : 'Outlook not connected'}
-            >
-              <span
-                className={cx('w-1.5 h-1.5 rounded-pill', outlook.connected ? 'bg-emerald-500' : 'bg-slate-400')}
-                aria-hidden="true"
-              />
-              {outlook.connected ? 'Outlook connected' : 'Outlook offline'}
-            </span>
-          )}
 
           <ThemeToggleButton />
 
@@ -470,9 +340,16 @@ const AppShell = ({ children }) => {
                   </span>
                 </div>
 
-                <div className="px-4 py-3 border-b border-slate-100">
-                  <ThemeSelector />
-                </div>
+                {/* Theme, mailbox and account details all live in Settings now.
+                    The top-bar toggle remains for a quick light/dark flip. */}
+                <Link
+                  to="/settings"
+                  role="menuitem"
+                  className="w-full flex items-center gap-2.5 px-4 py-3 text-meta font-medium text-slate-700 hover:bg-slate-50 transition-colors duration-fast border-b border-slate-100"
+                >
+                  <Settings className="w-4 h-4 text-slate-400" aria-hidden="true" />
+                  Settings
+                </Link>
 
                 <button
                   type="button"
@@ -488,11 +365,11 @@ const AppShell = ({ children }) => {
           </div>
         </header>
 
-        <main id="main-content" className="px-4 sm:px-6 py-6 max-w-[1400px] mx-auto">
+        <main id="main-content" className="px-4 sm:px-6 lg:px-8 py-6 lg:py-8 max-w-[1400px] mx-auto">
           {children}
         </main>
 
-        <footer className="px-4 sm:px-6 py-6 max-w-[1400px] mx-auto">
+        <footer className="px-4 sm:px-6 lg:px-8 pb-8 max-w-[1400px] mx-auto">
           <p className="text-xs text-slate-400 border-t border-slate-200 pt-5">
             Relevance scores are decision-support signals only. Every hiring decision stays with your recruiters.
           </p>

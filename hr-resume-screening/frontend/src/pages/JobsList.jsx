@@ -1,19 +1,42 @@
-import React, { useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { Briefcase, Plus, Search, X } from 'lucide-react';
-import { getJobsSummary } from '../services/api';
+import React, { useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Archive, Briefcase, Plus, Search, X } from 'lucide-react';
+import { closeJob, getJobShortlist, getJobsSummary, toApiError } from '../services/api';
 import { useApiResource } from '../hooks/useApiResource';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { useToast } from '../components/ToastProvider';
 import JobSummaryCard from '../components/jobs/JobSummaryCard';
+import CloseJobDialog from '../components/jobs/CloseJobDialog';
 import Pagination from '../components/Pagination';
 import { Button, Card, EmptyState, ErrorState, PageHeader, Skeleton, cx } from '../components/ui';
 
+/** Sorts offered for active jobs. */
 const SORT_OPTIONS = [
   { value: 'newest', label: 'Newest' },
   { value: 'oldest', label: 'Oldest' },
   { value: 'candidates', label: 'Most candidates' },
   { value: 'best_match', label: 'Best match' },
   { value: 'title', label: 'Title (A–Z)' }
+];
+
+/** Closed jobs are historical, so they sort by when they were filled. */
+const CLOSED_SORT_OPTIONS = [
+  { value: 'recently_closed', label: 'Recently closed' },
+  { value: 'oldest_closed', label: 'Oldest closed' },
+  { value: 'best_match', label: 'Best match' },
+  { value: 'title', label: 'Title (A–Z)' }
+];
+
+/**
+ * Two tabs, not three.
+ *
+ * A recruiter is either working live vacancies or looking at history; an "All"
+ * tab mixing the two answers neither question well. Active is the default, and
+ * `/jobs/closed` remains a real route so the history stays bookmarkable.
+ */
+const STATUS_TABS = [
+  { value: 'OPEN', label: 'Active', countKey: 'open' },
+  { value: 'CLOSED', label: 'Closed', countKey: 'closed' }
 ];
 
 const PAGE_SIZE = 12;
@@ -41,20 +64,77 @@ const JobCardSkeleton = () => (
 /**
  * Jobs portal — every recruitment job with its candidate statistics.
  *
- * Search and sort are resolved by the API (title, JD filename and skills are
- * matched in PostgreSQL) so the browser never receives jobs it will not show.
- * Search, sort and page live in the query string, so a filtered view survives a
- * refresh and can be shared.
+ * Search, status filtering, sorting and pagination are all resolved by the API,
+ * so the browser never receives jobs it will not show and a fifty-job workspace
+ * costs the same as a five-job one. Each of those lives in the query string, so
+ * a filtered view survives a refresh and can be shared.
+ *
+ * The same component serves the closed-jobs history: passing `lockedStatus`
+ * fixes the lifecycle filter and hides the status tabs, which keeps one
+ * implementation of searching and listing jobs rather than a near-duplicate.
  */
-const JobsList = () => {
+const JobsList = ({ lockedStatus = null, title = 'Jobs', eyebrow = 'Recruitment' }) => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
 
-  const sort = searchParams.get('sort') || 'newest';
+  const isHistory = lockedStatus === 'CLOSED';
+  const sortOptions = isHistory ? CLOSED_SORT_OPTIONS : SORT_OPTIONS;
+  const defaultSort = isHistory ? 'recently_closed' : 'newest';
+
+  const sort = searchParams.get('sort') || defaultSort;
   const urlSearch = searchParams.get('search') || '';
   const page = Math.max(parseInt(searchParams.get('page'), 10) || 1, 1);
+  // On the history route the lifecycle is fixed, so an active job can never be
+  // reached by editing the query string. Elsewhere the portal opens on active
+  // work; ?status=CLOSED and an explicit ?status= (all jobs) both still resolve.
+  const rawStatus = searchParams.get('status');
+  const status = lockedStatus ?? (rawStatus === null ? 'OPEN' : rawStatus);
 
   const [searchInput, setSearchInput] = useState(urlSearch);
   const debouncedSearch = useDebouncedValue(searchInput, 350);
+
+  const toast = useToast();
+  // Closure from the portal. The dialog's shortlist is fetched only when a
+  // recruiter actually opens it, so listing jobs costs no extra queries.
+  const [closingJob, setClosingJob] = useState(null);
+  const [shortlist, setShortlist] = useState([]);
+  const [closeSubmitting, setCloseSubmitting] = useState(false);
+  const [closeError, setCloseError] = useState('');
+
+  const openCloseDialog = async (job) => {
+    setCloseError('');
+    try {
+      const response = await getJobShortlist(job.id);
+      const candidates = response?.data || [];
+      if (candidates.length === 0) {
+        toast.error('Shortlist at least one candidate before closing this job.');
+        return;
+      }
+      setShortlist(candidates);
+      setClosingJob(job);
+    } catch (err) {
+      toast.error(toApiError(err).message);
+    }
+  };
+
+  const confirmClose = async (selectedCandidateId) => {
+    setCloseSubmitting(true);
+    setCloseError('');
+    try {
+      const response = await closeJob(closingJob.id, selectedCandidateId);
+      const hire = response?.data?.selectedCandidate;
+      const title = closingJob.title;
+      setClosingJob(null);
+      toast.success(hire?.name ? `Job closed. ${hire.name} was selected for ${title}.` : 'Job closed successfully.');
+      // Refetch rather than patching locally: the job may now belong to a
+      // different tab, and the status counts have changed.
+      refetch();
+    } catch (err) {
+      setCloseError(toApiError(err).message);
+    } finally {
+      setCloseSubmitting(false);
+    }
+  };
 
   const updateParams = (changes, { resetPage = true } = {}) => {
     setSearchParams(
@@ -64,6 +144,7 @@ const JobsList = () => {
           if (value === '' || value === null || value === undefined) next.delete(key);
           else next.set(key, String(value));
         });
+        // A new search or filter invalidates the current page number.
         if (resetPage && !('page' in changes)) next.delete('page');
         return next;
       },
@@ -84,51 +165,94 @@ const JobsList = () => {
   }, [urlSearch]);
 
   const { data, error, loading, refetch } = useApiResource(
-    (config) => getJobsSummary({ sort, search: urlSearch }, config),
-    [sort, urlSearch],
+    (config) => getJobsSummary({ sort, search: urlSearch, status, page, limit: PAGE_SIZE }, config),
+    [sort, urlSearch, status, page],
     { keepPreviousData: true }
   );
 
   const jobs = data?.data || [];
   const threshold = data?.meta?.strongMatchThreshold ?? 80;
+  const pagination = data?.meta?.pagination || null;
+  const statusCounts = data?.meta?.statusCounts || { all: 0, open: 0, closed: 0 };
+  const total = pagination?.total ?? jobs.length;
 
-  // Jobs are paginated client-side: the portal holds tens of jobs, not the
-  // thousands that make candidate paging a server concern.
-  const totalPages = Math.max(Math.ceil(jobs.length / PAGE_SIZE), 1);
-  const currentPage = Math.min(page, totalPages);
-  const visible = useMemo(
-    () => jobs.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
-    [jobs, currentPage]
-  );
+  const describe = () => {
+    if (loading && !data) return 'Loading roles…';
+    if (urlSearch) return `${total} job${total === 1 ? '' : 's'} found for “${urlSearch}”`;
+    if (isHistory) return `${total} closed role${total === 1 ? '' : 's'} with a selected candidate.`;
+    if (total === 0) return 'Manage your open roles and review their candidates.';
+    if (status === 'CLOSED') return `${total} closed role${total === 1 ? '' : 's'}.`;
+    if (status === 'OPEN') return `${total} active role${total === 1 ? '' : 's'} being screened.`;
+    return `${statusCounts.open} active · ${statusCounts.closed} closed`;
+  };
 
-  const totals = useMemo(
-    () =>
-      jobs.reduce(
-        (acc, job) => ({
-          candidates: acc.candidates + job.candidateCount,
-          strong: acc.strong + job.strongMatchCount,
-          shortlisted: acc.shortlisted + job.shortlistedCount
-        }),
-        { candidates: 0, strong: 0, shortlisted: 0 }
-      ),
-    [jobs]
-  );
+  /** Empty state wording depends on why nothing is showing. */
+  const renderEmpty = () => {
+    if (urlSearch) {
+      return (
+        <EmptyState
+          icon={Search}
+          title={`No jobs found for “${urlSearch}”`}
+          description="Try a different search or clear the current filters."
+          action={
+            <Button variant="primary" size="sm" onClick={() => setSearchInput('')}>
+              Clear search
+            </Button>
+          }
+        />
+      );
+    }
+
+    if (isHistory || status === 'CLOSED') {
+      return (
+        <EmptyState
+          icon={Archive}
+          title="No closed jobs yet"
+          description="Jobs appear here after a candidate is selected and the job is closed."
+        />
+      );
+    }
+
+    if (status === 'OPEN') {
+      return (
+        <EmptyState
+          icon={Briefcase}
+          title="No active jobs"
+          description="Create a new job to start candidate screening."
+          action={
+            <Link to="/jobs/new" className="btn btn-sm btn-primary">
+              <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+              Create job
+            </Link>
+          }
+        />
+      );
+    }
+
+    return (
+      <EmptyState
+        icon={Briefcase}
+        title="No jobs yet"
+        description="Create your first job and upload a JD to begin candidate screening."
+        action={
+          <Link to="/jobs/new" className="btn btn-sm btn-primary">
+            <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+            Create job
+          </Link>
+        }
+      />
+    );
+  };
 
   return (
     <div className="space-y-5">
       <PageHeader
-        eyebrow="Recruitment"
-        title="Jobs"
-        description={
-          loading && !data
-            ? 'Loading roles…'
-            : jobs.length === 0
-              ? 'Manage open roles and review their candidate pipelines.'
-              : `${jobs.length} role${jobs.length === 1 ? '' : 's'} · ${totals.candidates} candidate${
-                  totals.candidates === 1 ? '' : 's'
-                } · ${totals.strong} strong match${totals.strong === 1 ? '' : 'es'} · ${totals.shortlisted} shortlisted`
-        }
+        eyebrow={eyebrow}
+        title={title}
+        description={describe()}
         actions={
+          // One dominant action on this page. Creating a job is the only thing a
+          // recruiter starts from here that is not already on a card.
           <Link to="/jobs/new" className="btn btn-md btn-primary">
             <Plus className="w-4 h-4" aria-hidden="true" />
             Create job
@@ -136,49 +260,91 @@ const JobsList = () => {
         }
       />
 
-      {/* Search + sort */}
+      {/* Search, status filter and sort */}
       <Card padding="card-pad-sm">
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" aria-hidden="true" />
-            <label htmlFor="job-search" className="sr-only">
-              Search jobs by title, JD file or required skill
-            </label>
-            <input
-              id="job-search"
-              type="search"
-              className="input pl-9 pr-9"
-              placeholder="Search jobs…"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-            />
-            {searchInput && (
-              <button
-                type="button"
-                onClick={() => setSearchInput('')}
-                className="absolute right-2.5 top-2.5 p-1 text-slate-400 hover:text-slate-700 rounded transition-colors duration-fast"
-                aria-label="Clear job search"
+        <div className="space-y-3">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1 min-w-0">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" aria-hidden="true" />
+              <label htmlFor="job-search" className="sr-only">
+                {isHistory ? 'Search closed jobs by title, skill or selected candidate' : 'Search jobs by title, skill or selected candidate'}
+              </label>
+              <input
+                id="job-search"
+                type="search"
+                className="input pl-9 pr-9"
+                placeholder={isHistory ? 'Search closed jobs…' : 'Search by job title, skill or candidate…'}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+              />
+              {searchInput && (
+                <button
+                  type="button"
+                  onClick={() => setSearchInput('')}
+                  className="absolute right-2.5 top-2.5 p-1 text-slate-400 hover:text-slate-700 rounded transition-colors duration-fast"
+                  aria-label="Clear job search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            <label className="flex items-center gap-2 shrink-0">
+              <span className="text-meta text-slate-500 whitespace-nowrap">Sort</span>
+              <select
+                className="select w-auto min-w-[10rem]"
+                value={sort}
+                onChange={(e) => updateParams({ sort: e.target.value })}
+                aria-label="Sort jobs"
               >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
+                {sortOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
 
-          <label className="flex items-center gap-2 shrink-0">
-            <span className="text-meta text-slate-500 whitespace-nowrap">Sort</span>
-            <select
-              className="select w-auto min-w-[10rem]"
-              value={sort}
-              onChange={(e) => updateParams({ sort: e.target.value })}
-              aria-label="Sort jobs"
-            >
-              {SORT_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          {/* Active / Closed. Rendered on both /jobs and /jobs/closed so the two
+              read as one page rather than a navigation hierarchy to learn.
+              Counts come from the API under the current search term, so they
+              always describe what switching tab would actually show. */}
+          <div role="group" aria-label="Filter jobs by status" className="flex flex-wrap items-center gap-1.5">
+            {STATUS_TABS.map((tab) => {
+              const active = status === tab.value;
+              return (
+                <button
+                  key={tab.countKey}
+                  type="button"
+                  onClick={() => {
+                    // From the history route, switching to Active returns to the
+                    // portal, carrying the search term across.
+                    if (isHistory) {
+                      if (tab.value === 'OPEN') {
+                        navigate(`/jobs${urlSearch ? `?search=${encodeURIComponent(urlSearch)}` : ''}`);
+                      }
+                      return;
+                    }
+                    updateParams({ status: tab.value });
+                  }}
+                  aria-pressed={active}
+                  className={cx(
+                    'inline-flex items-center gap-1.5 h-8 px-3 rounded-pill text-meta font-medium border transition-colors duration-fast',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1',
+                    active
+                      ? 'bg-brand-600 text-white border-brand-600'
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-slate-900'
+                  )}
+                >
+                  {tab.label}
+                  <span className={cx('tabular-nums', active ? 'text-white/80' : 'text-slate-400')}>
+                    {statusCounts[tab.countKey] ?? 0}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </Card>
 
@@ -192,44 +358,29 @@ const JobsList = () => {
           ))}
         </div>
       ) : jobs.length === 0 ? (
-        <EmptyState
-          icon={Briefcase}
-          title={urlSearch ? 'No jobs match your search' : 'No jobs yet'}
-          description={
-            urlSearch
-              ? 'Try a different job title, JD file name or skill.'
-              : 'Create your first job and upload a JD to begin candidate screening.'
-          }
-          action={
-            urlSearch ? (
-              <Button variant="primary" size="sm" onClick={() => setSearchInput('')}>
-                Clear search
-              </Button>
-            ) : (
-              <Link to="/jobs/new" className="btn btn-sm btn-primary">
-                <Plus className="w-3.5 h-3.5" aria-hidden="true" />
-                Create job
-              </Link>
-            )
-          }
-        />
+        renderEmpty()
       ) : (
         <>
           <div className={cx('grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5', loading && 'opacity-60')}>
-            {visible.map((job) => (
-              <JobSummaryCard key={job.id} job={job} strongMatchThreshold={threshold} />
+            {jobs.map((job) => (
+              <JobSummaryCard
+                key={job.id}
+                job={job}
+                strongMatchThreshold={threshold}
+                onCloseJob={openCloseDialog}
+              />
             ))}
           </div>
 
-          {totalPages > 1 && (
+          {pagination && pagination.totalPages > 1 && (
             <Pagination
               pagination={{
-                page: currentPage,
-                limit: PAGE_SIZE,
-                total: jobs.length,
-                totalPages,
-                hasNextPage: currentPage < totalPages,
-                hasPreviousPage: currentPage > 1
+                page: pagination.page,
+                limit: pagination.limit,
+                total: pagination.total,
+                totalPages: pagination.totalPages,
+                hasNextPage: pagination.page < pagination.totalPages,
+                hasPreviousPage: pagination.page > 1
               }}
               onPageChange={(next) => {
                 updateParams({ page: next }, { resetPage: false });
@@ -239,6 +390,20 @@ const JobsList = () => {
             />
           )}
         </>
+      )}
+
+      {closingJob && (
+        <CloseJobDialog
+          jobTitle={closingJob.title}
+          candidates={shortlist}
+          submitting={closeSubmitting}
+          error={closeError}
+          onConfirm={confirmClose}
+          onClose={() => {
+            setClosingJob(null);
+            setCloseError('');
+          }}
+        />
       )}
     </div>
   );

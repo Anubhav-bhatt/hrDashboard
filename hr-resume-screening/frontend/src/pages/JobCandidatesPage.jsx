@@ -150,7 +150,7 @@ const JobCandidatesPage = () => {
           </Link>
           <Link to={`/jobs/${job.id}/import`} className="btn btn-md btn-secondary">
             <DownloadCloud className="w-4 h-4" aria-hidden="true" />
-            Import candidates
+            Add candidates
           </Link>
           <Link to={`/jobs/${job.id}`} className="btn btn-md btn-secondary">
             <Settings2 className="w-4 h-4" aria-hidden="true" />

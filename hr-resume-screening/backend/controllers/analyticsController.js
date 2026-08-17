@@ -1,26 +1,29 @@
 const prisma = require('../config/prisma');
 const { formatCandidateForApi } = require('../utils/candidateSerializer');
 const { LIST_SELECT } = require('../utils/candidateQuery');
-const { getJobSummaries, getCandidateStatsByJob, emptyStats } = require('../services/jobSummaryService');
+const { getCandidateStatsByJob, emptyStats } = require('../services/jobSummaryService');
+const { SELECTED_CANDIDATE_SELECT } = require('../services/jobClosureService');
 const { STRONG_MATCH_MIN, PENDING_REVIEW_STATUSES, SCORE_BANDS } = require('../utils/scoreThresholds');
 
 /**
  * Recruitment pipeline stages. These mirror the HR statuses the application
- * actually stores — no speculative stages such as "Offer" or "Hired" are shown,
- * because nothing in the data model records them.
+ * actually stores — no speculative stages such as "Offer" or "Onboarding" are
+ * shown, because nothing in the data model records them. Selected is included
+ * because job closure does persist it.
  */
 const PIPELINE_STAGES = [
   { key: 'REVIEW', label: 'In Review', description: 'Awaiting recruiter screening' },
   { key: 'NEEDS_REVIEW', label: 'Needs Review', description: 'Flagged for a second look' },
   { key: 'SHORTLISTED', label: 'Shortlisted', description: 'Progressed by a recruiter' },
+  { key: 'SELECTED', label: 'Selected', description: 'Hired for the role' },
   { key: 'NOT_SUITABLE', label: 'Not Suitable', description: 'Declined after screening' }
 ];
 
 /** Number of highest-scoring candidates returned for the dashboard. */
 const TOP_CANDIDATE_LIMIT = 5;
 
-/** Jobs shown in the dashboard's overview section before "view all". */
-const OVERVIEW_JOB_LIMIT = 6;
+/** Most recent hires listed on the dashboard. */
+const RECENT_HIRE_LIMIT = 5;
 
 const startOfMonth = (date = new Date()) => new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
 
@@ -145,9 +148,30 @@ const getOverview = async (req, res, next) => {
       });
     }
 
-    // The jobs overview is only meaningful when looking across jobs.
-    const jobsOverview = job ? [] : await getJobSummaries({ sort: 'candidates', limit: OVERVIEW_JOB_LIMIT });
-    const jobsOverviewTotal = job ? 1 : await prisma.job.count();
+    // Hiring outcome. Counted in Postgres rather than by loading jobs, and only
+    // across the whole workspace: inside a single job's dashboard these global
+    // totals would be noise, so that view stays focused on its own pipeline.
+    const [openJobs, closedJobs, selectedCandidates, recentHires] = job
+      ? [null, null, null, []]
+      : await Promise.all([
+          prisma.job.count({ where: { status: 'OPEN' } }),
+          prisma.job.count({ where: { status: 'CLOSED' } }),
+          prisma.candidate.count({ where: { hrStatus: 'SELECTED' } }),
+          // One query with a projected relation — not a per-job candidate lookup.
+          prisma.job.findMany({
+            where: { status: 'CLOSED', selectedCandidateId: { not: null } },
+            orderBy: { closedAt: 'desc' },
+            take: RECENT_HIRE_LIMIT,
+            select: {
+              id: true,
+              title: true,
+              closedAt: true,
+              selectedCandidate: {
+                select: { id: true, name: true, currentRole: true, totalExperience: true, overallScore: true }
+              }
+            }
+          })
+        ]);
 
     return res.status(200).json({
       success: true,
@@ -180,7 +204,12 @@ const getOverview = async (req, res, next) => {
               ? Math.round(scoreAggregate._avg.overallScore * 10) / 10
               : null,
           topScore: scoreAggregate._max.overallScore ?? null,
-          bestMatchScore: scoreAggregate._max.overallScore ?? null
+          bestMatchScore: scoreAggregate._max.overallScore ?? null,
+          // Null inside a single-job dashboard, where a workspace-wide count
+          // would not describe what the recruiter is looking at.
+          openJobs,
+          closedJobs,
+          selectedCandidates
         },
         pipeline,
         scoreBands,
@@ -193,8 +222,18 @@ const getOverview = async (req, res, next) => {
           ...formatCandidateForApi(c, null),
           jobTitle: c.job ? c.job.title : null
         })),
-        jobsOverview,
-        jobsOverviewTotal,
+        recentHires: recentHires
+          .filter((hire) => hire.selectedCandidate)
+          .map((hire) => ({
+            jobId: hire.id,
+            jobTitle: hire.title,
+            closedAt: hire.closedAt,
+            candidateId: hire.selectedCandidate.id,
+            candidateName: hire.selectedCandidate.name,
+            currentRole: hire.selectedCandidate.currentRole,
+            totalExperience: hire.selectedCandidate.totalExperience,
+            overallScore: hire.selectedCandidate.overallScore
+          })),
         strongMatchThreshold: STRONG_MATCH_MIN,
         generatedAt: new Date().toISOString()
       }
@@ -227,7 +266,11 @@ const getJobSummary = async (req, res, next) => {
         minimumExperience: true,
         maximumExperience: true,
         preferredLocations: true,
-        qualifications: true
+        qualifications: true,
+        status: true,
+        closedAt: true,
+        selectedCandidateId: true,
+        selectedCandidate: { select: SELECTED_CANDIDATE_SELECT }
       }
     });
 
@@ -258,7 +301,13 @@ const getJobSummary = async (req, res, next) => {
           minimumExperience: job.minimumExperience ?? 0,
           maximumExperience: job.maximumExperience ?? null,
           preferredLocations: job.preferredLocations || [],
-          qualifications: job.qualifications || []
+          qualifications: job.qualifications || [],
+          status: job.status,
+          isClosed: job.status === 'CLOSED',
+          closedAt: job.closedAt,
+          selectedCandidateId: job.selectedCandidateId,
+          selectedCandidate: job.selectedCandidate || null,
+          canClose: job.status === 'OPEN' && stats.shortlistedCount > 0
         },
         stats,
         scoreBands: SCORE_BANDS.map((band, index) => ({ ...band, count: scoreBandCounts[index] })),

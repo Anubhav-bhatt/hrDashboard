@@ -19,8 +19,19 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  notes        CandidateNote[]
-  activities   CandidateActivity[]
+  notes            CandidateNote[]
+  activities       CandidateActivity[]
+  closedJobs       Job[]               @relation("JobClosedBy")
+  selectedHires    Candidate[]         @relation("CandidateSelectedBy")
+}
+
+/// Persisted recruitment lifecycle of a vacancy. Deliberately minimal: a job is
+/// either being worked or it has been filled and closed. This is separate from
+/// the processing state shown on job cards (New / Importing / Ready to score /
+/// All scored), which is derived from candidate counts and not stored.
+enum JobStatus {
+  OPEN
+  CLOSED
 }
 
 model Job {
@@ -44,14 +55,33 @@ model Job {
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 
-  candidates         Candidate[]
+  /// Every existing job becomes OPEN, so the addition is backwards-compatible.
+  status             JobStatus       @default(OPEN)
+
+  /// The candidate hired for this vacancy, recorded on the job so closed-job
+  /// listings do not have to search candidates by status. Unique because a
+  /// vacancy has exactly one hire.
+  selectedCandidateId String?        @unique
+  selectedCandidate   Candidate?     @relation("JobSelectedCandidate", fields: [selectedCandidateId], references: [id], onDelete: SetNull)
+
+  closedAt           DateTime?
+  /// Recruiter who closed the job, kept as a stable identifier rather than an
+  /// email so the reference survives an address change.
+  closedByUserId     String?
+  closedBy           User?           @relation("JobClosedBy", fields: [closedByUserId], references: [id], onDelete: SetNull)
+
+  candidates         Candidate[]     @relation("JobCandidates")
   importSessions     ImportSession[]
+
+  /// Closed-job history is listed by recency, and the portal filters by status.
+  @@index([status])
+  @@index([status, closedAt])
 }
 
 model Candidate {
   id                     String    @id @default(uuid())
   jobId                  String
-  job                    Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  job                    Job       @relation("JobCandidates", fields: [jobId], references: [id], onDelete: Cascade)
 
   name                   String?   @default("Unknown Candidate")
   nameSource             String?   @default("unknown")
@@ -121,14 +151,25 @@ model Candidate {
   analysisSummary        String?   @db.Text
   analyzedAt             DateTime?
 
+  /// REVIEW | SHORTLISTED | NEEDS_REVIEW | NOT_SUITABLE | SELECTED.
+  /// SELECTED means hired for the vacancy and is only ever set by closing a job;
+  /// it is deliberately distinct from SHORTLISTED (still under consideration).
   hrStatus               String    @default("REVIEW")
   notes                  String?   @db.Text
+
+  /// Set when the candidate is chosen as the hire during job closure.
+  selectedAt             DateTime?
+  selectedByUserId       String?
+  selectedBy             User?     @relation("CandidateSelectedBy", fields: [selectedByUserId], references: [id], onDelete: SetNull)
 
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
   noteEntries            CandidateNote[]
   activities             CandidateActivity[]
+  /// Back-relation for Job.selectedCandidate. A candidate is the hire for at
+  /// most one job, which the unique FK on Job enforces.
+  selectedForJob         Job?      @relation("JobSelectedCandidate")
 
   @@unique([jobId, outlookMessageId, outlookAttachmentId])
   @@unique([jobId, resumeHash])
@@ -136,6 +177,9 @@ model Candidate {
   @@index([jobId, overallScore])
   @@index([hrStatus])
   @@index([createdAt])
+  /// Job-scoped status lookups: the closure dialog lists shortlisted candidates
+  /// for one job, and closed-job cards count by status.
+  @@index([jobId, hrStatus])
 }
 
 /// Timestamped recruiter note attached to a candidate.

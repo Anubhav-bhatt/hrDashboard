@@ -5,6 +5,7 @@ import {
   Briefcase,
   Building2,
   Calendar,
+  CheckCircle2,
   Download,
   ExternalLink,
   FileText,
@@ -42,6 +43,7 @@ import {
   EmptyState,
   ErrorState,
   ProfileSkeleton,
+  StatusBadge,
   Tabs,
   TabPanel
 } from '../components/ui';
@@ -269,6 +271,7 @@ const CandidateProfile = () => {
   const professional = candidate.professional || {};
   const application = candidate.application || {};
   const statusMeta = getStatusMeta(candidate.hrStatus);
+  const isSelected = candidate.hrStatus === 'SELECTED';
   const linkedin = safeExternalUrl(personal.linkedin);
   const telHref = toTelHref(personal.phone);
 
@@ -361,6 +364,31 @@ const CandidateProfile = () => {
               </span>
             </div>
 
+            {/* Hiring outcome. Stated plainly and positively — no celebration
+                effects, this is a record of a business decision. */}
+            {isSelected && (
+              <div className="mt-3 rounded-control border border-brand-200 bg-brand-50 px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-2">
+                <p className="inline-flex items-center gap-2 text-body font-semibold text-brand-700">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" aria-hidden="true" />
+                  Selected for this role
+                </p>
+                {application.jobTitle && (
+                  <p className="text-meta text-slate-700">
+                    <span className="text-slate-500">Selected for </span>
+                    <Link to={`/jobs/${application.jobId}`} className="link font-medium">
+                      {application.jobTitle}
+                    </Link>
+                  </p>
+                )}
+                {candidate.selectedAt && (
+                  <p className="text-meta text-slate-700">
+                    <span className="text-slate-500">Selected on </span>
+                    {formatDate(candidate.selectedAt)}
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Primary actions */}
             <div className="flex flex-wrap items-center gap-2 mt-4">
               {personal.email ? (
@@ -412,22 +440,35 @@ const CandidateProfile = () => {
                 Add note
               </Button>
 
-              <label className="inline-flex items-center gap-2 ml-auto">
-                <span className="text-meta text-slate-500 whitespace-nowrap">Status</span>
-                <select
-                  value={candidate.hrStatus || 'REVIEW'}
-                  onChange={(e) => handleStatusChange(e.target.value)}
-                  disabled={statusSaving}
-                  className="select h-10 w-auto min-w-[9.5rem]"
-                  aria-label="Change candidate status"
-                >
-                  {Object.entries(HR_STATUS_META).map(([value, meta]) => (
-                    <option key={value} value={value}>
-                      {meta.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {/* A selected candidate's status is fixed: it records the hiring
+                  outcome for a closed job, and the server refuses to change it. */}
+              {isSelected ? (
+                <p className="inline-flex items-center gap-2 ml-auto text-meta text-slate-600">
+                  <span className="text-slate-500">Status</span>
+                  <StatusBadge status="SELECTED" />
+                </p>
+              ) : (
+                <label className="inline-flex items-center gap-2 ml-auto">
+                  <span className="text-meta text-slate-500 whitespace-nowrap">Status</span>
+                  <select
+                    value={candidate.hrStatus || 'REVIEW'}
+                    onChange={(e) => handleStatusChange(e.target.value)}
+                    disabled={statusSaving}
+                    className="select h-10 w-auto min-w-[9.5rem]"
+                    aria-label="Change candidate status"
+                  >
+                    {/* Selected is omitted: a candidate becomes the hire by
+                        closing the job, not by picking a status here. */}
+                    {Object.entries(HR_STATUS_META)
+                      .filter(([value]) => value !== 'SELECTED')
+                      .map(([value, meta]) => (
+                        <option key={value} value={value}>
+                          {meta.label}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              )}
             </div>
           </div>
         </div>

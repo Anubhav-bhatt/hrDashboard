@@ -305,7 +305,10 @@ const run = async () => {
     assert.strictEqual(job.strongMatchCount, 0);
     assert.strictEqual(job.shortlistedCount, 0);
     assert.strictEqual(job.bestMatchScore, null);
-    assert.strictEqual(job.status, 'NEW');
+    // `status` is the persisted lifecycle; the derived operational badge that
+    // used to occupy this field is now reported as `processingStatus`.
+    assert.strictEqual(job.status, 'OPEN');
+    assert.strictEqual(job.processingStatus, 'NEW');
   });
 
   await testAsync('an empty job’s candidate list is an empty page, not an error', async () => {
@@ -391,11 +394,18 @@ const run = async () => {
     }
   });
 
-  await testAsync('the dashboard overview embeds the jobs overview in the same response', async () => {
+  await testAsync('the dashboard overview reports hiring outcome alongside pipeline metrics', async () => {
     const { body } = await request('GET', '/dashboard/overview');
-    assert.ok(Array.isArray(body.data.jobsOverview), 'jobs overview included');
-    assert.ok(body.data.jobsOverview.length > 0, 'and populated');
-    assert.ok('candidateCount' in body.data.jobsOverview[0], 'with aggregates already attached');
+    const { metrics, recentHires } = body.data;
+
+    // The per-job overview grid was removed from the dashboard; jobs are browsed
+    // in the jobs portal. What the dashboard reports about jobs is the hiring
+    // outcome, aggregated in the database.
+    assert.strictEqual(body.data.jobsOverview, undefined, 'the jobs overview grid is no longer part of the dashboard');
+    assert.ok(Number.isInteger(metrics.openJobs), 'active job count included');
+    assert.ok(Number.isInteger(metrics.closedJobs), 'closed job count included');
+    assert.ok(Number.isInteger(metrics.selectedCandidates), 'selected candidate count included');
+    assert.ok(Array.isArray(recentHires), 'recent hires included');
   });
 
   suite.group('Test 15 — candidate ranking');

@@ -34,6 +34,30 @@ const recordActivity = async ({ candidateId, actor = null, type, description, me
   }
 };
 
+/**
+ * Same as recordActivity but written through a caller-supplied transaction
+ * client, and deliberately *not* error-swallowing.
+ *
+ * Job closure records its audit trail as part of the same transaction that flips
+ * the statuses, so a job can never end up closed without the matching history.
+ * A failure here must therefore roll the whole closure back rather than be
+ * logged and ignored.
+ *
+ * @param {Object} tx Prisma transaction client
+ * @param {Object} params Same shape as recordActivity
+ */
+const recordActivityWithin = (tx, { candidateId, actor = null, type, description, metadata = null }) =>
+  tx.candidateActivity.create({
+    data: {
+      candidateId,
+      actorId: actor && actor.id ? actor.id : null,
+      actorName: actor && actor.name ? actor.name : 'System',
+      type,
+      description: String(description).slice(0, 500),
+      metadata: metadata || undefined
+    }
+  });
+
 /** Most recent activity entries for a candidate, newest first. */
 const getActivityForCandidate = async (candidateId, limit = 50) =>
   prisma.candidateActivity.findMany({
@@ -42,4 +66,4 @@ const getActivityForCandidate = async (candidateId, limit = 50) =>
     take: Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200)
   });
 
-module.exports = { recordActivity, getActivityForCandidate };
+module.exports = { recordActivity, recordActivityWithin, getActivityForCandidate };

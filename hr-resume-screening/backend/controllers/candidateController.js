@@ -8,8 +8,9 @@ const { generateCandidateInsights } = require('../services/candidateInsightServi
 const { processCandidateResume } = require('../services/candidateProcessingService');
 const { recordActivity } = require('../services/activityService');
 const { formatCandidateForApi, formatCandidateDetail } = require('../utils/candidateSerializer');
+const { STRONG_MATCH_MIN } = require('../utils/scoreThresholds');
 const {
-  HR_STATUSES,
+  ASSIGNABLE_HR_STATUSES,
   LIST_SELECT,
   parsePagination,
   parseSort,
@@ -360,11 +361,14 @@ const updateCandidateStatus = async (req, res, next) => {
     const { jobId, candidateId } = req.params;
     const { status } = req.body || {};
 
-    if (!status || !HR_STATUSES.includes(status)) {
+    // SELECTED is excluded: it is the hiring outcome and is only ever reached by
+    // closing the job, so that the candidate's status and the job's recorded
+    // hire are written together and cannot drift apart.
+    if (!status || !ASSIGNABLE_HR_STATUSES.includes(status)) {
       return res.status(400).json({
         success: false,
         code: 'VALIDATION_ERROR',
-        message: `Invalid status. Allowed values: ${HR_STATUSES.join(', ')}.`
+        message: `Invalid status. Allowed values: ${ASSIGNABLE_HR_STATUSES.join(', ')}.`
       });
     }
 
@@ -372,6 +376,17 @@ const updateCandidateStatus = async (req, res, next) => {
     // candidate, letting one job's URL change another job's records.
     const existing = await findCandidateInJob(jobId, candidateId, { select: { id: true, hrStatus: true } });
     if (!existing) return notFoundCandidate(res);
+
+    // Historical integrity: the hire recorded against a closed job must stay
+    // recorded. Allowing a revert here would leave the job pointing at a
+    // candidate who no longer shows as selected.
+    if (existing.hrStatus === 'SELECTED') {
+      return res.status(409).json({
+        success: false,
+        code: 'CANDIDATE_ALREADY_SELECTED',
+        message: 'This candidate was selected for the role. Their status cannot be changed.'
+      });
+    }
 
     if (existing.hrStatus === status) {
       const unchanged = await prisma.candidate.findUnique({ where: { id: existing.id }, select: LIST_SELECT });
@@ -615,15 +630,32 @@ const getCandidatesByJob = async (req, res, next) => {
     const orderBy = parseSort(req.query.sort);
     const where = { AND: [{ jobId }, buildCandidateWhere(req.query, job)] };
 
-    const [total, candidates] = await Promise.all([
+    // Tab tallies for this job, ignoring the status filter so every tab keeps a
+    // meaningful count while one of them is selected. Same shape as the global
+    // listing, so one component can render either.
+    const tabWhere = { AND: [{ jobId }, buildCandidateWhere({ ...req.query, hrStatus: undefined }, job)] };
+
+    const [total, candidates, statusGroups, strongMatchCount, tabTotal] = await Promise.all([
       prisma.candidate.count({ where }),
-      prisma.candidate.findMany({ where, orderBy, skip, take: limit, select: LIST_SELECT })
+      prisma.candidate.findMany({ where, orderBy, skip, take: limit, select: LIST_SELECT }),
+      prisma.candidate.groupBy({ by: ['hrStatus'], where: tabWhere, _count: { _all: true } }),
+      prisma.candidate.count({ where: { AND: [tabWhere, { overallScore: { gte: STRONG_MATCH_MIN } }] } }),
+      prisma.candidate.count({ where: tabWhere })
     ]);
 
     return res.status(200).json({
       success: true,
       data: candidates.map((c) => formatCandidateForApi(c, job)),
-      pagination: buildPaginationMeta({ page, limit, total })
+      pagination: buildPaginationMeta({ page, limit, total }),
+      facets: {
+        statusCounts: statusGroups.reduce((acc, row) => {
+          acc[row.hrStatus] = row._count._all;
+          return acc;
+        }, {}),
+        strongMatchCount,
+        allCount: tabTotal,
+        strongMatchThreshold: STRONG_MATCH_MIN
+      }
     });
   } catch (error) {
     next(error);

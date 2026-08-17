@@ -6,6 +6,8 @@ const {
   getAllJobs,
   getJobsSummary,
   getJobById,
+  getJobShortlist,
+  closeJobById,
   updateJobSearchCriteria,
   searchOutlookEmailsForJob
 } = require('../controllers/jobController');
@@ -23,6 +25,10 @@ router.get('/', getAllJobs);
 
 // Candidate statistics for one job (job workspace header & KPI row)
 router.get('/:jobId/summary', getJobSummary);
+
+// Shortlisted candidates eligible for selection, and the closure action itself.
+router.get('/:jobId/shortlist', getJobShortlist);
+router.post('/:jobId/close', closeJobById);
 
 // Route for getting individual job details
 router.get('/:id', getJobById);

@@ -114,6 +114,10 @@ const formatCandidateForApi = (cand, job = null) => {
     extractionStatus: cand.extractionStatus,
     extractionWarnings: asArray(cand.extractionWarnings),
     hrStatus: cand.hrStatus,
+    // Hiring outcome. `isSelected` saves every consumer from string-comparing
+    // the status, and selectedAt is null for everyone who was not hired.
+    isSelected: cand.hrStatus === 'SELECTED',
+    selectedAt: cand.selectedAt ?? null,
     notes: cand.notes || null,
     createdAt: cand.createdAt,
     updatedAt: cand.updatedAt,

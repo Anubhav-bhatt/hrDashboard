@@ -294,7 +294,9 @@ const run = async () => {
     const { metrics, pipeline, scoreBands, trend, recentCandidates } = res.body.data;
     assert.ok(metrics.totalCandidates >= 3, `expected at least our 3 candidates, got ${metrics.totalCandidates}`);
     assert.ok(metrics.shortlisted >= 1, 'shortlisted count includes our fixture');
-    assert.strictEqual(pipeline.length, 4, 'four pipeline stages');
+    // Five stages since job closure added SELECTED, which the data model stores.
+    assert.strictEqual(pipeline.length, 5, 'five pipeline stages');
+    assert.ok(pipeline.some((stage) => stage.key === 'SELECTED'), 'the hiring outcome is a pipeline stage');
     assert.strictEqual(scoreBands.length, 5, 'five score bands');
     assert.strictEqual(trend.length, 14, 'fourteen-day trend');
     assert.ok(Array.isArray(recentCandidates), 'recent candidates present');

@@ -103,20 +103,32 @@ try {
 
   // Wait for real content, not just network idle: the KPI cards render skeletons
   // until the analytics request resolves.
-  await page.locator('a[aria-label^="Total candidates"]').waitFor({ state: 'visible', timeout: 20000 });
+  await page.locator('a[aria-label^="Candidates"]').waitFor({ state: 'visible', timeout: 20000 });
   const dashboard = await text();
-  check(/total candidates/i.test(dashboard), 'the dashboard renders its KPI cards');
+  check(/candidates/i.test(dashboard), 'the dashboard renders its KPI cards');
   check(!/\bNaN\b|\bundefined\b/.test(dashboard), 'no NaN or undefined values appear on the dashboard');
-  check(/hiring pipeline/i.test(dashboard), 'the hiring pipeline section renders');
-  check(/recent candidates/i.test(dashboard), 'the recent candidates section renders');
+  check(/needs your attention/i.test(dashboard), 'the Needs your attention section renders');
+  check(/analytics/i.test(dashboard), 'the Analytics section is offered');
 
-  const totalCard = page.locator('a[aria-label^="Total candidates"]');
-  check((await totalCard.count()) === 1, 'the Total candidates card is a single interactive element');
+  // The pipeline and recent-candidates panels were moved behind the Analytics
+  // disclosure so the first screen stays about what to do next. They are still
+  // present — expanding Analytics must reveal both.
+  await page.locator('button[aria-controls="dashboard-analytics"]').click();
+  await page.waitForTimeout(700);
+  const analytics = await text();
+  check(/hiring pipeline/i.test(analytics), 'the hiring pipeline renders inside Analytics');
+  check(/recent candidates/i.test(analytics), 'the recent candidates panel renders inside Analytics');
+  await page.locator('button[aria-controls="dashboard-analytics"]').click();
+  await page.waitForTimeout(400);
+
+  const totalCard = page.locator('a[aria-label^="Candidates"]');
+  check((await totalCard.count()) === 1, 'the Candidates card is a single interactive element');
 
   // Click the far corner of the card, well away from any text, to prove the
-  // whole surface is the target rather than just the label.
+  // whole surface is the target rather than just the label. Positioned relative
+  // to the element so the assertion does not depend on the page's scroll offset.
   const cardBox = await totalCard.boundingBox();
-  await page.mouse.click(cardBox.x + cardBox.width - 24, cardBox.y + 14);
+  await totalCard.click({ position: { x: cardBox.width - 24, y: 14 } });
   await page.waitForURL('**/candidates**', { timeout: 15000 });
   // The card links to the ranked list, so a sort parameter is expected.
   check(
@@ -237,10 +249,14 @@ try {
   section('Scenario 3 — filter, sort, open a profile, then go Back');
   await page.goto(`${BASE}/candidates`, { waitUntil: 'networkidle' });
   await page.locator('a[aria-label^="Open profile for"]').first().waitFor({ state: 'visible', timeout: 20000 });
-  // Skill and sort are primary filters and sit inline in the toolbar; the
-  // "More filters" drawer holds only the secondary ones.
-  await page.selectOption('#filter-skill', 'React');
+  // Sort stays in the toolbar; every field-level filter now lives in the Filters
+  // drawer, which is what lets the list open with just search, sort and presets.
+  await page.locator('button[aria-controls="candidate-filters"]').click();
+  await page.locator('#drawer-filter-skill').waitFor({ state: 'visible', timeout: 15000 });
+  await page.selectOption('#drawer-filter-skill', 'React');
   await page.waitForTimeout(1100);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(500);
   await page.selectOption('select[aria-label="Sort candidates"]', 'newest');
   await page.waitForTimeout(1100);
 

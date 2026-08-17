@@ -2,14 +2,12 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
-  Briefcase,
   Check,
   ChevronRight,
   Github,
   HelpCircle,
   Linkedin,
   Mail,
-  MapPin,
   Phone,
   X as XIcon
 } from 'lucide-react';
@@ -22,7 +20,7 @@ import {
   safeExternalUrl,
   toTelHref
 } from '../utils/format';
-import { Avatar, Badge, cx } from './ui';
+import { Avatar, Badge, StatusBadge, cx } from './ui';
 
 /**
  * Candidate list card.
@@ -35,7 +33,6 @@ import { Avatar, Badge, cx } from './ui';
 const CandidateCard = ({ candidate, actions, showJob = false, className }) => {
   const score = candidate.matchAnalysis?.overallScore;
   const scoreMeta = getScoreMeta(score);
-  const statusMeta = getStatusMeta(candidate.hrStatus);
 
   const skills = candidate.matchAnalysis?.matchedSkills?.length
     ? candidate.matchAnalysis.matchedSkills
@@ -78,33 +75,42 @@ const CandidateCard = ({ candidate, actions, showJob = false, className }) => {
                 </p>
               </div>
 
-              <div className="hidden sm:flex flex-col items-end gap-1.5 shrink-0">
+              {/*
+                Score as a figure with its band beneath, not a badge.
+                "94% / Strong match" is read at a glance down a list of fifty
+                rows; a pill containing the same text is not. The slim meter
+                repeats the value positionally for faster comparison, and the
+                band label means the score is never conveyed by colour alone.
+              */}
+              <div className="hidden sm:flex flex-col items-end gap-1.5 shrink-0 w-24">
                 {score !== undefined && score !== null ? (
-                  <Badge variant={scoreMeta.badge.replace('badge-', '')}>{score}% match</Badge>
+                  <>
+                    <p className="text-section text-slate-900 tabular-nums leading-none">{score}%</p>
+                    <p className={cx('text-[11px] font-medium leading-none', scoreMeta.text)}>{scoreMeta.label} match</p>
+                    <div className="mt-0.5 h-1 w-full rounded-pill bg-slate-100 overflow-hidden">
+                      <div
+                        className={cx('h-full rounded-pill', scoreMeta.bar)}
+                        style={{ width: `${Math.min(Math.max(score, 0), 100)}%` }}
+                      />
+                    </div>
+                  </>
                 ) : (
-                  <Badge variant="neutral">Not scored</Badge>
+                  <p className="text-meta text-slate-400">Not scored</p>
                 )}
-                <Badge variant={statusMeta.badge.replace('badge-', '')}>{statusMeta.label}</Badge>
               </div>
             </div>
 
-            {/* Meta row */}
-            <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 mt-2 text-xs text-slate-500">
-              <span className="inline-flex items-center gap-1">
-                <MapPin className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
-                {candidate.currentLocation || 'Location not provided'}
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <Briefcase className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
-                {formatExperience(candidate.totalExperience, 'Experience not stated')}
-              </span>
-              {showJob && candidate.jobTitle && (
-                <span className="inline-flex items-center gap-1 truncate max-w-[14rem]">
-                  <span className="text-slate-300" aria-hidden="true">•</span>
-                  <span className="truncate">{candidate.jobTitle}</span>
-                </span>
-              )}
-            </div>
+            {/* One compact line of the facts that decide a shortlist. */}
+            <p className="text-xs text-slate-500 mt-2 truncate">
+              {[
+                formatExperience(candidate.totalExperience, 'Experience not stated'),
+                candidate.currentLocation || 'Location not provided',
+                candidate.qualification
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+              {showJob && candidate.jobTitle ? ` · ${candidate.jobTitle}` : ''}
+            </p>
 
             {/* Skills */}
             {skills.length > 0 && (
@@ -148,19 +154,27 @@ const CandidateCard = ({ candidate, actions, showJob = false, className }) => {
               </div>
             )}
 
-            {/* Mobile badges + applied time */}
-            <div className="flex items-center justify-between gap-2 mt-2.5">
-              <p className="text-xs text-slate-400">Applied {formatRelativeTime(candidate.createdAt, 'date unknown')}</p>
-              <div className="flex sm:hidden items-center gap-1.5">
-                {score !== undefined && score !== null && (
-                  <Badge variant={scoreMeta.badge.replace('badge-', '')}>{score}%</Badge>
-                )}
-                <Badge variant={statusMeta.badge.replace('badge-', '')}>{statusMeta.label}</Badge>
+            {/* Status and applied time. The status badge shows at every width —
+                where a candidate sits in the process is not a detail to drop on
+                a small screen. */}
+            <div className="flex items-center justify-between gap-2 mt-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <StatusBadge status={candidate.hrStatus} />
+                <span className="text-xs text-slate-400 truncate hidden sm:inline">
+                  Applied {formatRelativeTime(candidate.createdAt, 'date unknown')}
+                </span>
               </div>
-              <ChevronRight
-                className="hidden sm:block w-4 h-4 text-slate-300 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all duration-fast"
-                aria-hidden="true"
-              />
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                {/* Score repeats on mobile, where the right-hand column is hidden. */}
+                {score !== undefined && score !== null && (
+                  <span className="sm:hidden text-meta font-semibold text-slate-900 tabular-nums">{score}%</span>
+                )}
+                <ChevronRight
+                  className="hidden sm:block w-4 h-4 text-slate-300 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all duration-fast"
+                  aria-hidden="true"
+                />
+              </div>
             </div>
           </div>
         </Link>
@@ -171,7 +185,7 @@ const CandidateCard = ({ candidate, actions, showJob = false, className }) => {
             <a
               href={`mailto:${candidate.email}`}
               className="btn btn-icon-sm btn-ghost"
-              title={`Email ${candidate.email}`}
+              title={`Email ${candidate.name}`}
               aria-label={`Send an email to ${candidate.name}`}
             >
               <Mail className="w-4 h-4" aria-hidden="true" />
@@ -186,7 +200,7 @@ const CandidateCard = ({ candidate, actions, showJob = false, className }) => {
             <a
               href={telHref}
               className="btn btn-icon-sm btn-ghost"
-              title={`Call ${formatPhone(candidate.phone)}`}
+              title={`Call ${candidate.name}`}
               aria-label={`Call ${candidate.name}`}
             >
               <Phone className="w-4 h-4" aria-hidden="true" />

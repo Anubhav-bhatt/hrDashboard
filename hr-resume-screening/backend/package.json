@@ -10,6 +10,7 @@
     "test:unit": "node tests/unit.test.js",
     "test:api": "node tests/api.test.js",
     "test:jobs": "node tests/jobPortal.test.js",
+    "test:closure": "node tests/jobClosure.test.js",
     "test:legacy": "node tests/phase5.test.js",
     "seed:user": "node prisma/seedUser.js",
     "prisma:generate": "prisma generate",
