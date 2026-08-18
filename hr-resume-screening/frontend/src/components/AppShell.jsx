@@ -14,11 +14,14 @@ import {
   X
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useAiConfig } from '../context/AiConfigContext';
 import { useToast } from './ToastProvider';
 import { ThemeToggleButton } from './ThemeSelector';
 import { Avatar, Button, cx } from './ui';
+import { AGENT_MODE_LIST } from '../constants/agentModes';
 
 export const SIDEBAR_STORAGE_KEY = 'hr-dashboard-sidebar-collapsed';
+export const AI_GROUP_STORAGE_KEY = 'hr-dashboard-ai-group-open';
 
 /**
  * Sidebar navigation — four destinations, one per thing a recruiter works on.
@@ -43,6 +46,21 @@ const readCollapsed = () => {
     return window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === 'true';
   } catch {
     return false;
+  }
+};
+
+/**
+ * Reads the persisted AI group state, defaulting to open.
+ *
+ * Open by default because a collapsed group hides five destinations behind a
+ * click a recruiter has no reason to suspect is there. Once they collapse it, the
+ * choice sticks.
+ */
+const readAiGroupOpen = () => {
+  try {
+    return window.localStorage.getItem(AI_GROUP_STORAGE_KEY) !== 'false';
+  } catch {
+    return true;
   }
 };
 
@@ -79,9 +97,12 @@ const AppShell = ({ children }) => {
   const { user, signOut } = useAuth();
   const toast = useToast();
 
+  const { enabled: aiEnabled, isModeEnabled } = useAiConfig();
+
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(readCollapsed);
+  const [aiGroupOpen, setAiGroupOpen] = useState(readAiGroupOpen);
 
   const accountRef = useRef(null);
 
@@ -96,6 +117,18 @@ const AppShell = ({ children }) => {
       const next = !previous;
       try {
         window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(next));
+      } catch {
+        // Preference simply will not persist across reloads.
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleAiGroup = useCallback(() => {
+    setAiGroupOpen((previous) => {
+      const next = !previous;
+      try {
+        window.localStorage.setItem(AI_GROUP_STORAGE_KEY, String(next));
       } catch {
         // Preference simply will not persist across reloads.
       }
@@ -145,6 +178,16 @@ const AppShell = ({ children }) => {
     }
     return location.pathname === item.to;
   };
+
+  /**
+   * Exact matching for AI destinations.
+   *
+   * Every agent route lives beneath `/ai`, so the prefix rule used for `/jobs`
+   * would leave the assistant highlighted while a recruiter is on the ranking
+   * page. Each agent owns exactly one URL, so an exact comparison is both correct
+   * and simpler.
+   */
+  const isAiModeActive = (mode) => location.pathname.replace(/\/+$/, '') === mode.route;
 
   /**
    * @param {boolean} isCollapsed Render the icon-only variant
@@ -215,6 +258,129 @@ const AppShell = ({ children }) => {
         })}
       </nav>
 
+      {/* AI Recruitment — a separate, clearly labelled group below the four
+          workspace destinations. Additive: with AI_ENABLED=false nothing here
+          renders and the rail is byte-for-byte what it was before. */}
+      {aiEnabled && (
+        <nav
+          className={cx('mt-6 pt-5 border-t border-slate-200', isCollapsed && 'flex flex-col items-center w-full')}
+          aria-label="AI Recruitment"
+        >
+          {isCollapsed ? (
+            // Collapsed rail: no room for a group header, so the items stand on
+            // their own with the shared sparkle marking them as one family.
+            <div className="flex flex-col items-center gap-0.5 w-full">
+              {AGENT_MODE_LIST.map((mode) => {
+                const modeEnabled = isModeEnabled(mode.id);
+                const active = isAiModeActive(mode);
+
+                if (!modeEnabled) return null;
+
+                return (
+                  <NavLink
+                    key={mode.id}
+                    to={mode.route}
+                    // Exact matching. Without it NavLink treats /ai as active on
+                    // every /ai/* route and marks the assistant aria-current
+                    // alongside the real destination.
+                    end
+                    className={cx(
+                      'group relative flex items-center justify-center w-10 h-10 rounded-control transition-colors duration-fast',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1',
+                      active ? 'bg-brand-50 text-brand-700' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    )}
+                    aria-current={active ? 'page' : undefined}
+                    aria-label={mode.name}
+                  >
+                    <mode.icon
+                      className={cx('w-[18px] h-[18px] shrink-0', active ? 'text-brand-600' : 'text-slate-400 group-hover:text-slate-600')}
+                      aria-hidden="true"
+                    />
+                    <CollapsedTooltip label={mode.name} />
+                  </NavLink>
+                );
+              })}
+            </div>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={toggleAiGroup}
+                className="w-full flex items-center gap-2 px-3 h-8 rounded-control text-label uppercase text-slate-500
+                           hover:text-slate-900 hover:bg-slate-100 transition-colors duration-fast
+                           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                aria-expanded={aiGroupOpen}
+                aria-controls="ai-recruitment-group"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-brand-500 shrink-0" aria-hidden="true" />
+                <span className="flex-1 text-left">AI Recruitment</span>
+                <ChevronDown
+                  className={cx('w-3.5 h-3.5 shrink-0 transition-transform duration-fast', !aiGroupOpen && '-rotate-90')}
+                  aria-hidden="true"
+                />
+              </button>
+
+              {aiGroupOpen && (
+                <div id="ai-recruitment-group" className="mt-1 space-y-0.5">
+                  {AGENT_MODE_LIST.map((mode) => {
+                    const modeEnabled = isModeEnabled(mode.id);
+                    const active = isAiModeActive(mode);
+
+                    // A mode whose flag is off is shown but not navigable. It
+                    // reads as "not yet" rather than vanishing, which is what a
+                    // recruiter needs to understand the state of the section.
+                    if (!modeEnabled) {
+                      return (
+                        <span
+                          key={mode.id}
+                          aria-disabled="true"
+                          className="flex items-center gap-2.5 px-3 h-9 rounded-control text-body text-slate-400 cursor-not-allowed"
+                        >
+                          <mode.icon className="w-[18px] h-[18px] shrink-0 text-slate-300" aria-hidden="true" />
+                          <span className="flex-1 min-w-0 truncate">{mode.name}</span>
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 shrink-0">
+                            Soon
+                          </span>
+                        </span>
+                      );
+                    }
+
+                    return (
+                      <NavLink
+                        key={mode.id}
+                        to={mode.route}
+                        // See the collapsed rail above: /ai would otherwise stay
+                        // active across every agent route.
+                        end
+                        className={cx(
+                          'group relative flex items-center gap-2.5 px-3 h-9 rounded-control text-body font-medium transition-colors duration-fast',
+                          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1',
+                          active
+                            ? 'bg-brand-50 text-brand-700 font-semibold'
+                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                        )}
+                        aria-current={active ? 'page' : undefined}
+                      >
+                        {active && (
+                          <span
+                            className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-0.5 rounded-r bg-brand-600"
+                            aria-hidden="true"
+                          />
+                        )}
+                        <mode.icon
+                          className={cx('w-[18px] h-[18px] shrink-0', active ? 'text-brand-600' : 'text-slate-400 group-hover:text-slate-600')}
+                          aria-hidden="true"
+                        />
+                        {mode.name}
+                      </NavLink>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
+        </nav>
+      )}
     </>
   );
 

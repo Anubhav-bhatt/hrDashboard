@@ -32,6 +32,8 @@ const { getAIProvider } = require('../providers');
 const { normalizeAgentContext } = require('../context/AgentContext');
 const { AiError, aiDisabled, aiModeDisabled, aiRequestInvalid, aiProviderError } = require('../errors/ai.errors');
 const { logAiRun, logAiConfigWarnings } = require('../logging/aiLogger');
+const { runScreeningAgent } = require('../modes/screening.agent');
+const { runRankingAgent } = require('../modes/ranking.agent');
 
 /**
  * Upper bound on a prompt. Generous for a recruiter's question and small enough
@@ -183,15 +185,31 @@ const run = async ({ mode, message, context } = {}, { user = null, config, provi
   //    the AI layer.
   let result;
   try {
-    result = normalizeProviderResult(
-      await activeProvider.run({
+    let rawResult;
+    if (agentMode.id === 'screening' && agentContext && agentContext.jobId) {
+      rawResult = await runScreeningAgent({
+        message: normalizedMessage,
+        context: agentContext,
+        provider: activeProvider,
+        config: activeConfig
+      });
+    } else if (agentMode.id === 'ranking' && agentContext && agentContext.jobId) {
+      rawResult = await runRankingAgent({
+        message: normalizedMessage,
+        context: agentContext,
+        provider: activeProvider,
+        config: activeConfig
+      });
+    } else {
+      rawResult = await activeProvider.run({
         mode: agentMode.id,
         message: normalizedMessage,
         context: agentContext,
         metadata: { readOnly: agentMode.readOnly, writeActionsEnabled: activeConfig.writeActionsEnabled }
-      }),
-      agentMode.id
-    );
+      });
+    }
+
+    result = normalizeProviderResult(rawResult, agentMode.id);
   } catch (error) {
     const wrapped = error instanceof AiError ? error : aiProviderError(error);
     logAiRun({

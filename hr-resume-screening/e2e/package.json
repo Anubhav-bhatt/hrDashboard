@@ -7,8 +7,9 @@
     "test:a11y": "node accessibility.mjs",
     "test:theme": "node theme-and-shell.mjs",
     "test:closure": "node closure.mjs",
-    "test:simplification": "node simplification.mjs",
-    "test:all": "node scenarios.mjs && node accessibility.mjs && node theme-and-shell.mjs && node closure.mjs && node simplification.mjs"
+    "test:ai": "node ai-shell.mjs",
+    "test:ai:agents": "node ai-screening-ranking.mjs",
+    "test:all": "node scenarios.mjs && node accessibility.mjs && node theme-and-shell.mjs && node closure.mjs && node simplification.mjs && node ai-shell.mjs && node ai-screening-ranking.mjs"
   },
   "dependencies": {
     "playwright": "^1.62.1"

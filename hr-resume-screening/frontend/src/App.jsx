@@ -1,7 +1,9 @@
-import React, { Suspense, lazy } from 'react';
+﻿import React, { Suspense, lazy } from 'react';
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { AiConfigProvider } from './context/AiConfigContext';
 import { ToastProvider } from './components/ToastProvider';
+import AiRouteGuard from './components/ai/AiRouteGuard';
 import AppShell from './components/AppShell';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ProfileSkeleton, Spinner } from './components/ui';
@@ -27,9 +29,23 @@ const CandidateProfile = lazy(() => import('./pages/CandidateProfile'));
 const ImportCandidates = lazy(() => import('./pages/ImportCandidates'));
 
 /**
+ * The AI section is code-split as a group.
+ *
+ * It is an additive area that many installations will run with `AI_ENABLED=false`
+ * and never open. Keeping it out of the initial bundle means those deployments
+ * pay nothing for its presence, which is what "additive" has to mean in practice
+ * as well as in architecture.
+ */
+const AIAssistant = lazy(() => import('./pages/ai/AIAssistant'));
+const ScreeningAgent = lazy(() => import('./pages/ai/ScreeningAgent'));
+const RankingAgent = lazy(() => import('./pages/ai/RankingAgent'));
+const ComparisonAgent = lazy(() => import('./pages/ai/ComparisonAgent'));
+const InsightsAgent = lazy(() => import('./pages/ai/InsightsAgent'));
+
+/**
  * Gate for every screen that shows candidate or job data.
  *
- * While the session is being established nothing is rendered but a spinner —
+ * While the session is being established nothing is rendered but a spinner â€”
  * rendering children first would flash protected data before the redirect.
  * The attempted location is carried along so sign-in can return the recruiter
  * to where they were headed.
@@ -38,14 +54,14 @@ const RequireAuth = ({ children, fallback }) => {
   const { isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
 
-  if (isLoading) return <Spinner label="Checking your session…" className="min-h-screen" />;
+  if (isLoading) return <Spinner label="Checking your sessionâ€¦" className="min-h-screen" />;
   if (!isAuthenticated) return <Navigate to="/login" state={{ from: location }} replace />;
 
   return (
     <AppShell>
       {/* Lazily-loaded routes show their own shaped skeleton while the chunk
           arrives, so a code-split screen does not flash an empty page. */}
-      <Suspense fallback={fallback || <Spinner label="Loading…" />}>{children}</Suspense>
+      <Suspense fallback={fallback || <Spinner label="Loadingâ€¦" />}>{children}</Suspense>
     </AppShell>
   );
 };
@@ -66,125 +82,185 @@ function App() {
     <ErrorBoundary>
       <ToastProvider>
         <AuthProvider>
-          <Routes>
-            <Route path="/login" element={<Login />} />
+          {/* Inside AuthProvider: the flag endpoint is authenticated, so it is
+              only queried once a recruiter has a session. */}
+          <AiConfigProvider>
+            <Routes>
+              <Route path="/login" element={<Login />} />
 
-            <Route
-              path="/"
-              element={
-                <RequireAuth>
-                  <Dashboard />
-                </RequireAuth>
-              }
-            />
-            {/* The dashboard is the app root; /dashboard is accepted too so the
-                named URL can be linked and bookmarked. */}
-            <Route
-              path="/dashboard"
-              element={
-                <RequireAuth>
-                  <Dashboard />
-                </RequireAuth>
-              }
-            />
+              <Route
+                path="/"
+                element={
+                  <RequireAuth>
+                    <Dashboard />
+                  </RequireAuth>
+                }
+              />
+              {/* The dashboard is the app root; /dashboard is accepted too so the
+                  named URL can be linked and bookmarked. */}
+              <Route
+                path="/dashboard"
+                element={
+                  <RequireAuth>
+                    <Dashboard />
+                  </RequireAuth>
+                }
+              />
 
-            <Route
-              path="/candidates"
-              element={
-                <RequireAuth>
-                  <CandidatesList />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/settings"
-              element={
-                <RequireAuth>
-                  <Settings />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/candidates/:candidateId"
-              element={
-                <RequireAuth fallback={<ProfileSkeleton />}>
-                  <CandidateProfile />
-                </RequireAuth>
-              }
-            />
+              <Route
+                path="/candidates"
+                element={
+                  <RequireAuth>
+                    <CandidatesList />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/settings"
+                element={
+                  <RequireAuth>
+                    <Settings />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/candidates/:candidateId"
+                element={
+                  <RequireAuth fallback={<ProfileSkeleton />}>
+                    <CandidateProfile />
+                  </RequireAuth>
+                }
+              />
 
-            <Route
-              path="/jobs"
-              element={
-                <RequireAuth>
-                  <JobsList />
-                </RequireAuth>
-              }
-            />
-            {/* Registered before /jobs/:jobId so "closed" is not read as an id. */}
-            <Route
-              path="/jobs/closed"
-              element={
-                <RequireAuth>
-                  <ClosedJobs />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/jobs/new"
-              element={
-                <RequireAuth>
-                  <CreateJob />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/jobs/:id"
-              element={
-                <RequireAuth>
-                  <JobDetails />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/jobs/:jobId/import"
-              element={
-                <RequireAuth>
-                  <ImportCandidates />
-                </RequireAuth>
-              }
-            />
+              <Route
+                path="/jobs"
+                element={
+                  <RequireAuth>
+                    <JobsList />
+                  </RequireAuth>
+                }
+              />
+              {/* Registered before /jobs/:jobId so "closed" is not read as an id. */}
+              <Route
+                path="/jobs/closed"
+                element={
+                  <RequireAuth>
+                    <ClosedJobs />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/jobs/new"
+                element={
+                  <RequireAuth>
+                    <CreateJob />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/jobs/:id"
+                element={
+                  <RequireAuth>
+                    <JobDetails />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/jobs/:jobId/import"
+                element={
+                  <RequireAuth>
+                    <ImportCandidates />
+                  </RequireAuth>
+                }
+              />
 
-            {/* Canonical job-scoped candidate list. The job comes from the
-                route, so refreshing and bookmarking preserve the scope. */}
-            <Route
-              path="/jobs/:jobId/candidates"
-              element={
-                <RequireAuth>
-                  <JobCandidatesPage />
-                </RequireAuth>
-              }
-            />
+              {/* Canonical job-scoped candidate list. The job comes from the
+                  route, so refreshing and bookmarking preserve the scope. */}
+              <Route
+                path="/jobs/:jobId/candidates"
+                element={
+                  <RequireAuth>
+                    <JobCandidatesPage />
+                  </RequireAuth>
+                }
+              />
 
-            {/* Preserved legacy route */}
-            <Route
-              path="/jobs/:jobId/candidates/:candidateId"
-              element={
-                <RequireAuth>
-                  <LegacyCandidateRedirect />
-                </RequireAuth>
-              }
-            />
+              {/* Preserved legacy route */}
+              <Route
+                path="/jobs/:jobId/candidates/:candidateId"
+                element={
+                  <RequireAuth>
+                    <LegacyCandidateRedirect />
+                  </RequireAuth>
+                }
+              />
 
-            <Route
-              path="*"
-              element={
-                <RequireAuth>
-                  <NotFound />
-                </RequireAuth>
-              }
-            />
-          </Routes>
+              {/* AI Recruitment. Every route sits inside the same RequireAuth
+                  wrapper as the rest of the dashboard â€” there is no separate AI
+                  auth path and no anonymous variant. AiRouteGuard then applies the
+                  feature flags, so a disabled agent shows a stated reason instead
+                  of a blank page. */}
+              <Route
+                path="/ai"
+                element={
+                  <RequireAuth>
+                    <AiRouteGuard>
+                      <AIAssistant />
+                    </AiRouteGuard>
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/ai/screening"
+                element={
+                  <RequireAuth>
+                    <AiRouteGuard modeId="screening">
+                      <ScreeningAgent />
+                    </AiRouteGuard>
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/ai/ranking"
+                element={
+                  <RequireAuth>
+                    <AiRouteGuard modeId="ranking">
+                      <RankingAgent />
+                    </AiRouteGuard>
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/ai/comparison"
+                element={
+                  <RequireAuth>
+                    <AiRouteGuard modeId="comparison">
+                      <ComparisonAgent />
+                    </AiRouteGuard>
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/ai/insights"
+                element={
+                  <RequireAuth>
+                    <AiRouteGuard modeId="insights">
+                      <InsightsAgent />
+                    </AiRouteGuard>
+                  </RequireAuth>
+                }
+              />
+
+              <Route
+                path="*"
+                element={
+                  <RequireAuth>
+                    <NotFound />
+                  </RequireAuth>
+                }
+              />
+            </Routes>
+          </AiConfigProvider>
         </AuthProvider>
       </ToastProvider>
     </ErrorBoundary>

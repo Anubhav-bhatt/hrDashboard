@@ -20,7 +20,17 @@ const AI_ERROR_CODES = Object.freeze({
   /** The caller's mode, message or context failed validation. */
   AI_REQUEST_INVALID: 400,
   /** The resolved provider threw while handling the request. */
-  AI_PROVIDER_ERROR: 502
+  AI_PROVIDER_ERROR: 502,
+  /** Screening-specific errors */
+  SCREENING_JOB_REQUIRED: 400,
+  SCREENING_CANDIDATE_REQUIRED: 400,
+  SCREENING_INVALID_CANDIDATE_COUNT: 400,
+  SCREENING_CANDIDATE_MISMATCH: 400,
+  /** Ranking-specific errors */
+  RANKING_JOB_REQUIRED: 400,
+  RANKING_INVALID_SCOPE: 400,
+  RANKING_NO_CANDIDATES: 400,
+  RANKING_INVALID_FILTER: 400
 });
 
 /**
@@ -70,7 +80,7 @@ const aiProviderInvalid = (supported) =>
   );
 
 /** @param {string} message Written for the caller — states what was wrong. */
-const aiRequestInvalid = (message) => new AiError('AI_REQUEST_INVALID', message);
+const aiRequestInvalid = (message, code = 'AI_REQUEST_INVALID') => new AiError(code, message);
 
 /**
  * Wraps a provider failure. The underlying message is kept on `cause` for
@@ -85,6 +95,32 @@ const aiProviderError = (cause) => {
   return error;
 };
 
+// Screening factories
+const screeningJobRequired = () =>
+  new AiError('SCREENING_JOB_REQUIRED', 'Screening requires a selected job.');
+
+const screeningCandidateRequired = () =>
+  new AiError('SCREENING_CANDIDATE_REQUIRED', 'Screening requires a selected candidate.');
+
+const screeningInvalidCandidateCount = () =>
+  new AiError('SCREENING_INVALID_CANDIDATE_COUNT', 'Screening analyzes exactly one candidate at a time.');
+
+const screeningCandidateMismatch = () =>
+  new AiError('SCREENING_CANDIDATE_MISMATCH', 'Selected candidate does not belong to the selected job.');
+
+// Ranking factories
+const rankingJobRequired = () =>
+  new AiError('RANKING_JOB_REQUIRED', 'Ranking requires a selected job.');
+
+const rankingInvalidScope = (scope) =>
+  new AiError('RANKING_INVALID_SCOPE', `Invalid candidate scope "${scope}". Supported scopes: ALL, SHORTLISTED.`);
+
+const rankingNoCandidates = () =>
+  new AiError('RANKING_NO_CANDIDATES', 'No candidates found for the selected job and scope.');
+
+const rankingInvalidFilter = (message) =>
+  new AiError('RANKING_INVALID_FILTER', message || 'Invalid filter parameters for candidate ranking.');
+
 module.exports = {
   AI_ERROR_CODES,
   AiError,
@@ -92,5 +128,13 @@ module.exports = {
   aiModeDisabled,
   aiProviderInvalid,
   aiRequestInvalid,
-  aiProviderError
+  aiProviderError,
+  screeningJobRequired,
+  screeningCandidateRequired,
+  screeningInvalidCandidateCount,
+  screeningCandidateMismatch,
+  rankingJobRequired,
+  rankingInvalidScope,
+  rankingNoCandidates,
+  rankingInvalidFilter
 };

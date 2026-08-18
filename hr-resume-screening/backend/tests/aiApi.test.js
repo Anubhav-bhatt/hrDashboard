@@ -424,11 +424,23 @@ const run = async () => {
     }
   });
 
-  await testAsync('no other AI path is exposed', async () => {
+  await testAsync('no other AI path accepts a POST', async () => {
     setAiEnv(allModesOn());
-    for (const path of ['/ai', '/ai/', '/ai/config', '/ai/modes', '/ai/providers']) {
+    // /ai/config exists but is read-only, so it must reject a POST like any
+    // unregistered path. Nothing else under /ai is writable at all.
+    for (const path of ['/ai', '/ai/', '/ai/config', '/ai/modes', '/ai/providers', '/ai/tools']) {
       const res = await authed('POST', path, { body: { mode: 'screening', message: 'test' } });
-      assert.strictEqual(res.status, 404, `${path} should not exist`);
+      assert.strictEqual(res.status, 404, `POST ${path} should not exist`);
+    }
+  });
+
+  await testAsync('the tool registry is not reachable over HTTP', async () => {
+    setAiEnv(allModesOn());
+    // The tool layer is backend-only by design: an agent reaches it in-process,
+    // a browser must not reach it at all.
+    for (const path of ['/ai/tools', '/ai/tools/getCandidates', '/ai/registry', '/ai/execute']) {
+      const res = await authed('GET', path);
+      assert.strictEqual(res.status, 404, `GET ${path} should not exist`);
     }
   });
 
@@ -485,6 +497,82 @@ const run = async () => {
     setAiEnv(allModesOn());
     const res = await request('GET', '/health');
     assert.ok(!/ai/i.test(JSON.stringify(res.body).replace(/database/gi, '')), JSON.stringify(res.body));
+  });
+
+  /* ------------------------------------------------- GET /api/ai/config --- */
+
+  suite.group('Feature-flag endpoint (GET /api/ai/config)');
+
+  await testAsync('the config endpoint requires a session', async () => {
+    setAiEnv(allModesOn());
+    const res = await request('GET', '/ai/config');
+    assert.strictEqual(res.status, 401);
+    assert.strictEqual(res.body.code, 'AUTH_REQUIRED');
+  });
+
+  await testAsync('with AI off it reports every mode off', async () => {
+    setAiEnv({ AI_ENABLED: 'false' });
+    const res = await authed('GET', '/ai/config');
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.data.enabled, false);
+    for (const id of AGENT_MODE_IDS) {
+      assert.strictEqual(res.body.data.modes[id], false, `${id} should be off`);
+    }
+  });
+
+  await testAsync('the master switch overrides an individually enabled mode', async () => {
+    // A mode flag on while AI_ENABLED is off must not report the mode usable —
+    // the UI would offer a route the orchestrator refuses.
+    setAiEnv({ AI_ENABLED: 'false', AI_RANKING_ENABLED: 'true' });
+    const res = await authed('GET', '/ai/config');
+
+    assert.strictEqual(res.body.data.enabled, false);
+    assert.strictEqual(res.body.data.modes.ranking, false);
+  });
+
+  await testAsync('individual mode flags are reported independently', async () => {
+    setAiEnv({
+      AI_ENABLED: 'true',
+      AI_PROVIDER: 'mock',
+      AI_ASSISTANT_ENABLED: 'true',
+      AI_RANKING_ENABLED: 'false',
+      AI_SCREENING_ENABLED: 'true'
+    });
+    const res = await authed('GET', '/ai/config');
+
+    assert.strictEqual(res.body.data.enabled, true);
+    assert.strictEqual(res.body.data.modes.assistant, true);
+    assert.strictEqual(res.body.data.modes.screening, true);
+    assert.strictEqual(res.body.data.modes.ranking, false, 'ranking was explicitly disabled');
+    assert.strictEqual(res.body.data.modes.comparison, false, 'an unset flag defaults to off');
+  });
+
+  await testAsync('every known mode is always present as a boolean', async () => {
+    setAiEnv(allModesOn());
+    const res = await authed('GET', '/ai/config');
+
+    const keys = Object.keys(res.body.data.modes).sort();
+    assert.deepStrictEqual(keys, [...AGENT_MODE_IDS].sort(), 'mode list drifted from the backend authority');
+    for (const id of AGENT_MODE_IDS) {
+      assert.strictEqual(typeof res.body.data.modes[id], 'boolean');
+    }
+  });
+
+  await testAsync('the response carries booleans only — no provider, limits or secrets', async () => {
+    setAiEnv(allModesOn());
+    const res = await authed('GET', '/ai/config');
+
+    // The browser is told what is on, and nothing about how it is configured.
+    assert.deepStrictEqual(Object.keys(res.body.data).sort(), ['enabled', 'modes']);
+
+    const serialized = JSON.stringify(res.body);
+    for (const forbidden of ['mock', 'provider', 'limit', 'apiKey', 'key', 'openai', 'anthropic']) {
+      assert.ok(
+        !new RegExp(forbidden, 'i').test(serialized),
+        `"${forbidden}" must not appear in the client payload: ${serialized}`
+      );
+    }
   });
 
   const { failed } = suite.summary();
