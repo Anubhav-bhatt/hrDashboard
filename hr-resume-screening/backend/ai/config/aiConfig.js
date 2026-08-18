@@ -34,6 +34,41 @@ const TRUTHY = Object.freeze(['true', '1', 'yes', 'on', 'enabled']);
 const FALSY = Object.freeze(['false', '0', 'no', 'off', 'disabled', '']);
 
 /**
+ * Retrieval ceilings for the tool layer.
+ *
+ * These exist so a single agent request can never pull the whole candidate table.
+ * They are enforced today even though the provider is a mock, because the point
+ * is that the limit is already in place before anything expensive is connected.
+ */
+const LIMIT_DEFAULTS = Object.freeze({
+  AI_TOOL_DEFAULT_CANDIDATE_LIMIT: 50,
+  AI_TOOL_MAX_CANDIDATE_LIMIT: 200,
+  AI_TOOL_DEFAULT_JOB_LIMIT: 25,
+  AI_TOOL_MAX_JOB_LIMIT: 100
+});
+
+/**
+ * Parses a positive-integer limit.
+ *
+ * A value that is absent, unparseable, zero, negative or fractional falls back to
+ * the documented default and is reported. Guessing at a malformed ceiling is the
+ * one failure mode that matters here: reading `AI_TOOL_MAX_CANDIDATE_LIMIT=2OO`
+ * as `NaN` and then as "no limit" is exactly the accident these bounds exist to
+ * prevent.
+ */
+const parseLimit = (raw, key, warnings) => {
+  const fallback = LIMIT_DEFAULTS[key];
+  if (raw === undefined || raw === null || String(raw).trim() === '') return fallback;
+
+  const parsed = Number(String(raw).trim());
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    warnings.push(`${key} must be a positive integer ("${raw}"); using the default of ${fallback}.`);
+    return fallback;
+  }
+  return parsed;
+};
+
+/**
  * Parses a boolean flag.
  *
  * An unset flag takes `fallback`. A value we do not recognise resolves to
@@ -92,11 +127,40 @@ const resolveAiConfig = (env = process.env) => {
       ? DEFAULT_PROVIDER
       : String(rawProvider).trim().toLowerCase();
 
+  // A default above its own maximum is contradictory; the smaller of the two is
+  // the only safe reading, and the operator is told which one was applied.
+  const clampDefault = (defaultValue, maxValue, defaultKey, maxKey) => {
+    if (defaultValue <= maxValue) return defaultValue;
+    warnings.push(`${defaultKey} (${defaultValue}) exceeds ${maxKey} (${maxValue}); using ${maxValue}.`);
+    return maxValue;
+  };
+
+  const maxCandidateLimit = parseLimit(env.AI_TOOL_MAX_CANDIDATE_LIMIT, 'AI_TOOL_MAX_CANDIDATE_LIMIT', warnings);
+  const maxJobLimit = parseLimit(env.AI_TOOL_MAX_JOB_LIMIT, 'AI_TOOL_MAX_JOB_LIMIT', warnings);
+
+  const limits = Object.freeze({
+    defaultCandidateLimit: clampDefault(
+      parseLimit(env.AI_TOOL_DEFAULT_CANDIDATE_LIMIT, 'AI_TOOL_DEFAULT_CANDIDATE_LIMIT', warnings),
+      maxCandidateLimit,
+      'AI_TOOL_DEFAULT_CANDIDATE_LIMIT',
+      'AI_TOOL_MAX_CANDIDATE_LIMIT'
+    ),
+    maxCandidateLimit,
+    defaultJobLimit: clampDefault(
+      parseLimit(env.AI_TOOL_DEFAULT_JOB_LIMIT, 'AI_TOOL_DEFAULT_JOB_LIMIT', warnings),
+      maxJobLimit,
+      'AI_TOOL_DEFAULT_JOB_LIMIT',
+      'AI_TOOL_MAX_JOB_LIMIT'
+    ),
+    maxJobLimit
+  });
+
   return Object.freeze({
     enabled,
     provider,
     writeActionsEnabled: parseFlag(env.AI_WRITE_ACTIONS_ENABLED, false, 'AI_WRITE_ACTIONS_ENABLED', warnings),
     modes: Object.freeze(modes),
+    limits,
     warnings: Object.freeze(warnings)
   });
 };
@@ -125,13 +189,15 @@ const describeAiConfig = (config) => ({
   provider: config.provider,
   providerSupported: SUPPORTED_PROVIDERS.includes(config.provider),
   writeActionsEnabled: config.writeActionsEnabled,
-  modes: { ...config.modes }
+  modes: { ...config.modes },
+  limits: { ...config.limits }
 });
 
 module.exports = {
   SUPPORTED_PROVIDERS,
   KNOWN_UNIMPLEMENTED_PROVIDERS,
   DEFAULT_PROVIDER,
+  LIMIT_DEFAULTS,
   resolveAiConfig,
   isModeEnabled,
   describeAiConfig

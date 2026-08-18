@@ -3,13 +3,9 @@ const { extractJDText } = require('../services/jdParser');
 const { extractJDRequirements } = require('../services/jdRequirementExtractor');
 const outlookService = require('../services/outlookService');
 const { getJobSummaries, getJobStatusCounts } = require('../services/jobSummaryService');
+const { getJobDetails } = require('../services/jobService');
 const { STRONG_MATCH_MIN } = require('../utils/scoreThresholds');
-const {
-  closeJob,
-  getShortlistedCandidates,
-  JobClosureError,
-  SELECTED_CANDIDATE_SELECT
-} = require('../services/jobClosureService');
+const { closeJob, getShortlistedCandidates, JobClosureError } = require('../services/jobClosureService');
 
 /**
  * @desc    Create a new recruitment job with uploaded JD using Prisma
@@ -160,119 +156,23 @@ const getJobsSummary = async (req, res, next) => {
  * @desc    Get single job details including full extracted JD text and job metrics via Prisma
  * @route   GET /api/jobs/:id
  * @access  Public
+ *
+ * The read itself lives in `services/jobService.getJobDetails` so a non-HTTP
+ * caller can obtain the same record. The legacy requirement back-fill still runs
+ * on this path, exactly as before.
  */
 const getJobById = async (req, res, next) => {
   try {
-    const { id } = req.params;
+    const data = await getJobDetails(req.params.id, { backfillRequirements: true });
 
-    let job = await prisma.job.findUnique({
-      where: { id }
-    });
-
-    if (!job) {
+    if (!data) {
       return res.status(404).json({
         success: false,
         message: 'Job not found.'
       });
     }
 
-    // Lazy load requirements if missing from legacy records
-    if (!job.requiredSkills || job.requiredSkills.length === 0) {
-      const reqs = extractJDRequirements(job.jdText, job.title);
-      job = await prisma.job.update({
-        where: { id: job.id },
-        data: {
-          requiredSkills: reqs.requiredSkills || [],
-          preferredSkills: reqs.preferredSkills || [],
-          roleKeywords: reqs.roleKeywords || [],
-          minimumExperience: reqs.minimumExperience || 0,
-          preferredEducation: reqs.preferredEducation || []
-        }
-      });
-    }
-
-    // Compute Metrics & Score Tier Distribution
-    const candidatesCount = await prisma.candidate.count({ where: { jobId: job.id } });
-    const analyzedCount = await prisma.candidate.count({
-      where: { jobId: job.id, overallScore: { not: null } }
-    });
-
-    const tier90 = await prisma.candidate.count({ where: { jobId: job.id, overallScore: { gte: 90 } } });
-    const tier80_89 = await prisma.candidate.count({ where: { jobId: job.id, overallScore: { gte: 80, lt: 90 } } });
-    const tier70_79 = await prisma.candidate.count({ where: { jobId: job.id, overallScore: { gte: 70, lt: 80 } } });
-    const tierBelow70 = await prisma.candidate.count({ where: { jobId: job.id, overallScore: { lt: 70 } } });
-
-    // Aggregate Import Sessions
-    const importSessions = await prisma.importSession.findMany({ where: { jobId: job.id } });
-    const applicationsFound = importSessions.reduce((acc, sess) => acc + (sess.emailsFound || 0), 0);
-
-    // Operational processing badge, distinct from the persisted OPEN/CLOSED
-    // lifecycle returned as `status` below.
-    let processingStatus = 'NEW';
-    if (candidatesCount > 0 && analyzedCount === 0) processingStatus = 'IMPORTING';
-    else if (candidatesCount > 0 && analyzedCount < candidatesCount) processingStatus = 'READY_FOR_ANALYSIS';
-    else if (candidatesCount > 0 && analyzedCount === candidatesCount) processingStatus = 'COMPLETED';
-
-    const shortlistedCount = await prisma.candidate.count({
-      where: { jobId: job.id, hrStatus: 'SHORTLISTED' }
-    });
-
-    // Projection only: enough to render the closed-job banner, never the resume.
-    const selectedCandidate = job.selectedCandidateId
-      ? await prisma.candidate.findUnique({
-          where: { id: job.selectedCandidateId },
-          select: SELECTED_CANDIDATE_SELECT
-        })
-      : null;
-
-    return res.status(200).json({
-      success: true,
-      data: {
-        _id: job.id,
-        id: job.id,
-        title: job.title,
-        status: job.status,
-        isClosed: job.status === 'CLOSED',
-        closedAt: job.closedAt,
-        selectedCandidateId: job.selectedCandidateId,
-        selectedCandidate,
-        // Drives whether the Close Job action is offered.
-        canClose: job.status === 'OPEN' && shortlistedCount > 0,
-        shortlistedCount,
-        jdFileName: job.jdFileName,
-        jdMimeType: job.jdMimeType,
-        jdText: job.jdText,
-        requirements: {
-          requiredSkills: job.requiredSkills || [],
-          preferredSkills: job.preferredSkills || [],
-          searchKeywords: job.searchKeywords || [],
-          minimumExperience: job.minimumExperience || 0,
-          maximumExperience: job.maximumExperience || null,
-          salaryMin: job.salaryMin || null,
-          salaryMax: job.salaryMax || null,
-          salaryCurrency: job.salaryCurrency || 'INR',
-          preferredLocations: job.preferredLocations || [],
-          qualifications: job.qualifications || [],
-          preferredEducation: job.preferredEducation || [],
-          roleKeywords: job.roleKeywords || []
-        },
-        createdAt: job.createdAt,
-        updatedAt: job.updatedAt,
-        metrics: {
-          applicationsFound: applicationsFound || candidatesCount,
-          candidatesCount,
-          analyzedCount,
-          shortlistedCount,
-          processingStatus,
-          scoreTiers: {
-            tier90,
-            tier80_89,
-            tier70_79,
-            tierBelow70
-          }
-        }
-      }
-    });
+    return res.status(200).json({ success: true, data });
   } catch (error) {
     next(error);
   }

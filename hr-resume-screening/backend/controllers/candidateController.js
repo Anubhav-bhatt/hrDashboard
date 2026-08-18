@@ -7,16 +7,9 @@ const { matchCandidateToJob } = require('../services/candidateMatcher');
 const { generateCandidateInsights } = require('../services/candidateInsightService');
 const { processCandidateResume } = require('../services/candidateProcessingService');
 const { recordActivity } = require('../services/activityService');
-const { formatCandidateForApi, formatCandidateDetail } = require('../utils/candidateSerializer');
-const { STRONG_MATCH_MIN } = require('../utils/scoreThresholds');
-const {
-  ASSIGNABLE_HR_STATUSES,
-  LIST_SELECT,
-  parsePagination,
-  parseSort,
-  buildCandidateWhere,
-  buildPaginationMeta
-} = require('../utils/candidateQuery');
+const { listCandidatesForJob, getCandidateDetail } = require('../services/candidateService');
+const { formatCandidateForApi } = require('../utils/candidateSerializer');
+const { ASSIGNABLE_HR_STATUSES, LIST_SELECT } = require('../utils/candidateQuery');
 
 const chunkArray = (array, size) => {
   const result = [];
@@ -619,43 +612,17 @@ const getCandidateResumeStream = async (req, res, next) => {
  */
 const getCandidatesByJob = async (req, res, next) => {
   try {
-    const { jobId } = req.params;
+    const result = await listCandidatesForJob(req.params.jobId, req.query);
 
-    const job = await prisma.job.findUnique({ where: { id: jobId } });
-    if (!job) {
+    if (!result) {
       return res.status(404).json({ success: false, code: 'JOB_NOT_FOUND', message: 'Job not found.' });
     }
 
-    const { page, limit, skip } = parsePagination(req.query);
-    const orderBy = parseSort(req.query.sort);
-    const where = { AND: [{ jobId }, buildCandidateWhere(req.query, job)] };
-
-    // Tab tallies for this job, ignoring the status filter so every tab keeps a
-    // meaningful count while one of them is selected. Same shape as the global
-    // listing, so one component can render either.
-    const tabWhere = { AND: [{ jobId }, buildCandidateWhere({ ...req.query, hrStatus: undefined }, job)] };
-
-    const [total, candidates, statusGroups, strongMatchCount, tabTotal] = await Promise.all([
-      prisma.candidate.count({ where }),
-      prisma.candidate.findMany({ where, orderBy, skip, take: limit, select: LIST_SELECT }),
-      prisma.candidate.groupBy({ by: ['hrStatus'], where: tabWhere, _count: { _all: true } }),
-      prisma.candidate.count({ where: { AND: [tabWhere, { overallScore: { gte: STRONG_MATCH_MIN } }] } }),
-      prisma.candidate.count({ where: tabWhere })
-    ]);
-
     return res.status(200).json({
       success: true,
-      data: candidates.map((c) => formatCandidateForApi(c, job)),
-      pagination: buildPaginationMeta({ page, limit, total }),
-      facets: {
-        statusCounts: statusGroups.reduce((acc, row) => {
-          acc[row.hrStatus] = row._count._all;
-          return acc;
-        }, {}),
-        strongMatchCount,
-        allCount: tabTotal,
-        strongMatchThreshold: STRONG_MATCH_MIN
-      }
+      data: result.candidates,
+      pagination: result.pagination,
+      facets: result.facets
     });
   } catch (error) {
     next(error);
@@ -672,23 +639,10 @@ const getCandidateById = async (req, res, next) => {
   try {
     const { jobId, candidateId } = req.params;
 
-    const candidate = await prisma.candidate.findFirst({
-      where: { id: candidateId, jobId },
-      include: {
-        job: { select: { id: true, title: true } },
-        noteEntries: { orderBy: { createdAt: 'desc' }, take: 50 },
-        activities: { orderBy: { createdAt: 'desc' }, take: 50 }
-      }
-    });
+    const data = await getCandidateDetail(candidateId, { jobId, includeResumeText: true });
+    if (!data) return notFoundCandidate(res);
 
-    if (!candidate) return notFoundCandidate(res);
-
-    const job = await prisma.job.findUnique({ where: { id: jobId } });
-
-    return res.status(200).json({
-      success: true,
-      data: formatCandidateDetail(candidate, job, { includeResumeText: true })
-    });
+    return res.status(200).json({ success: true, data });
   } catch (error) {
     next(error);
   }

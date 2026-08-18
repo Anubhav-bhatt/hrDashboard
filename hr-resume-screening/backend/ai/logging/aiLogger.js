@@ -91,6 +91,31 @@ const logAiRun = ({ requestId, mode, provider, status, durationMs, userId, error
 };
 
 /**
+ * Records one tool execution.
+ *
+ * Counts and identifiers only. `resultCount` is logged because "this request
+ * pulled 200 candidates" is exactly what an operator needs to see; the candidates
+ * themselves are not, and the same redaction guard above applies, so a caller
+ * that passes a candidate array cannot get it written to a log.
+ *
+ * @param {Object} entry
+ * @param {string|null} entry.requestId
+ * @param {string} entry.toolName
+ * @param {string|null} [entry.userId]
+ * @param {'SUCCESS'|'FAILED'|'REJECTED'} entry.status
+ * @param {number} entry.durationMs
+ * @param {number} [entry.resultCount]
+ * @param {string|null} [entry.errorCode]
+ */
+const logToolRun = ({ requestId, toolName, userId, status, durationMs, resultCount, errorCode }) => {
+  const line = format({ requestId, tool: toolName, userId, status, durationMs, resultCount, errorCode });
+
+  if (status === 'SUCCESS') console.log(`[AI_TOOL] ${line}`);
+  else if (status === 'REJECTED') console.warn(`[AI_TOOL] ${line}`);
+  else console.error(`[AI_TOOL] ${line}`);
+};
+
+/**
  * Reports non-fatal configuration problems once per request that has any.
  *
  * These do not stop execution — an unparseable flag has already resolved to
@@ -107,4 +132,4 @@ const logAiConfigWarnings = (warnings, requestId) => {
   }
 };
 
-module.exports = { logAiRun, logAiConfigWarnings, FORBIDDEN_KEYS };
+module.exports = { logAiRun, logToolRun, logAiConfigWarnings, FORBIDDEN_KEYS };

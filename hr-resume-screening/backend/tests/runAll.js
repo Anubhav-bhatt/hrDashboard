@@ -20,7 +20,8 @@ const SUITES = [
   { name: 'API integration', file: 'api.test.js', requiresDatabase: true },
   { name: 'Jobs portal & job-wise dashboard', file: 'jobPortal.test.js', requiresDatabase: true },
   { name: 'Job closure & candidate selection', file: 'jobClosure.test.js', requiresDatabase: true },
-  { name: 'AI API (POST /api/ai/run)', file: 'aiApi.test.js', requiresDatabase: true }
+  { name: 'AI API (POST /api/ai/run)', file: 'aiApi.test.js', requiresDatabase: true },
+  { name: 'AI tool layer', file: 'aiTools.test.js', requiresDatabase: true }
 ];
 
 const runSuite = (file) =>

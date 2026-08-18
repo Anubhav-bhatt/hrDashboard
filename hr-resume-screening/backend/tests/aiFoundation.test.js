@@ -113,17 +113,50 @@ const run = async () => {
     assert.strictEqual(resolveAiConfig({ AI_ENABLED: 'true' }).enabled, true);
   });
 
-  test('describeAiConfig exposes flags and provider only — never a secret', () => {
+  test('describeAiConfig exposes flags, provider and limits only — never a secret', () => {
     const described = describeAiConfig(resolveAiConfig(allOn({ GEMINI_API_KEY: 'should-not-appear' })));
     const serialized = JSON.stringify(described);
     assert.ok(!/should-not-appear/.test(serialized), serialized);
+    // `limits` was added with the Phase 2 tool layer. The list is pinned so a
+    // future field cannot join this summary without the addition being noticed —
+    // this object is the one that would be safe to show a client.
     assert.deepStrictEqual(Object.keys(described).sort(), [
       'enabled',
+      'limits',
       'modes',
       'provider',
       'providerSupported',
       'writeActionsEnabled'
     ]);
+  });
+
+  test('retrieval limits default safely and reject nonsense', () => {
+    const defaults = resolveAiConfig({}).limits;
+    assert.strictEqual(defaults.defaultCandidateLimit, 50);
+    assert.strictEqual(defaults.maxCandidateLimit, 200);
+    assert.strictEqual(defaults.defaultJobLimit, 25);
+    assert.strictEqual(defaults.maxJobLimit, 100);
+
+    // An unparseable ceiling must not become "no ceiling".
+    const bad = resolveAiConfig({ AI_TOOL_MAX_CANDIDATE_LIMIT: '2OO' });
+    assert.strictEqual(bad.limits.maxCandidateLimit, 200, 'falls back to the documented default');
+    assert.ok(bad.warnings.some((w) => /AI_TOOL_MAX_CANDIDATE_LIMIT/.test(w)), JSON.stringify(bad.warnings));
+
+    for (const value of ['0', '-5', '12.5', 'unlimited']) {
+      assert.strictEqual(
+        resolveAiConfig({ AI_TOOL_MAX_CANDIDATE_LIMIT: value }).limits.maxCandidateLimit,
+        200,
+        `"${value}" must not be honoured`
+      );
+    }
+
+    // A default above its own maximum is contradictory; the maximum wins.
+    const contradictory = resolveAiConfig({
+      AI_TOOL_DEFAULT_CANDIDATE_LIMIT: '500',
+      AI_TOOL_MAX_CANDIDATE_LIMIT: '100'
+    });
+    assert.strictEqual(contradictory.limits.defaultCandidateLimit, 100);
+    assert.ok(contradictory.warnings.some((w) => /exceeds/.test(w)), JSON.stringify(contradictory.warnings));
   });
 
   /* ------------------------------------------------ master switch -------- */

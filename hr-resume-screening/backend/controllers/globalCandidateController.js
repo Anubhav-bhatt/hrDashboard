@@ -1,13 +1,8 @@
-const prisma = require('../config/prisma');
-const { formatCandidateForApi, formatCandidateDetail } = require('../utils/candidateSerializer');
 const {
-  LIST_SELECT,
-  parsePagination,
-  parseSort,
-  buildCandidateWhere,
-  buildPaginationMeta
-} = require('../utils/candidateQuery');
-const { STRONG_MATCH_MIN } = require('../utils/scoreThresholds');
+  listCandidatesAcrossJobs,
+  getCandidateDetail,
+  getCandidateFilterOptions
+} = require('../services/candidateService');
 
 /**
  * Cross-job candidate listing.
@@ -24,46 +19,13 @@ const { STRONG_MATCH_MIN } = require('../utils/scoreThresholds');
  */
 const listCandidates = async (req, res, next) => {
   try {
-    const { page, limit, skip } = parsePagination(req.query);
-    const orderBy = parseSort(req.query.sort);
-    const where = buildCandidateWhere(req.query);
-
-    // Tab tallies deliberately ignore the status filter: a recruiter looking at
-    // Shortlisted still needs to see how many candidates the other tabs hold.
-    // Every other active filter is respected, so the counts describe what
-    // switching tab would actually show.
-    const tabWhere = buildCandidateWhere({ ...req.query, hrStatus: undefined });
-
-    const [total, candidates, statusGroups, strongMatchCount, tabTotal] = await Promise.all([
-      prisma.candidate.count({ where }),
-      prisma.candidate.findMany({
-        where,
-        orderBy,
-        skip,
-        take: limit,
-        select: { ...LIST_SELECT, job: { select: { id: true, title: true } } }
-      }),
-      prisma.candidate.groupBy({ by: ['hrStatus'], where: tabWhere, _count: { _all: true } }),
-      prisma.candidate.count({ where: { ...tabWhere, overallScore: { gte: STRONG_MATCH_MIN } } }),
-      prisma.candidate.count({ where: tabWhere })
-    ]);
+    const { candidates, pagination, facets } = await listCandidatesAcrossJobs(req.query);
 
     return res.status(200).json({
       success: true,
-      data: candidates.map((c) => ({
-        ...formatCandidateForApi(c, null),
-        jobTitle: c.job ? c.job.title : null
-      })),
-      pagination: buildPaginationMeta({ page, limit, total }),
-      facets: {
-        statusCounts: statusGroups.reduce((acc, row) => {
-          acc[row.hrStatus] = row._count._all;
-          return acc;
-        }, {}),
-        strongMatchCount,
-        allCount: tabTotal,
-        strongMatchThreshold: STRONG_MATCH_MIN
-      }
+      data: candidates,
+      pagination,
+      facets
     });
   } catch (error) {
     next(error);
@@ -77,18 +39,9 @@ const listCandidates = async (req, res, next) => {
  */
 const getCandidate = async (req, res, next) => {
   try {
-    const { candidateId } = req.params;
+    const data = await getCandidateDetail(req.params.candidateId, { includeResumeText: true });
 
-    const candidate = await prisma.candidate.findUnique({
-      where: { id: candidateId },
-      include: {
-        job: true,
-        noteEntries: { orderBy: { createdAt: 'desc' }, take: 50 },
-        activities: { orderBy: { createdAt: 'desc' }, take: 50 }
-      }
-    });
-
-    if (!candidate) {
+    if (!data) {
       return res.status(404).json({
         success: false,
         code: 'CANDIDATE_NOT_FOUND',
@@ -96,10 +49,7 @@ const getCandidate = async (req, res, next) => {
       });
     }
 
-    return res.status(200).json({
-      success: true,
-      data: formatCandidateDetail(candidate, candidate.job, { includeResumeText: true })
-    });
+    return res.status(200).json({ success: true, data });
   } catch (error) {
     next(error);
   }
@@ -113,32 +63,7 @@ const getCandidate = async (req, res, next) => {
  */
 const getFilterOptions = async (req, res, next) => {
   try {
-    const rows = await prisma.candidate.findMany({
-      select: { skills: true, currentLocation: true, qualification: true },
-      take: 5000
-    });
-
-    const tally = (values) => {
-      const counts = new Map();
-      for (const value of values) {
-        if (!value) continue;
-        const key = String(value).trim();
-        if (!key) continue;
-        counts.set(key, (counts.get(key) || 0) + 1);
-      }
-      return Array.from(counts.entries())
-        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-        .map(([value, count]) => ({ value, count }));
-    };
-
-    return res.status(200).json({
-      success: true,
-      data: {
-        skills: tally(rows.flatMap((r) => r.skills || [])).slice(0, 60),
-        locations: tally(rows.map((r) => r.currentLocation)).slice(0, 40),
-        qualifications: tally(rows.map((r) => r.qualification)).slice(0, 25)
-      }
-    });
+    return res.status(200).json({ success: true, data: await getCandidateFilterOptions() });
   } catch (error) {
     next(error);
   }
