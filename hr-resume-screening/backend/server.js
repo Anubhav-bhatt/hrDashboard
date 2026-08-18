@@ -164,6 +164,11 @@ app.use('/api/jobs', requireAuth, require('./routes/jobRoutes'));
 app.use('/api/outlook', requireAuth, require('./routes/outlookRoutes'));
 app.use('/api/jobs', requireAuth, require('./routes/candidateRoutes'));
 
+// Additive AI layer. Mounted last and isolated behind its own prefix, so it
+// cannot shadow an existing route. Every AI feature is off by default; with
+// AI_ENABLED=false this route answers AI_DISABLED and nothing else changes.
+app.use('/api/ai', requireAuth, require('./routes/aiRoutes'));
+
 // Error Middlewares
 const { notFound, errorHandler } = require('./middleware/errorHandler');
 app.use(notFound);

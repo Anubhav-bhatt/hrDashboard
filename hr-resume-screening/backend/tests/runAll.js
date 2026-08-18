@@ -16,9 +16,11 @@ const SUITES = [
   { name: 'Scoring & ranking baseline', file: 'scoringBaseline.test.js', requiresDatabase: false },
   { name: 'Scoring & parsing (legacy phase 4)', file: 'phase4.test.js', requiresDatabase: false },
   { name: 'Outlook & matching (legacy phase 5)', file: 'phase5.test.js', requiresDatabase: false },
+  { name: 'AI foundation (flags, provider, orchestrator)', file: 'aiFoundation.test.js', requiresDatabase: false },
   { name: 'API integration', file: 'api.test.js', requiresDatabase: true },
   { name: 'Jobs portal & job-wise dashboard', file: 'jobPortal.test.js', requiresDatabase: true },
-  { name: 'Job closure & candidate selection', file: 'jobClosure.test.js', requiresDatabase: true }
+  { name: 'Job closure & candidate selection', file: 'jobClosure.test.js', requiresDatabase: true },
+  { name: 'AI API (POST /api/ai/run)', file: 'aiApi.test.js', requiresDatabase: true }
 ];
 
 const runSuite = (file) =>

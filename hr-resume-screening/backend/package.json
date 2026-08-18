@@ -9,6 +9,8 @@
     "test": "node tests/runAll.js",
     "test:unit": "node tests/unit.test.js",
     "test:scoring": "node tests/scoringBaseline.test.js",
+    "test:ai": "node tests/aiFoundation.test.js",
+    "test:ai:api": "node tests/aiApi.test.js",
     "test:api": "node tests/api.test.js",
     "test:jobs": "node tests/jobPortal.test.js",
     "test:closure": "node tests/jobClosure.test.js",
