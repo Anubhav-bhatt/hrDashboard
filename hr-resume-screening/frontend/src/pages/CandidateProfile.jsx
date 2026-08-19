@@ -439,7 +439,7 @@ const CandidateProfile = () => {
               <Button
                 variant="secondary"
                 size="md"
-                className="text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800"
+                className="text-indigo-700 border-indigo-200"
                 icon={Sparkles}
                 onClick={() => navigate(`/ai/screening?jobId=${candidate.jobId}&candidateId=${candidate._id}`)}
               >

@@ -20,18 +20,18 @@ const SCREENING_STEPS = [
 ];
 
 const FIT_BADGES = {
-  VERY_STRONG: { label: 'Very Strong Fit', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800' },
-  STRONG: { label: 'Strong Fit', bg: 'bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800' },
-  MODERATE: { label: 'Moderate Fit', bg: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800' },
-  WEAK: { label: 'Weak Fit', bg: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800' },
-  INSUFFICIENT_DATA: { label: 'Insufficient Data', bg: 'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-900/40 dark:text-slate-300 dark:border-slate-800' }
+  VERY_STRONG: { label: 'Very Strong Fit', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  STRONG: { label: 'Strong Fit', bg: 'bg-teal-50 text-teal-700 border-teal-200' },
+  MODERATE: { label: 'Moderate Fit', bg: 'bg-amber-50 text-amber-700 border-amber-200' },
+  WEAK: { label: 'Weak Fit', bg: 'bg-rose-50 text-rose-700 border-rose-200' },
+  INSUFFICIENT_DATA: { label: 'Insufficient Data', bg: 'bg-slate-50 text-slate-700 border-slate-200' }
 };
 
 const RECOMMENDATION_BADGES = {
-  PROCEED_TO_REVIEW: { label: 'Proceed to Recruiter Review', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800' },
-  REVIEW_WITH_CAUTION: { label: 'Review With Caution', bg: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800' },
-  NEEDS_MORE_INFORMATION: { label: 'Needs More Information', bg: 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800' },
-  LOW_PRIORITY: { label: 'Low Priority', bg: 'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-900/40 dark:text-slate-300 dark:border-slate-800' }
+  PROCEED_TO_REVIEW: { label: 'Proceed to Recruiter Review', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  REVIEW_WITH_CAUTION: { label: 'Review With Caution', bg: 'bg-amber-50 text-amber-700 border-amber-200' },
+  NEEDS_MORE_INFORMATION: { label: 'Needs More Information', bg: 'bg-sky-50 text-sky-700 border-sky-200' },
+  LOW_PRIORITY: { label: 'Low Priority', bg: 'bg-slate-50 text-slate-700 border-slate-200' }
 };
 
 const ScreeningAgent = () => {
@@ -164,7 +164,7 @@ const ScreeningAgent = () => {
               {loading ? 'Analyzing candidate…' : 'Analyse candidate'}
             </Button>
             {!canAnalyse && !loading && (
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="text-xs text-slate-500">
                 Select a job and a candidate to begin screening.
               </p>
             )}
@@ -197,14 +197,14 @@ const ScreeningAgent = () => {
         {result ? (
           <div className="space-y-6 animate-fade-in" id="screening-result-card">
             {/* Top Assessment Header */}
-            <Card className="border-l-4 border-l-brand-600 dark:border-l-brand-500">
+            <Card className="border-l-4 border-l-brand-600">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-2">
-                    <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                    <h2 className="text-xl font-bold text-slate-900">
                       {result.candidateName}
                     </h2>
-                    <span className="text-sm text-slate-500 dark:text-slate-400">
+                    <span className="text-sm text-slate-500">
                       for {result.jobTitle}
                     </span>
                   </div>
@@ -224,12 +224,12 @@ const ScreeningAgent = () => {
                 </div>
 
                 {/* Score Panel */}
-                <div className="flex items-center gap-4 bg-slate-50 dark:bg-slate-900/60 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
+                <div className="flex items-center gap-4 bg-slate-50 p-3 rounded-lg border border-slate-200">
                   <div className="text-right">
-                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                    <p className="text-xs text-slate-500 font-medium">
                       Existing Match Score
                     </p>
-                    <p className="text-2xl font-black text-brand-600 dark:text-brand-400">
+                    <p className="text-2xl font-black text-brand-600">
                       {result.overallScore !== null ? `${result.overallScore}%` : 'Unscored'}
                     </p>
                   </div>
@@ -237,7 +237,7 @@ const ScreeningAgent = () => {
               </div>
 
               {/* Summary Statement */}
-              <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+              <div className="mt-4 pt-4 border-t border-slate-100 text-sm text-slate-700 leading-relaxed">
                 {result.summary}
               </div>
             </Card>
@@ -247,13 +247,13 @@ const ScreeningAgent = () => {
               {/* Strengths */}
               <Card>
                 <div className="flex items-center gap-2 mb-3">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                  <h3 className="text-sm font-semibold text-slate-900">
                     Key Strengths ({result.strengths?.length || 0})
                   </h3>
                 </div>
                 {result.strengths && result.strengths.length > 0 ? (
-                  <ul className="space-y-2 text-sm text-slate-700 dark:text-slate-300">
+                  <ul className="space-y-2 text-sm text-slate-700">
                     {result.strengths.map((str, idx) => (
                       <li key={idx} className="flex items-start gap-2">
                         <span className="text-emerald-500 font-bold">•</span>
@@ -269,19 +269,19 @@ const ScreeningAgent = () => {
               {/* Gaps */}
               <Card>
                 <div className="flex items-center gap-2 mb-3">
-                  <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  <AlertCircle className="w-5 h-5 text-amber-600" />
+                  <h3 className="text-sm font-semibold text-slate-900">
                     Requirements Gaps ({result.gaps?.length || 0})
                   </h3>
                 </div>
                 {result.gaps && result.gaps.length > 0 ? (
-                  <ul className="space-y-2 text-sm text-slate-700 dark:text-slate-300">
+                  <ul className="space-y-2 text-sm text-slate-700">
                     {result.gaps.map((gap, idx) => {
                       const isMandatory = gap.toLowerCase().includes('mandatory') || gap.toLowerCase().includes('missing mandatory');
                       return (
                         <li key={idx} className="flex items-start gap-2">
                           <span className={`font-bold ${isMandatory ? 'text-rose-500' : 'text-amber-500'}`}>!</span>
-                          <span className={isMandatory ? 'font-medium text-rose-700 dark:text-rose-300' : ''}>
+                          <span className={isMandatory ? 'font-medium text-rose-700' : ''}>
                             {gap}
                           </span>
                         </li>
@@ -298,14 +298,14 @@ const ScreeningAgent = () => {
             {result.risks && result.risks.length > 0 && (
               <Card>
                 <div className="flex items-center gap-2 mb-3">
-                  <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400" />
-                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  <AlertTriangle className="w-5 h-5 text-rose-600" />
+                  <h3 className="text-sm font-semibold text-slate-900">
                     Evidence-Based Risks & Considerations ({result.risks.length})
                   </h3>
                 </div>
-                <ul className="space-y-2 text-sm text-slate-700 dark:text-slate-300">
+                <ul className="space-y-2 text-sm text-slate-700">
                   {result.risks.map((risk, idx) => (
-                    <li key={idx} className="flex items-start gap-2 text-rose-800 dark:text-rose-300">
+                    <li key={idx} className="flex items-start gap-2 text-rose-800">
                       <span className="text-rose-500 font-bold">•</span>
                       <span>{risk}</span>
                     </li>
@@ -324,50 +324,50 @@ const ScreeningAgent = () => {
                   aria-expanded={showCriteriaDetails}
                 >
                   <div className="flex items-center gap-2">
-                    <Layers className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    <Layers className="w-4 h-4 text-indigo-600" />
+                    <h3 className="text-sm font-semibold text-slate-900">
                       Detailed Criteria Review
                     </h3>
                   </div>
-                  <span className="text-xs text-indigo-600 dark:text-indigo-400 font-semibold hover:underline">
+                  <span className="text-xs text-indigo-600 font-semibold hover:underline">
                     {showCriteriaDetails ? 'Collapse' : 'Expand'}
                   </span>
                 </button>
 
                 {showCriteriaDetails && (
-                  <div className="overflow-x-auto pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <div className="overflow-x-auto pt-2 border-t border-slate-100">
                     <table className="w-full text-left text-sm border-collapse">
                       <thead>
-                        <tr className="border-b border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        <tr className="border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                           <th className="py-2.5 px-3">Criterion</th>
                           <th className="py-2.5 px-3">Type</th>
                           <th className="py-2.5 px-3">Status</th>
                           <th className="py-2.5 px-3">Evidence</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                      <tbody className="divide-y divide-slate-100">
                         {result.criteria.map((crit, idx) => (
-                          <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
-                            <td className="py-2.5 px-3 font-medium text-slate-900 dark:text-slate-100">
+                          <tr key={idx} className="hover:bg-slate-50/50">
+                            <td className="py-2.5 px-3 font-medium text-slate-900">
                               {crit.criterion}
                             </td>
-                            <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400 text-xs">
+                            <td className="py-2.5 px-3 text-slate-600 text-xs">
                               {crit.type}
                             </td>
                             <td className="py-2.5 px-3">
                               <span
                                 className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${
                                   crit.status === 'MATCH'
-                                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
+                                    ? 'bg-emerald-50 text-emerald-700'
                                     : crit.status === 'GAP'
-                                    ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300'
-                                    : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                                    ? 'bg-rose-50 text-rose-700'
+                                    : 'bg-slate-100 text-slate-700'
                                 }`}
                               >
                                 {crit.status}
                               </span>
                             </td>
-                            <td className="py-2.5 px-3 text-xs text-slate-600 dark:text-slate-400">
+                            <td className="py-2.5 px-3 text-xs text-slate-600">
                               {crit.evidence}
                             </td>
                           </tr>
@@ -390,7 +390,7 @@ const ScreeningAgent = () => {
 
             {/* Bottom Actions & Professional Disclaimer */}
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xl">
+              <p className="text-xs text-slate-500 max-w-xl">
                 Screening insights support recruiter review and are based on available job, candidate and scoring data. Final hiring decisions remain with recruiters.
               </p>
 

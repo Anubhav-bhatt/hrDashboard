@@ -150,9 +150,9 @@ const ComparisonAgent = () => {
       mode={AGENT_MODES.comparison}
       setup={
         <Card className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
             <div>
-              <h2 className="font-bold text-sm text-slate-900 dark:text-slate-100">
+              <h2 className="font-bold text-sm text-slate-900">
                 Candidate Comparison Setup
               </h2>
               <p className="text-xs text-slate-500">
@@ -161,7 +161,7 @@ const ComparisonAgent = () => {
             </div>
 
             {source === 'ranking' && (
-              <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 self-start sm:self-auto">
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 self-start sm:self-auto">
                 <GitCompare className="w-3.5 h-3.5" /> Handoff from Ranking
               </span>
             )}
@@ -218,7 +218,7 @@ const ComparisonAgent = () => {
                   key={idx}
                   type="button"
                   onClick={() => setFocusInstruction(suggestion)}
-                  className="text-[11px] font-medium px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                  className="text-[11px] font-medium px-2 py-0.5 rounded bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
                 >
                   + {suggestion}
                 </button>

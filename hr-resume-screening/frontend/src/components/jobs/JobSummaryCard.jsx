@@ -50,7 +50,7 @@ export const JobSummaryCard = ({
   }, [menuOpen]);
 
   return (
-    <div className="card hover:shadow-card-hover hover:border-slate-300 dark:hover:border-slate-700 transition duration-150 flex flex-col justify-between relative group">
+    <div className="card hover:shadow-card-hover hover:border-slate-300 transition duration-150 flex flex-col justify-between relative group">
       {/* Top Details & Header */}
       <div className={compact ? 'p-4' : 'p-5'}>
         {/* Status + Department + Action menu */}
@@ -71,7 +71,7 @@ export const JobSummaryCard = ({
                 e.stopPropagation();
                 setMenuOpen((prev) => !prev);
               }}
-              className="p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
               aria-label="Job actions"
             >
               <MoreVertical className="w-4 h-4" />
@@ -79,12 +79,12 @@ export const JobSummaryCard = ({
 
             {menuOpen && (
               <div
-                className="absolute right-0 mt-1 w-48 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl py-1 z-30 text-xs animate-fade-in"
+                className="absolute right-0 mt-1 w-48 rounded-xl bg-white border border-slate-200 shadow-xl py-1 z-30 text-xs animate-fade-in"
                 onClick={(e) => e.stopPropagation()}
               >
                 <Link
                   to={`/jobs/${job.id}`}
-                  className="flex items-center gap-2 px-3 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+                  className="flex items-center gap-2 px-3 py-2 text-slate-700 hover:bg-slate-50"
                   onClick={() => setMenuOpen(false)}
                 >
                   <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
@@ -95,7 +95,7 @@ export const JobSummaryCard = ({
                   <>
                     <Link
                       to={`/jobs/${job.id}/import`}
-                      className="flex items-center gap-2 px-3 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+                      className="flex items-center gap-2 px-3 py-2 text-slate-700 hover:bg-slate-50"
                       onClick={() => setMenuOpen(false)}
                     >
                       <Upload className="w-3.5 h-3.5 text-slate-400" />
@@ -104,17 +104,17 @@ export const JobSummaryCard = ({
 
                     <Link
                       to={`/ai/ranking?jobId=${job.id}`}
-                      className="flex items-center gap-2 px-3 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+                      className="flex items-center gap-2 px-3 py-2 text-slate-700 hover:bg-slate-50"
                       onClick={() => setMenuOpen(false)}
                     >
-                      <Bot className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                      <Bot className="w-3.5 h-3.5 text-indigo-600" />
                       <span>Rank Candidates (AI)</span>
                     </Link>
 
                     {canClose && onCloseJob && (
                       <button
                         type="button"
-                        className="w-full flex items-center gap-2 px-3 py-2 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 text-left border-t border-slate-100 dark:border-slate-800 mt-1"
+                        className="w-full flex items-center gap-2 px-3 py-2 text-amber-700 hover:bg-amber-50 text-left border-t border-slate-100 mt-1"
                         onClick={() => {
                           setMenuOpen(false);
                           onCloseJob(job);
@@ -134,13 +134,13 @@ export const JobSummaryCard = ({
         {/* Job Title */}
         <Link
           to={bodyHref}
-          className="font-bold text-base text-slate-900 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors line-clamp-2 mt-2 block"
+          className="font-bold text-base text-slate-900 hover:text-indigo-600 transition-colors line-clamp-2 mt-2 block"
         >
           {job.title}
         </Link>
 
         {/* Location & Experience requirements */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400 mt-1.5">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 mt-1.5">
           {job.location && (
             <span className="flex items-center gap-1">
               <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
@@ -158,7 +158,7 @@ export const JobSummaryCard = ({
             {job.requiredSkills.slice(0, 3).map((skill, idx) => (
               <span
                 key={idx}
-                className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-600"
               >
                 {skill}
               </span>
@@ -173,19 +173,19 @@ export const JobSummaryCard = ({
 
         {/* Closed Role Summary */}
         {isClosed && (
-          <div className="mt-3.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60 p-3">
+          <div className="mt-3.5 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
             {hire ? (
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 flex items-center gap-1">
                   <CheckCircle2 className="w-3.5 h-3.5" /> Hired Candidate
                 </p>
                 <div className="flex items-center justify-between gap-2 mt-1.5">
                   <div className="min-w-0">
-                    <p className="font-bold text-xs text-slate-900 dark:text-slate-100 truncate">{hire.name}</p>
+                    <p className="font-bold text-xs text-slate-900 truncate">{hire.name}</p>
                     <p className="text-[10px] text-slate-500 truncate">{hire.currentRole || 'Candidate'}</p>
                   </div>
                   {typeof hire.overallScore === 'number' && (
-                    <span className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                    <span className="text-xs font-extrabold text-emerald-600 tabular-nums">
                       {hire.overallScore}%
                     </span>
                   )}
@@ -194,7 +194,7 @@ export const JobSummaryCard = ({
             ) : (
               <p className="text-xs text-slate-500">Position filled and closed.</p>
             )}
-            <p className="text-[10px] text-slate-400 mt-2 border-t border-slate-200/60 dark:border-slate-800 pt-1.5">
+            <p className="text-[10px] text-slate-400 mt-2 border-t border-slate-200/60 pt-1.5">
               Closed on {formatDate(job.closedAt)}
             </p>
           </div>
@@ -203,14 +203,14 @@ export const JobSummaryCard = ({
 
       {/* Footer Metrics & Actions */}
       {!isClosed && (
-        <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800/80 bg-slate-50/40 dark:bg-slate-900/40 flex items-center justify-between gap-3 text-xs">
+        <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/40 flex items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-3">
             <div>
-              <span className="font-extrabold text-slate-900 dark:text-slate-100">{job.candidateCount || 0}</span>
+              <span className="font-extrabold text-slate-900">{job.candidateCount || 0}</span>
               <span className="text-slate-400 ml-1">applicants</span>
             </div>
             {job.shortlistedCount > 0 && (
-              <div className="text-emerald-600 dark:text-emerald-400 font-semibold">
+              <div className="text-emerald-600 font-semibold">
                 <span>{job.shortlistedCount}</span>
                 <span className="ml-1">shortlisted</span>
               </div>
@@ -219,7 +219,7 @@ export const JobSummaryCard = ({
 
           <Link
             to={bodyHref}
-            className="btn btn-sm btn-ghost text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 text-indigo-600 dark:text-indigo-400"
+            className="btn btn-sm btn-ghost text-xs font-semibold hover:bg-slate-100 text-indigo-600"
           >
             Review
             <ArrowRight className="w-3 h-3 ml-1" />

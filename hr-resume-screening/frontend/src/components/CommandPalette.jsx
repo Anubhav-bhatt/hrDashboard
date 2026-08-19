@@ -126,16 +126,16 @@ export const CommandPalette = ({ isOpen, onClose }) => {
       aria-label="Command Palette"
     >
       <div
-        className="w-full max-w-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[70vh]"
+        className="w-full max-w-xl bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[70vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Search Header */}
-        <div className="flex items-center gap-3 px-4 py-3.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+        <div className="flex items-center gap-3 px-4 py-3.5 border-b border-slate-200 bg-slate-50/50">
           <Search className="w-4 h-4 text-slate-400 shrink-0" />
           <input
             ref={inputRef}
             type="text"
-            className="flex-1 bg-transparent border-none outline-none text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400"
+            className="flex-1 bg-transparent border-none outline-none text-sm text-slate-900 placeholder-slate-400"
             placeholder="Type a command or search jobs, candidates..."
             value={query}
             onChange={(e) => {
@@ -144,13 +144,13 @@ export const CommandPalette = ({ isOpen, onClose }) => {
             }}
             onKeyDown={handleKeyDown}
           />
-          <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded">
+          <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-mono text-slate-400 bg-slate-100 border border-slate-200 rounded">
             ESC
           </kbd>
         </div>
 
         {/* Results List */}
-        <div className="overflow-y-auto scroll-slim divide-y divide-slate-100 dark:divide-slate-800/60 p-2">
+        <div className="overflow-y-auto scroll-slim divide-y divide-slate-100 p-2">
           {allItems.length === 0 ? (
             <div className="py-8 text-center text-xs text-slate-500">
               No matching commands or jobs found for "{query}".
@@ -169,12 +169,12 @@ export const CommandPalette = ({ isOpen, onClose }) => {
                   className={cx(
                     'w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-left text-xs font-medium transition-colors',
                     isSelected
-                      ? 'bg-brand-50 text-brand-900 dark:bg-brand-950/40 dark:text-brand-200'
-                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                      ? 'bg-brand-50 text-brand-900'
+                      : 'text-slate-700 hover:bg-slate-50'
                   )}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <Icon className={cx('w-4 h-4 shrink-0', isSelected ? 'text-brand-600 dark:text-brand-400' : 'text-slate-400')} />
+                    <Icon className={cx('w-4 h-4 shrink-0', isSelected ? 'text-brand-600' : 'text-slate-400')} />
                     <div className="min-w-0">
                       <p className="truncate font-semibold">{item.label}</p>
                       {item.subtitle && (
@@ -193,10 +193,10 @@ export const CommandPalette = ({ isOpen, onClose }) => {
         </div>
 
         {/* Footer shortcuts */}
-        <div className="px-4 py-2 bg-slate-50 dark:bg-slate-900/80 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
+        <div className="px-4 py-2 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
           <div className="flex items-center gap-3">
-            <span><kbd className="font-mono bg-slate-200 dark:bg-slate-800 px-1 py-0.2 rounded text-[10px]">↑</kbd> <kbd className="font-mono bg-slate-200 dark:bg-slate-800 px-1 py-0.2 rounded text-[10px]">↓</kbd> to navigate</span>
-            <span><kbd className="font-mono bg-slate-200 dark:bg-slate-800 px-1 py-0.2 rounded text-[10px]">↵</kbd> to select</span>
+            <span><kbd className="font-mono bg-slate-200 px-1 py-0.2 rounded text-[10px]">↑</kbd> <kbd className="font-mono bg-slate-200 px-1 py-0.2 rounded text-[10px]">↓</kbd> to navigate</span>
+            <span><kbd className="font-mono bg-slate-200 px-1 py-0.2 rounded text-[10px]">↵</kbd> to select</span>
           </div>
           <span>HR Screening OS</span>
         </div>

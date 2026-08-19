@@ -16,24 +16,24 @@ import {
 import { Badge, StatusBadge, Button, cx } from '../ui';
 
 const FIT_BADGES = {
-  VERY_STRONG: { label: 'Very Strong', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800' },
-  STRONG: { label: 'Strong', bg: 'bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800' },
-  MODERATE: { label: 'Moderate', bg: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800' },
-  WEAK: { label: 'Weak', bg: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800' },
-  INSUFFICIENT_DATA: { label: 'Unscored', bg: 'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-900/40 dark:text-slate-300 dark:border-slate-800' }
+  VERY_STRONG: { label: 'Very Strong', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  STRONG: { label: 'Strong', bg: 'bg-teal-50 text-teal-700 border-teal-200' },
+  MODERATE: { label: 'Moderate', bg: 'bg-amber-50 text-amber-700 border-amber-200' },
+  WEAK: { label: 'Weak', bg: 'bg-rose-50 text-rose-700 border-rose-200' },
+  INSUFFICIENT_DATA: { label: 'Unscored', bg: 'bg-slate-50 text-slate-700 border-slate-200' }
 };
 
 const StatusIcon = ({ status }) => {
   if (status === 'MATCH') {
-    return <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />;
+    return <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />;
   }
   if (status === 'GAP') {
-    return <XCircle className="w-4 h-4 text-rose-500 dark:text-rose-400 shrink-0" />;
+    return <XCircle className="w-4 h-4 text-rose-500 shrink-0" />;
   }
   if (status === 'PARTIAL') {
-    return <AlertCircle className="w-4 h-4 text-amber-500 dark:text-amber-400 shrink-0" />;
+    return <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />;
   }
-  return <span className="text-slate-400 dark:text-slate-500 text-xs">—</span>;
+  return <span className="text-slate-400 text-xs">—</span>;
 };
 
 const ComparisonResultGrid = ({
@@ -65,16 +65,16 @@ const ComparisonResultGrid = ({
   return (
     <div className={cx('space-y-6 min-w-0', className)}>
       {/* Top Header / Context Bar */}
-      <div className="card bg-gradient-to-r from-slate-50 to-indigo-50/40 dark:from-slate-900 dark:to-indigo-950/20 border-slate-200 dark:border-slate-800">
+      <div className="card bg-gradient-to-r from-slate-50 to-indigo-50/40 border-slate-200">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <span className="text-xs font-semibold uppercase tracking-wider text-brand-600 dark:text-brand-400">
+            <span className="text-xs font-semibold uppercase tracking-wider text-brand-600">
               Side-by-Side Candidate Comparison
             </span>
-            <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 mt-0.5">
+            <h2 className="text-lg font-bold text-slate-900 mt-0.5">
               {jobTitle || 'Role Comparison'}
             </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            <p className="text-xs text-slate-500 mt-1">
               Comparing {candidates.length} candidate{candidates.length === 1 ? '' : 's'} using authoritative match scores and structured hiring criteria.
             </p>
           </div>
@@ -104,13 +104,13 @@ const ComparisonResultGrid = ({
 
         {/* Comparison Focus Banner if present */}
         {comparisonFocus && (
-          <div className="mt-3 pt-3 border-t border-slate-200/80 dark:border-slate-800 flex items-start gap-2 text-xs">
-            <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0 mt-0.5" />
+          <div className="mt-3 pt-3 border-t border-slate-200/80 flex items-start gap-2 text-xs">
+            <Sparkles className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
             <div>
-              <span className="font-semibold text-purple-900 dark:text-purple-300">
+              <span className="font-semibold text-purple-900">
                 Focus: "{comparisonFocus}"
               </span>
-              <span className="text-slate-600 dark:text-slate-400 ml-1.5">
+              <span className="text-slate-600 ml-1.5">
                 {comparisonFocusApplied
                   ? `(Applied to comparative analysis)`
                   : `(${comparisonFocusReason || 'Focus could not be mapped to structured attributes'})`}
@@ -146,23 +146,23 @@ const ComparisonResultGrid = ({
               <div>
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase">
+                    <p className="text-xs font-bold text-slate-400 uppercase">
                       Candidate #{idx + 1}
                     </p>
-                    <h3 className="font-bold text-slate-900 dark:text-slate-100 text-base truncate">
+                    <h3 className="font-bold text-slate-900 text-base truncate">
                       {cand.candidateName || 'Unnamed candidate'}
                     </h3>
                   </div>
                 </div>
 
                 <div className="mt-3 flex items-baseline gap-2">
-                  <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Match Score:</span>
+                  <span className="text-xs text-slate-500 font-medium">Match Score:</span>
                   {typeof cand.matchScore === 'number' ? (
-                    <span className="text-xl font-extrabold text-brand-600 dark:text-brand-400 tabular-nums">
+                    <span className="text-xl font-extrabold text-brand-600 tabular-nums">
                       {cand.matchScore}%
                     </span>
                   ) : (
-                    <span className="text-sm font-semibold text-slate-400 dark:text-slate-500 italic">
+                    <span className="text-sm font-semibold text-slate-400 italic">
                       Unscored
                     </span>
                   )}
@@ -173,14 +173,14 @@ const ComparisonResultGrid = ({
                     {fit.label}
                   </span>
                   {cand.status && (
-                    <span className="text-xs text-slate-500 dark:text-slate-400 px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded">
+                    <span className="text-xs text-slate-500 px-1.5 py-0.5 bg-slate-100 rounded">
                       {cand.status}
                     </span>
                   )}
                 </div>
 
                 {hasMandatoryGaps && (
-                  <div className="mt-3 p-2 rounded bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-800 dark:text-rose-300">
+                  <div className="mt-3 p-2 rounded bg-rose-50 border border-rose-200 text-xs text-rose-800">
                     <p className="font-semibold flex items-center gap-1">
                       <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> Missing Mandatory:
                     </p>
@@ -189,7 +189,7 @@ const ComparisonResultGrid = ({
                 )}
               </div>
 
-              <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center gap-2">
+              <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center gap-2">
                 <Button
                   variant="secondary"
                   size="sm"
@@ -223,14 +223,14 @@ const ComparisonResultGrid = ({
 
       {/* Key Trade-offs Section */}
       {tradeoffs.length > 0 && (
-        <div className="card bg-slate-50/70 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800">
+        <div className="card bg-slate-50/70 border-slate-200">
           <div className="flex items-center gap-2 mb-3">
-            <GitCompare className="w-4 h-4 text-brand-600 dark:text-brand-400" />
-            <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">
+            <GitCompare className="w-4 h-4 text-brand-600" />
+            <h3 className="font-bold text-slate-900 text-sm">
               Key Comparative Trade-offs
             </h3>
           </div>
-          <ul className="space-y-2 text-sm text-slate-700 dark:text-slate-300">
+          <ul className="space-y-2 text-sm text-slate-700">
             {tradeoffs.map((item, idx) => (
               <li key={idx} className="flex items-start gap-2">
                 <span className="text-brand-500 font-bold mt-0.5">•</span>
@@ -244,20 +244,20 @@ const ComparisonResultGrid = ({
       {/* Best By Dimension Section */}
       {bestByDimension.length > 0 && (
         <div>
-          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-3 flex items-center gap-2">
+          <h3 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
             <Award className="w-4 h-4 text-amber-500" />
             Comparative Dimension Highlights
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {bestByDimension.map((item, idx) => (
-              <div key={idx} className="card p-3 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              <div key={idx} className="card p-3 bg-white border-slate-200">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
                   {item.dimension}
                 </p>
-                <p className="font-bold text-sm text-slate-900 dark:text-slate-100 mt-1 truncate">
+                <p className="font-bold text-sm text-slate-900 mt-1 truncate">
                   {item.candidateName}
                 </p>
-                <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                <p className="text-xs text-slate-600 mt-1">
                   {item.reason}
                 </p>
               </div>
@@ -269,19 +269,19 @@ const ComparisonResultGrid = ({
       {/* Criteria Breakdown Matrix */}
       {criteria.length > 0 && (
         <div className="space-y-2">
-          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+          <h3 className="text-sm font-bold text-slate-900">
             Detailed Criteria Breakdown
           </h3>
           <div className="card p-0 overflow-x-auto scroll-slim">
             <table className="table w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  <th scope="col" className="sticky left-0 z-20 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur py-3 px-4 w-48 min-w-[12rem]">
+                <tr className="border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  <th scope="col" className="sticky left-0 z-20 bg-slate-50/95 backdrop-blur py-3 px-4 w-48 min-w-[12rem]">
                     Hiring Criterion
                   </th>
                   {candidates.map((cand) => (
                     <th key={cand.candidateId} scope="col" className="py-3 px-4 min-w-[12rem]">
-                      <div className="font-bold text-slate-900 dark:text-slate-100 truncate">
+                      <div className="font-bold text-slate-900 truncate">
                         {cand.candidateName}
                       </div>
                       <div className="text-[11px] font-normal text-slate-500">
@@ -291,12 +291,12 @@ const ComparisonResultGrid = ({
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-sm">
+              <tbody className="divide-y divide-slate-100 text-sm">
                 {criteria.map((crit, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
+                  <tr key={idx} className="hover:bg-slate-50/50">
                     <th
                       scope="row"
-                      className="sticky left-0 z-10 bg-white dark:bg-slate-900 font-semibold text-slate-800 dark:text-slate-200 py-3 px-4 text-left align-top"
+                      className="sticky left-0 z-10 bg-white font-semibold text-slate-800 py-3 px-4 text-left align-top"
                     >
                       <div className="flex flex-col">
                         <span>{crit.label || crit.criterion}</span>
@@ -315,7 +315,7 @@ const ComparisonResultGrid = ({
                         <td key={cand.candidateId} className="py-3 px-4 align-top text-xs">
                           <div className="flex items-center gap-1.5">
                             <StatusIcon status={status} />
-                            <span className="font-medium text-slate-800 dark:text-slate-200">
+                            <span className="font-medium text-slate-800">
                               {val?.evidence || '—'}
                             </span>
                           </div>
@@ -332,7 +332,7 @@ const ComparisonResultGrid = ({
 
       {/* Warnings / Data Notes */}
       {warnings.length > 0 && (
-        <div className="p-3 rounded-card bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-xs text-amber-800 dark:text-amber-300">
+        <div className="p-3 rounded-card bg-amber-50 border border-amber-200 text-xs text-amber-800">
           <p className="font-bold flex items-center gap-1.5">
             <AlertCircle className="w-4 h-4 shrink-0" />
             Comparison Notices & Data Gaps:
@@ -347,8 +347,8 @@ const ComparisonResultGrid = ({
 
       {/* Summary Box */}
       {summary && (
-        <div className="card p-4 bg-slate-50/50 dark:bg-slate-900/50 text-xs text-slate-600 dark:text-slate-400">
-          <p className="font-semibold text-slate-800 dark:text-slate-200 mb-1">
+        <div className="card p-4 bg-slate-50/50 text-xs text-slate-600">
+          <p className="font-semibold text-slate-800 mb-1">
             Recruiter Guidance Summary
           </p>
           <p>{summary}</p>

@@ -56,7 +56,7 @@ const readAiGroupCollapsed = () => {
 const CollapsedTooltip = ({ label }) => (
   <span
     role="tooltip"
-    className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 z-50 whitespace-nowrap rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 py-1 text-xs font-semibold text-slate-800 dark:text-slate-200 shadow-md opacity-0 translate-x-[-4px] transition-all duration-150 group-hover:opacity-100 group-hover:translate-x-0 group-focus:opacity-100 group-focus:translate-x-0"
+    className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 z-50 whitespace-nowrap rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-800 shadow-md opacity-0 translate-x-[-4px] transition-all duration-150 group-hover:opacity-100 group-hover:translate-x-0 group-focus:opacity-100 group-focus:translate-x-0"
   >
     {label}
   </span>
@@ -183,18 +183,18 @@ const AppShell = ({ children }) => {
   const SidebarNav = ({ isCollapsed = false }) => (
     <div className="flex flex-col h-full">
       {/* Brand Header */}
-      <div className={cx('flex items-center gap-2.5 h-14 border-b border-slate-100 dark:border-slate-800/80 shrink-0', isCollapsed ? 'justify-center px-0' : 'px-4')}>
+      <div className={cx('flex items-center gap-2.5 h-14 border-b border-slate-100 shrink-0', isCollapsed ? 'justify-center px-0' : 'px-4')}>
         <Link
           to="/"
           className="flex items-center gap-2.5 rounded-md min-w-0"
           aria-label="HR Screening OS"
         >
-          <span className="w-8 h-8 rounded-lg bg-indigo-600 dark:bg-indigo-500 flex items-center justify-center text-white shrink-0 shadow-xs">
+          <span className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white shrink-0 shadow-xs">
             <Sparkles className="w-4 h-4" aria-hidden="true" />
           </span>
           {!isCollapsed && (
             <span className="min-w-0">
-              <span className="text-sm font-bold text-slate-900 dark:text-slate-100 leading-none block">HR Screening</span>
+              <span className="text-sm font-bold text-slate-900 leading-none block">HR Screening</span>
               <span className="text-[10px] text-slate-400 font-medium block mt-0.5">Enterprise OS</span>
             </span>
           )}
@@ -206,7 +206,7 @@ const AppShell = ({ children }) => {
         {/* Main Workspace Navigation */}
         <nav aria-label="Main navigation" className="space-y-1">
           {!isCollapsed && (
-            <p className="px-4 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+            <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
               WORKSPACE
             </p>
           )}
@@ -223,16 +223,20 @@ const AppShell = ({ children }) => {
                     'group relative flex items-center rounded-lg text-xs font-medium transition-colors',
                     isCollapsed ? 'justify-center w-9 h-9 mx-auto' : 'gap-2.5 px-3 py-2',
                     active
-                      ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 font-semibold'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100'
+                      ? 'bg-indigo-50 text-indigo-700 font-semibold'
+                      : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900'
                   )}
                   aria-current={active ? 'page' : undefined}
-                  aria-label={item.label}
+                  // Only when the rail is collapsed to icons. Expanded, the
+                  // visible text already names the link, and an aria-label
+                  // duplicating it adds nothing while making the link
+                  // indistinguishable from other controls named "Candidates".
+                  aria-label={isCollapsed ? item.label : undefined}
                 >
                   <Icon
                     className={cx(
                       'w-4 h-4 shrink-0',
-                      active ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300'
+                      active ? 'text-indigo-600' : 'text-slate-400 group-hover:text-slate-600'
                     )}
                     aria-hidden="true"
                   />
@@ -254,7 +258,7 @@ const AppShell = ({ children }) => {
                   aria-controls="ai-recruitment-group"
                   aria-expanded={!aiGroupCollapsed}
                   onClick={toggleAiGroup}
-                  className="w-full flex items-center justify-between px-2 py-1 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                  className="w-full flex items-center justify-between px-2 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider hover:text-slate-600 transition-colors"
                 >
                   <span>AI Recruitment</span>
                   <ChevronDown
@@ -274,13 +278,13 @@ const AppShell = ({ children }) => {
                           <div
                             key={mode.id}
                             aria-disabled="true"
-                            className="flex items-center justify-between rounded-lg text-xs font-medium gap-2.5 px-3 py-2 text-slate-400 dark:text-slate-600 cursor-not-allowed opacity-75"
+                            className="flex items-center justify-between rounded-lg text-xs font-medium gap-2.5 px-3 py-2 text-slate-400 cursor-not-allowed opacity-75"
                           >
                             <span className="flex items-center gap-2.5 min-w-0">
-                              <Icon className="w-4 h-4 shrink-0 text-slate-400 dark:text-slate-600" aria-hidden="true" />
+                              <Icon className="w-4 h-4 shrink-0 text-slate-400" aria-hidden="true" />
                               <span className="truncate">{mode.name}</span>
                             </span>
-                            <span className="text-[10px] uppercase font-semibold text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-800 rounded px-1 py-0.2">
+                            <span className="text-[10px] uppercase font-semibold text-slate-400 border border-slate-200 rounded px-1 py-0.2">
                               Soon
                             </span>
                           </div>
@@ -295,16 +299,19 @@ const AppShell = ({ children }) => {
                           className={cx(
                             'group relative flex items-center rounded-lg text-xs font-medium transition-colors gap-2.5 px-3 py-2',
                             active
-                              ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 font-semibold'
-                              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100'
+                              ? 'bg-indigo-50 text-indigo-700 font-semibold'
+                              : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900'
                           )}
                           aria-current={active ? 'page' : undefined}
-                          aria-label={mode.name}
+                          // The agent name is rendered as visible text below, so
+                          // no aria-label is needed here. The collapsed rail
+                          // variant further down does set one, because there the
+                          // link is an icon with no text.
                         >
                           <Icon
                             className={cx(
                               'w-4 h-4 shrink-0',
-                              active ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300'
+                              active ? 'text-indigo-600' : 'text-slate-400 group-hover:text-slate-600'
                             )}
                             aria-hidden="true"
                           />
@@ -327,7 +334,7 @@ const AppShell = ({ children }) => {
                       <div
                         key={mode.id}
                         aria-disabled="true"
-                        className="group relative flex items-center justify-center w-9 h-9 mx-auto rounded-lg text-xs font-medium text-slate-400 dark:text-slate-600 opacity-60 cursor-not-allowed"
+                        className="group relative flex items-center justify-center w-9 h-9 mx-auto rounded-lg text-xs font-medium text-slate-400 opacity-60 cursor-not-allowed"
                       >
                         <Icon className="w-4 h-4 shrink-0" aria-hidden="true" />
                         <CollapsedTooltip label={`${mode.name} (Soon)`} />
@@ -343,8 +350,8 @@ const AppShell = ({ children }) => {
                       className={cx(
                         'group relative flex items-center justify-center w-9 h-9 mx-auto rounded-lg text-xs font-medium transition-colors',
                         active
-                          ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 font-semibold'
-                          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100'
+                          ? 'bg-indigo-50 text-indigo-700 font-semibold'
+                          : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900'
                       )}
                       aria-current={active ? 'page' : undefined}
                       aria-label={mode.name}
@@ -352,7 +359,7 @@ const AppShell = ({ children }) => {
                       <Icon
                         className={cx(
                           'w-4 h-4 shrink-0',
-                          active ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300'
+                          active ? 'text-indigo-600' : 'text-slate-400 group-hover:text-slate-600'
                         )}
                         aria-hidden="true"
                       />
@@ -367,11 +374,11 @@ const AppShell = ({ children }) => {
       </div>
 
       {/* Sidebar Footer */}
-      <div className="p-2 border-t border-slate-100 dark:border-slate-800/80 shrink-0">
+      <div className="p-2 border-t border-slate-100 shrink-0">
         <button
           type="button"
           onClick={toggleCollapsed}
-          className="hidden lg:flex w-full items-center justify-center p-2 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 dark:hover:text-slate-200 transition-colors text-xs"
+          className="hidden lg:flex w-full items-center justify-center p-2 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors text-xs"
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           {collapsed ? <ChevronRight className="w-4 h-4" /> : <div className="flex items-center gap-2 w-full px-2"><ChevronLeft className="w-4 h-4" /><span>Collapse rail</span></div>}
@@ -383,11 +390,23 @@ const AppShell = ({ children }) => {
   const breadcrumbs = getBreadcrumbs();
 
   return (
-    <div className="min-h-screen flex bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+    <div className="min-h-screen flex bg-slate-50 text-slate-900">
+      {/* Keyboard users land here first and can jump the whole navigation rail
+          rather than tabbing through every destination on every page. Visually
+          hidden until focused. The #main-content target is on <main> below. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-[60] focus:top-3 focus:left-3
+                   focus:px-4 focus:py-2 focus:bg-white focus:rounded-control focus:shadow-overlay
+                   focus:text-meta focus:font-semibold"
+      >
+        Skip to main content
+      </a>
+
       {/* Desktop Sidebar */}
       <aside
         className={cx(
-          'hidden lg:flex flex-col shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200/80 dark:border-slate-800/80 transition-all duration-200 select-none z-30 sticky top-0 h-screen',
+          'hidden lg:flex flex-col shrink-0 bg-white border-r border-slate-200/80 transition-all duration-200 select-none z-30 sticky top-0 h-screen',
           collapsed ? 'w-16' : 'w-56'
         )}
       >
@@ -406,7 +425,7 @@ const AppShell = ({ children }) => {
             role="dialog"
             aria-modal="true"
             aria-label="Mobile navigation drawer"
-            className="fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col lg:hidden animate-fade-in"
+            className="fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 flex flex-col lg:hidden animate-fade-in"
           >
             <SidebarNav isCollapsed={false} />
           </aside>
@@ -416,12 +435,12 @@ const AppShell = ({ children }) => {
       {/* Main Column */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Contextual Top Header */}
-        <header className="h-14 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 sticky top-0 z-20 flex items-center justify-between px-4 sm:px-6 gap-3">
+        <header className="h-14 bg-white/90 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-20 flex items-center justify-between px-4 sm:px-6 gap-3">
           {/* Left: Mobile trigger & Breadcrumbs */}
           <div className="flex items-center gap-3 min-w-0">
             <button
               type="button"
-              className="lg:hidden p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+              className="lg:hidden p-1.5 rounded-lg text-slate-500 hover:bg-slate-100"
               onClick={() => setMobileNavOpen(true)}
               aria-label="Open navigation menu"
             >
@@ -429,16 +448,16 @@ const AppShell = ({ children }) => {
             </button>
 
             {/* Breadcrumb path */}
-            <nav className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-medium truncate" aria-label="Breadcrumb">
+            <nav className="flex items-center gap-1.5 text-xs text-slate-500 font-medium truncate" aria-label="Breadcrumb">
               {breadcrumbs.map((crumb, idx) => {
                 const isLast = idx === breadcrumbs.length - 1;
                 return (
                   <React.Fragment key={crumb.label}>
-                    {idx > 0 && <span className="text-slate-300 dark:text-slate-600">/</span>}
+                    {idx > 0 && <span className="text-slate-300">/</span>}
                     {isLast ? (
-                      <span className="font-bold text-slate-900 dark:text-slate-100 truncate">{crumb.label}</span>
+                      <span className="font-bold text-slate-900 truncate">{crumb.label}</span>
                     ) : (
-                      <Link to={crumb.to} className="hover:text-slate-900 dark:hover:text-slate-200 transition-colors">
+                      <Link to={crumb.to} className="hover:text-slate-900 transition-colors">
                         {crumb.label}
                       </Link>
                     )}
@@ -454,12 +473,12 @@ const AppShell = ({ children }) => {
             <button
               type="button"
               onClick={() => setCommandPaletteOpen(true)}
-              className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/70 dark:hover:bg-slate-700/70 text-slate-500 dark:text-slate-400 text-xs transition-colors"
+              className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200/70 text-slate-500 text-xs transition-colors"
               aria-label="Search and quick commands (Cmd+K)"
             >
               <Search className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Search...</span>
-              <kbd className="hidden sm:inline-flex items-center gap-0.5 text-[10px] font-mono text-slate-400 bg-white dark:bg-slate-900 px-1.5 py-0.2 rounded border border-slate-200 dark:border-slate-700">
+              <kbd className="hidden sm:inline-flex items-center gap-0.5 text-[10px] font-mono text-slate-400 bg-white px-1.5 py-0.2 rounded border border-slate-200">
                 ⌘K
               </kbd>
             </button>
@@ -472,7 +491,7 @@ const AppShell = ({ children }) => {
               <button
                 type="button"
                 onClick={() => setAccountOpen((prev) => !prev)}
-                className="flex items-center gap-2 p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors focus-visible:ring-2 focus-visible:ring-brand-500"
+                className="flex items-center gap-2 p-1 rounded-full hover:bg-slate-100 transition-colors focus-visible:ring-2 focus-visible:ring-brand-500"
                 aria-expanded={accountOpen}
                 aria-haspopup="menu"
                 aria-label="User account menu"
@@ -483,12 +502,12 @@ const AppShell = ({ children }) => {
               {accountOpen && (
                 <div
                   role="menu"
-                  className="absolute right-0 mt-2 w-56 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl py-1.5 z-50 text-xs animate-fade-in"
+                  className="absolute right-0 mt-2 w-56 rounded-xl bg-white border border-slate-200 shadow-xl py-1.5 z-50 text-xs animate-fade-in"
                 >
-                  <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800">
-                    <p className="font-bold text-slate-900 dark:text-slate-100 truncate">{user?.name || 'Recruiter'}</p>
+                  <div className="px-3 py-2 border-b border-slate-100">
+                    <p className="font-bold text-slate-900 truncate">{user?.name || 'Recruiter'}</p>
                     <p className="text-[11px] text-slate-400 truncate">{user?.email || 'user@company.com'}</p>
-                    <span className="inline-block mt-1 px-1.5 py-0.2 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold uppercase">
+                    <span className="inline-block mt-1 px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 text-[10px] font-bold uppercase">
                       {user?.role || 'RECRUITER'}
                     </span>
                   </div>
@@ -496,7 +515,7 @@ const AppShell = ({ children }) => {
                   <Link
                     to="/settings"
                     role="menuitem"
-                    className="flex items-center gap-2 px-3 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+                    className="flex items-center gap-2 px-3 py-2 text-slate-700 hover:bg-slate-50"
                     onClick={() => setAccountOpen(false)}
                   >
                     <Settings className="w-3.5 h-3.5 text-slate-400" />
@@ -507,7 +526,7 @@ const AppShell = ({ children }) => {
                     type="button"
                     role="menuitem"
                     onClick={handleSignOut}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-left border-t border-slate-100 dark:border-slate-800 mt-1"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-rose-600 hover:bg-rose-50 text-left border-t border-slate-100 mt-1"
                   >
                     <LogOut className="w-3.5 h-3.5" />
                     <span>Sign out</span>

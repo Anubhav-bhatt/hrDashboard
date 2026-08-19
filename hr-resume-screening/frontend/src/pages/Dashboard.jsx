@@ -92,22 +92,22 @@ const Dashboard = () => {
   return (
     <div className="space-y-6">
       {/* Top Header & Context */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800/80 pb-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200/80 pb-4">
         <div>
-          <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600">
             Recruitment Command Center
           </span>
-          <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-slate-100 mt-0.5">
+          <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 mt-0.5">
             {greeting()}, {firstName}
           </h1>
-          <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-slate-500 dark:text-slate-400">
+          <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-slate-500">
             {isJobScoped ? (
-              <span>Filtered view for role: <strong className="text-slate-700 dark:text-slate-200">{scope?.jobTitle}</strong></span>
+              <span>Filtered view for role: <strong className="text-slate-700">{scope?.jobTitle}</strong></span>
             ) : (
               <span>Overview of all active recruitment pipelines, applicants, and decisions.</span>
             )}
-            <span className="text-slate-300 dark:text-slate-700">•</span>
-            <Link to="/jobs/closed" className="hover:text-indigo-600 dark:hover:text-indigo-400 font-medium">
+            <span className="text-slate-300">•</span>
+            <Link to="/jobs/closed" className="hover:text-indigo-600 font-medium">
               Closed jobs archive
             </Link>
           </div>
@@ -117,7 +117,7 @@ const Dashboard = () => {
         <div className="flex flex-wrap items-center gap-2.5">
           {/* Job Filter Selector */}
           <select
-            className="select text-xs py-1.5 min-w-[12rem] bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+            className="select text-xs py-1.5 min-w-[12rem] bg-white border-slate-200"
             value={selectedJobId}
             onChange={(e) => handleJobChange(e.target.value)}
             aria-label="Filter dashboard by job"
@@ -195,8 +195,13 @@ const Dashboard = () => {
                 to="/jobs"
                 subtitle="Open positions"
               />
+              {/* "Candidates", not "Total Applicants": the card navigates to
+                  /candidates and sits beside a nav item of the same name, so the
+                  label should match the destination. The accessible name is
+                  derived from this label, and the e2e suites identify this card
+                  by it. */}
               <StatCard
-                label="Total Applicants"
+                label="Candidates"
                 value={metrics?.totalCandidates ?? 0}
                 icon={Users}
                 tone="brand"
@@ -232,15 +237,15 @@ const Dashboard = () => {
       {/* Tabbed Recruiter Center */}
       <div className="space-y-4">
         {/* Navigation Tabs */}
-        <div className="border-b border-slate-200 dark:border-slate-800 flex items-center gap-2 overflow-x-auto scroll-slim">
+        <div className="border-b border-slate-200 flex items-center gap-2 overflow-x-auto scroll-slim">
           <button
             type="button"
             onClick={() => setActiveTab('overview')}
             className={cx(
               'px-3 py-2 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap',
               activeTab === 'overview'
-                ? 'border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
-                : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                ? 'border-indigo-600 text-indigo-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
             )}
           >
             Pipeline & Active Roles
@@ -251,8 +256,8 @@ const Dashboard = () => {
             className={cx(
               'px-3 py-2 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap',
               activeTab === 'top-candidates'
-                ? 'border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
-                : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                ? 'border-indigo-600 text-indigo-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
             )}
           >
             Top Scored Candidates
@@ -263,8 +268,8 @@ const Dashboard = () => {
             className={cx(
               'px-3 py-2 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap',
               activeTab === 'recent-hires'
-                ? 'border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
-                : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                ? 'border-indigo-600 text-indigo-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
             )}
           >
             Recent Hires
@@ -281,12 +286,12 @@ const Dashboard = () => {
                   <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
                     Active Hiring Roles ({jobOptions.length})
                   </h3>
-                  <Link to="/jobs" className="text-xs text-indigo-600 dark:text-indigo-400 font-semibold hover:underline">
+                  <Link to="/jobs" className="text-xs text-indigo-600 font-semibold hover:underline">
                     View all jobs →
                   </Link>
                 </div>
 
-                <div className="card p-0 divide-y divide-slate-100 dark:divide-slate-800/60 overflow-hidden">
+                <div className="card p-0 divide-y divide-slate-100 overflow-hidden">
                   {jobOptions.length === 0 ? (
                     <div className="p-8 text-center text-xs text-slate-400">
                       No active jobs yet. Create your first job to start screening.
@@ -295,12 +300,12 @@ const Dashboard = () => {
                     jobOptions.slice(0, 5).map((job) => (
                       <div
                         key={job.id}
-                        className="p-3.5 hover:bg-slate-50/70 dark:hover:bg-slate-800/30 transition-colors flex items-center justify-between gap-3"
+                        className="p-3.5 hover:bg-slate-50/70 transition-colors flex items-center justify-between gap-3"
                       >
                         <div className="min-w-0">
                           <Link
                             to={`/jobs/${job.id}`}
-                            className="font-bold text-sm text-slate-900 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400 truncate block"
+                            className="font-bold text-sm text-slate-900 hover:text-indigo-600 truncate block"
                           >
                             {job.title}
                           </Link>
@@ -311,7 +316,7 @@ const Dashboard = () => {
 
                         <div className="flex items-center gap-2 shrink-0">
                           {job.shortlistedCount > 0 && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                               {job.shortlistedCount} shortlisted
                             </span>
                           )}
@@ -333,33 +338,33 @@ const Dashboard = () => {
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
                   AI Recruitment Shortcuts
                 </h3>
-                <div className="card p-4 space-y-3 bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-900/60 border-slate-200/80 dark:border-slate-800">
-                  <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-bold text-xs">
+                <div className="card p-4 space-y-3 bg-gradient-to-br from-white to-slate-50 border-slate-200/80">
+                  <div className="flex items-center gap-2 text-indigo-600 font-bold text-xs">
                     <Bot className="w-4 h-4" />
                     <span>AI Agent Suite</span>
                   </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  <p className="text-xs text-slate-500 leading-relaxed">
                     Deterministic analysis tools operating with ₹0 API cost on your authentic candidate scores.
                   </p>
 
                   <div className="space-y-1.5 pt-1">
                     <Link
                       to="/ai/screening"
-                      className="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 hover:bg-indigo-50/60 dark:hover:bg-indigo-950/30 text-xs font-medium text-slate-700 dark:text-slate-300 transition-colors"
+                      className="flex items-center justify-between p-2 rounded-lg bg-slate-50 hover:bg-indigo-50/60 text-xs font-medium text-slate-700 transition-colors"
                     >
                       <span>Screen Candidate</span>
                       <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
                     </Link>
                     <Link
                       to="/ai/ranking"
-                      className="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 hover:bg-indigo-50/60 dark:hover:bg-indigo-950/30 text-xs font-medium text-slate-700 dark:text-slate-300 transition-colors"
+                      className="flex items-center justify-between p-2 rounded-lg bg-slate-50 hover:bg-indigo-50/60 text-xs font-medium text-slate-700 transition-colors"
                     >
                       <span>Rank Candidate Pool</span>
                       <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
                     </Link>
                     <Link
                       to="/ai/comparison"
-                      className="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 hover:bg-indigo-50/60 dark:hover:bg-indigo-950/30 text-xs font-medium text-slate-700 dark:text-slate-300 transition-colors"
+                      className="flex items-center justify-between p-2 rounded-lg bg-slate-50 hover:bg-indigo-50/60 text-xs font-medium text-slate-700 transition-colors"
                     >
                       <span>Compare Candidates</span>
                       <ArrowRight className="w-3.5 h-3.5 text-slate-400" />

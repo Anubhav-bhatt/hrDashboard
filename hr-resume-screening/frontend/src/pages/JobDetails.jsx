@@ -429,8 +429,8 @@ const JobDetails = () => {
                     <UserPlus className="w-4 h-4" aria-hidden="true" />
                     Add candidates
                   </Link>
-                  <Link to={`/ai/ranking?jobId=${id}`} className="btn btn-md btn-secondary text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800">
-                    <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400" aria-hidden="true" />
+                  <Link to={`/ai/ranking?jobId=${id}`} className="btn btn-md btn-secondary text-indigo-700 border-indigo-200">
+                    <Sparkles className="w-4 h-4 text-indigo-600" aria-hidden="true" />
                     Rank (AI)
                   </Link>
                   {canClose ? (

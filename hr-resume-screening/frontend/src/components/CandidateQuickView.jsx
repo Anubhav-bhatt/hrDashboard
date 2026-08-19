@@ -16,11 +16,11 @@ import {
 import { Avatar, Badge, Button, cx } from './ui';
 
 const FIT_BADGES = {
-  VERY_STRONG: { label: 'Very Strong', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800' },
-  STRONG: { label: 'Strong', bg: 'bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800' },
-  MODERATE: { label: 'Moderate', bg: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800' },
-  WEAK: { label: 'Weak', bg: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800' },
-  INSUFFICIENT_DATA: { label: 'Unscored', bg: 'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-900/40 dark:text-slate-300 dark:border-slate-800' }
+  VERY_STRONG: { label: 'Very Strong', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  STRONG: { label: 'Strong', bg: 'bg-teal-50 text-teal-700 border-teal-200' },
+  MODERATE: { label: 'Moderate', bg: 'bg-amber-50 text-amber-700 border-amber-200' },
+  WEAK: { label: 'Weak', bg: 'bg-rose-50 text-rose-700 border-rose-200' },
+  INSUFFICIENT_DATA: { label: 'Unscored', bg: 'bg-slate-50 text-slate-700 border-slate-200' }
 };
 
 export const CandidateQuickView = ({
@@ -66,21 +66,21 @@ export const CandidateQuickView = ({
       aria-label="Candidate Quick View"
     >
       <div
-        className="w-full max-w-md bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 h-full flex flex-col shadow-2xl overflow-hidden animate-slide-in-right"
+        className="w-full max-w-md bg-white border-l border-slate-200 h-full flex flex-col shadow-2xl overflow-hidden animate-slide-in-right"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-slate-50/50">
           <div className="flex items-center gap-2">
             <User className="w-4 h-4 text-slate-400" />
-            <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+            <h2 className="text-sm font-bold text-slate-900">
               Candidate Quick View
             </h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
             aria-label="Close drawer"
           >
             <X className="w-4 h-4" />
@@ -93,7 +93,7 @@ export const CandidateQuickView = ({
           <div className="flex items-start gap-3">
             <Avatar name={candidate.name || 'Unnamed candidate'} size="lg" />
             <div className="min-w-0 flex-1">
-              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 truncate">
+              <h3 className="text-base font-bold text-slate-900 truncate">
                 {candidate.name || 'Unnamed candidate'}
               </h3>
               <p className="text-xs text-slate-500 truncate">
@@ -104,7 +104,7 @@ export const CandidateQuickView = ({
                   {fit.label}
                 </span>
                 {candidate.status && (
-                  <span className="text-xs text-slate-500 dark:text-slate-400 px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded">
+                  <span className="text-xs text-slate-500 px-2 py-0.5 bg-slate-100 rounded">
                     {candidate.status}
                   </span>
                 )}
@@ -113,23 +113,23 @@ export const CandidateQuickView = ({
           </div>
 
           {/* Key Metrics Grid */}
-          <div className="grid grid-cols-2 gap-2.5 p-3 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200/80 dark:border-slate-800">
+          <div className="grid grid-cols-2 gap-2.5 p-3 rounded-lg bg-slate-50 border border-slate-200/80">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Match Score</p>
-              <p className="text-base font-extrabold text-brand-600 dark:text-brand-400 mt-0.5">
+              <p className="text-base font-extrabold text-brand-600 mt-0.5">
                 {isScored ? `${score}%` : 'Unscored'}
               </p>
             </div>
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Experience</p>
-              <p className="text-base font-bold text-slate-800 dark:text-slate-200 mt-0.5">
+              <p className="text-base font-bold text-slate-800 mt-0.5">
                 {candidate.experienceYears ?? candidate.experience ?? '—'} yrs
               </p>
             </div>
           </div>
 
           {/* Contact Details */}
-          <div className="space-y-2 text-xs text-slate-600 dark:text-slate-400">
+          <div className="space-y-2 text-xs text-slate-600">
             {candidate.email && (
               <div className="flex items-center gap-2">
                 <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
@@ -160,7 +160,7 @@ export const CandidateQuickView = ({
                 {skills.map((skill, idx) => (
                   <span
                     key={idx}
-                    className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
+                    className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700"
                   >
                     {skill}
                   </span>
@@ -171,11 +171,11 @@ export const CandidateQuickView = ({
 
           {/* Resume Summary / Note */}
           {candidate.summary && (
-            <div className="space-y-1.5 p-3 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800">
+            <div className="space-y-1.5 p-3 rounded-lg bg-slate-50 border border-slate-100">
               <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                 Profile Summary
               </h4>
-              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+              <p className="text-xs text-slate-600 leading-relaxed">
                 {candidate.summary}
               </p>
             </div>
@@ -183,7 +183,7 @@ export const CandidateQuickView = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/80 flex flex-col gap-2">
+        <div className="p-4 border-t border-slate-200 bg-slate-50/80 flex flex-col gap-2">
           <Button
             variant="primary"
             className="w-full justify-center text-xs"

@@ -134,10 +134,10 @@ const RankingAgent = () => {
                       className="mt-0.5 w-4 h-4 border-slate-300 text-brand-600 focus-visible:ring-2 focus-visible:ring-brand-500 shrink-0"
                     />
                     <span className="min-w-0">
-                      <span className="block text-meta font-medium text-slate-800 dark:text-slate-200">
+                      <span className="block text-meta font-medium text-slate-800">
                         {option.label}
                       </span>
-                      <span className="block text-xs text-slate-500 dark:text-slate-400">
+                      <span className="block text-xs text-slate-500">
                         {option.hint}
                       </span>
                     </span>
@@ -152,14 +152,14 @@ const RankingAgent = () => {
             <button
               type="button"
               onClick={() => setShowFilters(!showFilters)}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:underline"
             >
               <Filter className="w-3.5 h-3.5" />
               {showFilters ? 'Hide advanced filters' : 'Show advanced filters (minimum score)'}
             </button>
 
             {showFilters && (
-              <div className="mt-2 p-3 bg-slate-50 dark:bg-slate-900/60 rounded-lg border border-slate-200 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-3 animate-fade-in">
+              <div className="mt-2 p-3 bg-slate-50 rounded-lg border border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-3 animate-fade-in">
                 <div>
                   <label htmlFor="min-score-input" className="field-label text-xs">
                     Minimum Match Score (%)
@@ -202,7 +202,7 @@ const RankingAgent = () => {
                   key={idx}
                   type="button"
                   onClick={() => setInstruction(chip)}
-                  className="px-2 py-0.5 text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-full transition-colors"
+                  className="px-2 py-0.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full transition-colors"
                 >
                   {chip}
                 </button>
@@ -223,7 +223,7 @@ const RankingAgent = () => {
               {loading ? 'Ranking candidates…' : 'Rank candidates'}
             </Button>
             {!jobId && !loading && (
-              <p className="text-xs text-slate-500 dark:text-slate-400">Select a job to begin ranking.</p>
+              <p className="text-xs text-slate-500">Select a job to begin ranking.</p>
             )}
           </div>
         </Card>
@@ -254,13 +254,13 @@ const RankingAgent = () => {
         {result ? (
           <div className="space-y-6 animate-fade-in" id="ranking-results-container">
             {/* Summary & Methodology Header */}
-            <Card className="border-l-4 border-l-brand-600 dark:border-l-brand-500">
+            <Card className="border-l-4 border-l-brand-600">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                  <h2 className="text-xl font-bold text-slate-900">
                     {result.jobTitle}
                   </h2>
-                  <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+                  <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-500">
                     <span>
                       <strong>{result.totalCandidatesConsidered}</strong> candidates considered ({result.candidateScope.toLowerCase()})
                     </span>
@@ -289,7 +289,7 @@ const RankingAgent = () => {
 
               {/* Preference Applied Banner */}
               {result.instructionApplied && (
-                <div className="mt-3 p-2.5 rounded bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 text-xs text-purple-900 dark:text-purple-200 flex items-center gap-2">
+                <div className="mt-3 p-2.5 rounded bg-purple-50 border border-purple-200 text-xs text-purple-900 flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-purple-600 flex-shrink-0" />
                   <span>
                     <strong>Preference Applied:</strong> {result.instructionDetails || result.instruction} (Applied as tie-breaker without altering stored scores)
@@ -324,7 +324,7 @@ const RankingAgent = () => {
 
             {/* Transparency Disclaimer */}
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xl">
+              <p className="text-xs text-slate-500 max-w-xl">
                 Ranking prioritizes the application's authoritative match score and uses job requirement checks only for deterministic tie-breaking and explanation.
               </p>
 
