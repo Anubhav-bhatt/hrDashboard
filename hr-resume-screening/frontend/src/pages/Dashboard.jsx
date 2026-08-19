@@ -6,23 +6,25 @@ import {
   BarChart3,
   Briefcase,
   CheckCircle2,
-  ChevronDown,
   Clock,
   FileText,
   Plus,
   Sparkles,
   UserCheck,
   Users,
-  XCircle
+  TrendingUp,
+  ArrowRight,
+  Search,
+  Bot
 } from 'lucide-react';
 import { getDashboardOverview, getJobsSummary } from '../services/api';
 import { useApiResource } from '../hooks/useApiResource';
 import { useAuth } from '../context/AuthContext';
-import StatCard, { PipelineStage } from '../components/StatCard';
-import { CandidateRow } from '../components/CandidateCard';
+import StatCard from '../components/StatCard';
 import NeedsAttention from '../components/dashboard/NeedsAttention';
 import RecentHires from '../components/dashboard/RecentHires';
 import TopCandidates from '../components/dashboard/TopCandidates';
+import CandidateQuickView from '../components/CandidateQuickView';
 import {
   Badge,
   Button,
@@ -34,16 +36,8 @@ import {
   StatCardSkeleton,
   cx
 } from '../components/ui';
-import { formatDate, formatRelativeTime, getScoreMeta } from '../utils/format';
+import { formatDate, formatRelativeTime } from '../utils/format';
 
-const STAGE_BARS = {
-  REVIEW: 'bg-slate-400',
-  NEEDS_REVIEW: 'bg-amber-500',
-  SHORTLISTED: 'bg-emerald-500',
-  NOT_SUITABLE: 'bg-rose-400'
-};
-
-/** Greeting based on local time — a small touch that makes the page feel alive. */
 const greeting = () => {
   const hour = new Date().getHours();
   if (hour < 12) return 'Good morning';
@@ -54,13 +48,9 @@ const greeting = () => {
 const Dashboard = () => {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState('overview');
+  const [quickViewCandidate, setQuickViewCandidate] = useState(null);
 
-  // Analytics stays collapsed until asked for. The first screen is for deciding
-  // what to do next; the charts are for understanding a pipeline in depth.
-  const [analyticsOpen, setAnalyticsOpen] = useState(false);
-
-  // The selected job lives in the URL, so a job-scoped dashboard can be
-  // refreshed, bookmarked and shared.
   const selectedJobId = searchParams.get('jobId') || '';
 
   const { data, error, loading, refetch } = useApiResource(
@@ -69,9 +59,6 @@ const Dashboard = () => {
     { keepPreviousData: true }
   );
 
-  // Job options come from PostgreSQL, never a hard-coded list. Active jobs only:
-  // the dashboard is an operational view, and closed roles are browsed through
-  // the closed-jobs history instead of crowding the selector.
   const { data: jobsData } = useApiResource(
     (config) => getJobsSummary({ sort: 'candidates', status: 'OPEN' }, config),
     []
@@ -85,11 +72,6 @@ const Dashboard = () => {
   const threshold = overview?.strongMatchThreshold ?? 80;
   const firstName = (user?.name || '').split(' ')[0] || 'there';
 
-  const selectedJob = useMemo(
-    () => jobOptions.find((job) => job.id === selectedJobId) || null,
-    [jobOptions, selectedJobId]
-  );
-
   const handleJobChange = (jobId) => {
     setSearchParams(
       (prev) => {
@@ -102,7 +84,6 @@ const Dashboard = () => {
     );
   };
 
-  /** Candidate-list link that carries the active job scope. */
   const candidatesLink = (query = '') => {
     if (isJobScoped) return `/jobs/${scope.jobId}/candidates${query ? `?${query}` : ''}`;
     return `/candidates${query ? `?${query}` : ''}`;
@@ -110,164 +91,125 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-label uppercase text-brand-700">Recruitment dashboard</p>
-          <h1 className="text-page-title sm:text-display mt-1.5">
+      {/* Top Header & Context */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800/80 pb-4">
+        <div>
+          <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+            Recruitment Command Center
+          </span>
+          <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-slate-100 mt-0.5">
             {greeting()}, {firstName}
           </h1>
-
-          {/* Scope indicator — never leave a recruiter guessing whether the
-              numbers are global or for one role. */}
-          <div className="flex flex-wrap items-center gap-2 mt-2">
-            <span className="text-meta text-slate-500">Viewing:</span>
+          <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-slate-500 dark:text-slate-400">
             {isJobScoped ? (
-              <>
-                <Badge variant="brand">{scope.jobTitle}</Badge>
-                <button
-                  type="button"
-                  onClick={() => handleJobChange('')}
-                  className="text-xs font-semibold text-slate-500 hover:text-slate-900 underline decoration-slate-300 transition-colors duration-fast rounded"
-                >
-                  Show all jobs
-                </button>
-              </>
+              <span>Filtered view for role: <strong className="text-slate-700 dark:text-slate-200">{scope?.jobTitle}</strong></span>
             ) : (
-              <Badge variant="neutral">All jobs</Badge>
+              <span>Overview of all active recruitment pipelines, applicants, and decisions.</span>
             )}
+            <span className="text-slate-300 dark:text-slate-700">•</span>
+            <Link to="/jobs/closed" className="hover:text-indigo-600 dark:hover:text-indigo-400 font-medium">
+              Closed jobs archive
+            </Link>
           </div>
-
-          <p className="text-meta text-slate-500 mt-2">
-            {loading && !overview
-              ? 'Loading your hiring snapshot…'
-              : metrics
-                ? isJobScoped
-                  ? `${metrics.pendingReview} of ${metrics.totalCandidates} candidate${
-                      metrics.totalCandidates === 1 ? '' : 's'
-                    } on this role are waiting on your review.`
-                  : `${metrics.pendingReview} candidate${
-                      metrics.pendingReview === 1 ? '' : 's'
-                    } waiting on your review across ${metrics.totalJobs} open role${metrics.totalJobs === 1 ? '' : 's'}.`
-                : 'Your hiring snapshot across every open role.'}
-          </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
-          {/* Job selector */}
-          <label className="flex items-center gap-2">
-            <span className="text-meta text-slate-500 whitespace-nowrap">Job</span>
-            <select
-              className="select w-auto min-w-[13rem] max-w-[18rem]"
-              value={selectedJobId}
-              onChange={(e) => handleJobChange(e.target.value)}
-              aria-label="Filter the dashboard by job"
-            >
-              <option value="">All jobs</option>
-              {jobOptions.map((job) => (
-                <option key={job.id} value={job.id}>
-                  {job.title} ({job.candidateCount})
-                </option>
-              ))}
-            </select>
-          </label>
+        {/* Header Controls */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Job Filter Selector */}
+          <select
+            className="select text-xs py-1.5 min-w-[12rem] bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+            value={selectedJobId}
+            onChange={(e) => handleJobChange(e.target.value)}
+            aria-label="Filter dashboard by job"
+          >
+            <option value="">All Active Roles</option>
+            {jobOptions.map((job) => (
+              <option key={job.id} value={job.id}>
+                {job.title} ({job.candidateCount || 0})
+              </option>
+            ))}
+          </select>
 
-          <Link to={candidatesLink()} className="btn btn-md btn-secondary">
-            <Users className="w-4 h-4" aria-hidden="true" />
-            {isJobScoped ? 'Candidates' : 'All candidates'}
-          </Link>
-          <Link to="/jobs/new" className="btn btn-md btn-primary">
-            <Plus className="w-4 h-4" aria-hidden="true" />
-            Create job
+          <Link to="/jobs/create" className="btn btn-sm btn-primary">
+            <Plus className="w-3.5 h-3.5" />
+            <span>Create Job</span>
           </Link>
         </div>
       </div>
 
       {error && !overview && (
         <ErrorState
-          title="Unable to load your dashboard"
+          title="Unable to load dashboard metrics"
           error={error}
           onRetry={refetch}
-          action={
-            <Link to="/candidates" className="btn btn-sm btn-secondary">
-              Go to candidates
-            </Link>
-          }
         />
       )}
 
-      {/*
-        Four headline figures, each a full-surface link.
-        Across the workspace these answer "how much work is open, and how far has
-        it got?"; inside one job they answer the same about that job. Everything
-        else that used to sit here — average score, needs review, not suitable,
-        score bands, pipeline — moved into Analytics below, one click away.
-      */}
-      <section aria-label="Key metrics">
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      {/* KPI Stat Cards Grid */}
+      <section aria-label="Key Performance Indicators">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {loading && !overview ? (
             Array.from({ length: 4 }, (_, i) => <StatCardSkeleton key={i} />)
           ) : isJobScoped ? (
             <>
               <StatCard
                 label="Candidates"
-                value={metrics?.totalCandidates}
+                value={metrics?.totalCandidates ?? 0}
                 icon={Users}
                 tone="brand"
                 to={candidatesLink('sort=score_desc')}
                 subtitle="In this role"
               />
               <StatCard
-                label={`Strong matches (${threshold}%+)`}
-                value={metrics?.strongMatch}
+                label={`Strong Matches (${threshold}%+)`}
+                value={metrics?.strongMatch ?? 0}
                 icon={Award}
                 tone="emerald"
                 to={candidatesLink(`minScore=${threshold}&sort=score_desc`)}
-                subtitle="Ranked by relevance"
+                subtitle="High alignment"
               />
               <StatCard
                 label="Shortlisted"
-                value={metrics?.shortlisted}
+                value={metrics?.shortlisted ?? 0}
                 icon={UserCheck}
                 tone="emerald"
                 to={candidatesLink('hrStatus=SHORTLISTED&sort=score_desc')}
-                subtitle="Under consideration"
+                subtitle="Under review"
               />
               <StatCard
-                label="Awaiting review"
-                value={metrics?.pendingReview}
+                label="Awaiting Review"
+                value={metrics?.pendingReview ?? 0}
                 icon={Clock}
                 tone="amber"
                 to={candidatesLink('hrStatus=REVIEW,NEEDS_REVIEW&sort=score_desc')}
-                subtitle="Not yet screened"
+                subtitle="Pending action"
               />
             </>
           ) : (
             <>
               <StatCard
-                label="Active jobs"
+                label="Active Jobs"
                 value={metrics?.openJobs ?? 0}
                 icon={Briefcase}
                 tone="violet"
-                to="/jobs?status=OPEN"
-                subtitle="Roles being screened"
+                to="/jobs"
+                subtitle="Open positions"
               />
               <StatCard
-                label="Candidates"
-                value={metrics?.totalCandidates}
+                label="Total Applicants"
+                value={metrics?.totalCandidates ?? 0}
                 icon={Users}
                 tone="brand"
                 to={candidatesLink('sort=score_desc')}
-                trend={metrics?.candidatesThisMonth > 0 ? metrics.candidatesThisMonth : undefined}
-                trendLabel={metrics?.candidatesThisMonth > 0 ? 'this month' : 'View candidates'}
+                subtitle="Across all roles"
               />
               <StatCard
                 label="Shortlisted"
-                value={metrics?.shortlisted}
+                value={metrics?.shortlisted ?? 0}
                 icon={UserCheck}
                 tone="emerald"
                 to={candidatesLink('hrStatus=SHORTLISTED&sort=score_desc')}
-                subtitle="Under consideration"
+                subtitle="High potential"
               />
               <StatCard
                 label="Hires"
@@ -280,318 +222,183 @@ const Dashboard = () => {
             </>
           )}
         </div>
-
       </section>
 
-      {/* What should I do next? Derived from the job summaries already loaded for
-          the selector, so this costs no extra request. */}
+      {/* Actionable Needs Attention Row */}
       {!isJobScoped && (
         <NeedsAttention jobs={jobOptions} threshold={threshold} loading={loading && !overview} />
       )}
 
-      {/* Recent hires — only meaningful across jobs, so a single-job dashboard
-          stays focused on that job's pipeline. */}
-      {!isJobScoped && <RecentHires hires={overview?.recentHires || []} loading={loading && !overview} />}
-
-      {/*
-        Analytics, collapsed by default.
-        Nothing was removed: the pipeline, score distribution, top candidates,
-        secondary metrics and recent activity all still live here. They simply no
-        longer occupy the first screen, which is for deciding what to do next.
-      */}
-      <section aria-label="Analytics">
-        <button
-          type="button"
-          onClick={() => setAnalyticsOpen((open) => !open)}
-          aria-expanded={analyticsOpen}
-          aria-controls="dashboard-analytics"
-          className="w-full card card-pad-sm flex items-center justify-between gap-3 text-left
-                     hover:border-slate-300 transition-colors duration-fast
-                     focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-        >
-          <span className="min-w-0">
-            <span className="section-title flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-slate-400" aria-hidden="true" />
-              Analytics
-            </span>
-            <span className="block text-meta text-slate-500 mt-0.5">
-              Pipeline, score distribution, top candidates and recent activity.
-            </span>
-          </span>
-          <ChevronDown
+      {/* Tabbed Recruiter Center */}
+      <div className="space-y-4">
+        {/* Navigation Tabs */}
+        <div className="border-b border-slate-200 dark:border-slate-800 flex items-center gap-2 overflow-x-auto scroll-slim">
+          <button
+            type="button"
+            onClick={() => setActiveTab('overview')}
             className={cx(
-              'w-4 h-4 text-slate-400 shrink-0 transition-transform duration-fast',
-              analyticsOpen && 'rotate-180'
+              'px-3 py-2 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap',
+              activeTab === 'overview'
+                ? 'border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
+                : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
             )}
-            aria-hidden="true"
-          />
-        </button>
-      </section>
+          >
+            Pipeline & Active Roles
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('top-candidates')}
+            className={cx(
+              'px-3 py-2 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap',
+              activeTab === 'top-candidates'
+                ? 'border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
+                : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+            )}
+          >
+            Top Scored Candidates
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('recent-hires')}
+            className={cx(
+              'px-3 py-2 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap',
+              activeTab === 'recent-hires'
+                ? 'border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
+                : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+            )}
+          >
+            Recent Hires
+          </button>
+        </div>
 
-      <div id="dashboard-analytics" hidden={!analyticsOpen} className="space-y-5">
-        {/* Secondary metrics, kept out of the headline row. */}
-        {overview && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-            {isJobScoped ? (
-              <>
-                <StatCard
-                  label="Best match"
-                  value={metrics.bestMatchScore !== null ? `${metrics.bestMatchScore}%` : '—'}
-                  icon={Award}
-                  tone="violet"
-                  to={candidatesLink('sort=score_desc')}
-                  subtitle="Highest scoring candidate"
-                />
-                <StatCard
-                  label="Average match score"
-                  value={metrics.averageScore !== null ? `${metrics.averageScore}%` : '—'}
-                  icon={BarChart3}
-                  tone="brand"
-                  subtitle={metrics.averageScore !== null ? `Top score ${metrics.topScore}%` : 'No candidates scored yet'}
-                />
-                <StatCard
-                  label="Needs review"
-                  value={metrics.needsReview}
-                  icon={Clock}
-                  tone="amber"
-                  to={candidatesLink('hrStatus=NEEDS_REVIEW')}
-                  subtitle="Flagged for a second look"
-                />
-                <StatCard
-                  label="Not suitable"
-                  value={metrics.notSuitable}
-                  icon={XCircle}
-                  tone="rose"
-                  to={candidatesLink('hrStatus=NOT_SUITABLE')}
-                  subtitle="Declined after screening"
-                />
-              </>
-            ) : (
-              <>
-                <StatCard
-                  label={`Strong matches (${threshold}%+)`}
-                  value={metrics.strongMatch}
-                  icon={Award}
-                  tone="emerald"
-                  to={candidatesLink(`minScore=${threshold}&sort=score_desc`)}
-                  subtitle="Ranked by relevance"
-                />
-                <StatCard
-                  label="Awaiting review"
-                  value={metrics.pendingReview}
-                  icon={Clock}
-                  tone="amber"
-                  to={candidatesLink('hrStatus=REVIEW,NEEDS_REVIEW&sort=score_desc')}
-                  subtitle="Not yet screened"
-                />
-                <StatCard
-                  label="Closed jobs"
-                  value={metrics.closedJobs ?? 0}
-                  icon={Archive}
-                  tone="brand"
-                  to="/jobs/closed"
-                  subtitle="Filled and archived"
-                />
-                <StatCard
-                  label="Average match score"
-                  value={metrics.averageScore !== null ? `${metrics.averageScore}%` : '—'}
-                  icon={BarChart3}
-                  tone="brand"
-                  subtitle={metrics.averageScore !== null ? `Top score ${metrics.topScore}%` : 'No candidates scored yet'}
-                />
-              </>
+        {/* Tab 1: Pipeline & Active Roles */}
+        {activeTab === 'overview' && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Left: Active Roles List */}
+              <div className="lg:col-span-2 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Active Hiring Roles ({jobOptions.length})
+                  </h3>
+                  <Link to="/jobs" className="text-xs text-indigo-600 dark:text-indigo-400 font-semibold hover:underline">
+                    View all jobs →
+                  </Link>
+                </div>
+
+                <div className="card p-0 divide-y divide-slate-100 dark:divide-slate-800/60 overflow-hidden">
+                  {jobOptions.length === 0 ? (
+                    <div className="p-8 text-center text-xs text-slate-400">
+                      No active jobs yet. Create your first job to start screening.
+                    </div>
+                  ) : (
+                    jobOptions.slice(0, 5).map((job) => (
+                      <div
+                        key={job.id}
+                        className="p-3.5 hover:bg-slate-50/70 dark:hover:bg-slate-800/30 transition-colors flex items-center justify-between gap-3"
+                      >
+                        <div className="min-w-0">
+                          <Link
+                            to={`/jobs/${job.id}`}
+                            className="font-bold text-sm text-slate-900 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400 truncate block"
+                          >
+                            {job.title}
+                          </Link>
+                          <p className="text-xs text-slate-400 truncate mt-0.5">
+                            {job.department || 'Engineering'} • {job.location || 'Remote'} • {job.candidateCount || 0} applicants
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          {job.shortlistedCount > 0 && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                              {job.shortlistedCount} shortlisted
+                            </span>
+                          )}
+                          <Link
+                            to={`/jobs/${job.id}`}
+                            className="btn btn-sm btn-secondary text-xs"
+                          >
+                            Open
+                          </Link>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Right: AI Quick Tools Card */}
+              <div className="space-y-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  AI Recruitment Shortcuts
+                </h3>
+                <div className="card p-4 space-y-3 bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-900/60 border-slate-200/80 dark:border-slate-800">
+                  <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-bold text-xs">
+                    <Bot className="w-4 h-4" />
+                    <span>AI Agent Suite</span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Deterministic analysis tools operating with ₹0 API cost on your authentic candidate scores.
+                  </p>
+
+                  <div className="space-y-1.5 pt-1">
+                    <Link
+                      to="/ai/screening"
+                      className="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 hover:bg-indigo-50/60 dark:hover:bg-indigo-950/30 text-xs font-medium text-slate-700 dark:text-slate-300 transition-colors"
+                    >
+                      <span>Screen Candidate</span>
+                      <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+                    </Link>
+                    <Link
+                      to="/ai/ranking"
+                      className="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 hover:bg-indigo-50/60 dark:hover:bg-indigo-950/30 text-xs font-medium text-slate-700 dark:text-slate-300 transition-colors"
+                    >
+                      <span>Rank Candidate Pool</span>
+                      <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+                    </Link>
+                    <Link
+                      to="/ai/comparison"
+                      className="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 hover:bg-indigo-50/60 dark:hover:bg-indigo-950/30 text-xs font-medium text-slate-700 dark:text-slate-300 transition-colors"
+                    >
+                      <span>Compare Candidates</span>
+                      <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Recent Hires */}
+            {!isJobScoped && (
+              <RecentHires hires={overview?.recentHires || []} loading={loading && !overview} />
             )}
           </div>
         )}
 
-      {/* Top candidates for the active scope */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <div className="lg:col-span-2">
+        {/* Tab 2: Top Candidates */}
+        {activeTab === 'top-candidates' && (
           <TopCandidates
             candidates={overview?.topCandidates || []}
+            threshold={threshold}
             loading={loading && !overview}
-            jobTitle={isJobScoped ? scope.jobTitle : null}
-            viewAllTo={candidatesLink('sort=score_desc')}
+            onSelectCandidate={(cand) => setQuickViewCandidate(cand)}
           />
-        </div>
+        )}
 
-        {/* Score distribution for the active scope */}
-        <Card padding="p-0">
-          <div className="p-5 pb-3">
-            <CardHeader
-              title="Match distribution"
-              description={isJobScoped ? `Scored candidates on ${scope.jobTitle}.` : 'Scored candidates by relevance band.'}
-            />
-          </div>
-
-          <div className="px-5 pb-5 space-y-3">
-            {loading && !overview ? (
-              Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="h-8 w-full" />)
-            ) : overview?.scoreBands?.some((b) => b.count > 0) ? (
-              overview.scoreBands.map((band) => {
-                const total = overview.scoreBands.reduce((sum, b) => sum + b.count, 0);
-                const pct = total > 0 ? Math.round((band.count / total) * 100) : 0;
-                const meta = getScoreMeta(band.min === 0 ? 10 : band.min);
-
-                return (
-                  <Link
-                    key={band.key}
-                    to={candidatesLink(
-                      `minScore=${band.min}${band.max < 100 ? `&maxScore=${Math.floor(band.max)}` : ''}&sort=score_desc`
-                    )}
-                    className="group block focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1 rounded"
-                    aria-label={`${band.count} candidates scored ${band.label}`}
-                  >
-                    <div className="flex items-center justify-between gap-2 text-xs">
-                      <span className="font-semibold text-slate-700 group-hover:text-brand-700 transition-colors duration-fast">
-                        {band.label}
-                      </span>
-                      <span className="tabular-nums text-slate-500">
-                        {band.count} <span className="text-slate-400">({pct}%)</span>
-                      </span>
-                    </div>
-                    <div className="mt-1.5 h-2 w-full rounded-pill bg-slate-100 overflow-hidden">
-                      <div
-                        className={`h-full rounded-pill transition-all duration-slow ${meta.bar}`}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </Link>
-                );
-              })
-            ) : (
-              <p className="text-meta text-slate-500 py-4">
-                No candidates have been scored{isJobScoped ? ' on this role' : ''} yet.
-              </p>
-            )}
-          </div>
-
-          {overview && metrics.unanalyzed > 0 && (
-            <div className="mx-5 mb-5 rounded-control border border-amber-200 bg-amber-50 px-3 py-2.5">
-              <p className="text-xs text-amber-900">
-                <strong>{metrics.unanalyzed}</strong> candidate{metrics.unanalyzed === 1 ? '' : 's'} not scored yet.
-              </p>
-            </div>
-          )}
-        </Card>
+        {/* Tab 3: Recent Hires */}
+        {activeTab === 'recent-hires' && (
+          <RecentHires hires={overview?.recentHires || []} loading={loading && !overview} />
+        )}
       </div>
 
-      {/* Pipeline + recent activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <Card className="lg:col-span-2" padding="p-0">
-          <div className="p-5 pb-2">
-            <CardHeader
-              title="Hiring pipeline"
-              description={
-                isJobScoped
-                  ? `Review stages for ${scope.jobTitle}.`
-                  : 'Every stage links to the matching candidate list.'
-              }
-            />
-          </div>
-
-          <div className="px-1 pb-3">
-            {loading && !overview ? (
-              <div className="space-y-3 p-4">
-                {Array.from({ length: 4 }, (_, i) => (
-                  <div key={i} className="space-y-2">
-                    <Skeleton className="h-3 w-32" />
-                    <Skeleton className="h-1.5 w-full" />
-                  </div>
-                ))}
-              </div>
-            ) : overview?.pipeline?.some((s) => s.count > 0) ? (
-              overview.pipeline.map((stage) => (
-                <PipelineStage
-                  key={stage.key}
-                  label={stage.label}
-                  description={stage.description}
-                  count={stage.count}
-                  percentage={stage.percentage}
-                  barClass={STAGE_BARS[stage.key]}
-                  to={candidatesLink(`hrStatus=${stage.key}&sort=score_desc`)}
-                />
-              ))
-            ) : (
-              <div className="p-4">
-                <EmptyState
-                  icon={Users}
-                  title="No candidates in the pipeline yet"
-                  description={
-                    isJobScoped
-                      ? 'Import resumes for this role to start screening.'
-                      : 'Create a job, then upload resumes or import them from Outlook.'
-                  }
-                  action={
-                    isJobScoped ? (
-                      <Link to={`/jobs/${scope.jobId}/import`} className="btn btn-sm btn-primary">
-                        Add candidates
-                      </Link>
-                    ) : (
-                      <Link to="/jobs/new" className="btn btn-sm btn-primary">
-                        <Plus className="w-3.5 h-3.5" aria-hidden="true" />
-                        Create your first job
-                      </Link>
-                    )
-                  }
-                  className="border-0 shadow-none py-8"
-                />
-              </div>
-            )}
-          </div>
-        </Card>
-
-        <Card padding="p-0">
-          <div className="p-5 pb-3">
-            <CardHeader
-              title="Recent candidates"
-              description={isJobScoped ? `Newest applications for ${scope.jobTitle}.` : 'Newest applications across all roles.'}
-              actions={
-                <Link to={candidatesLink('sort=newest')} className="btn btn-sm btn-ghost">
-                  View all
-                </Link>
-              }
-            />
-          </div>
-
-          <div className="divide-y divide-slate-100 border-t border-slate-100">
-            {loading && !overview ? (
-              Array.from({ length: 5 }, (_, i) => (
-                <div key={i} className="flex items-center gap-3 px-4 py-3">
-                  <Skeleton className="w-8 h-8 rounded-pill" />
-                  <div className="flex-1 space-y-1.5">
-                    <Skeleton className="h-3 w-32" />
-                    <Skeleton className="h-2.5 w-44" />
-                  </div>
-                </div>
-              ))
-            ) : overview?.recentCandidates?.length ? (
-              overview.recentCandidates.slice(0, 6).map((candidate) => (
-                <CandidateRow key={candidate._id} candidate={candidate} />
-              ))
-            ) : (
-              <div className="p-5">
-                <EmptyState
-                  icon={FileText}
-                  title="No candidates yet"
-                  className="border-0 shadow-none py-6"
-                />
-              </div>
-            )}
-          </div>
-        </Card>
-      </div>
-      </div>
-
-      {overview?.generatedAt && (
-        <p className="text-xs text-slate-400 flex items-center gap-1.5">
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" aria-hidden="true" />
-          Live data, updated {formatRelativeTime(overview.generatedAt)}
-          <Button variant="ghost" size="sm" onClick={refetch} className="ml-1">
-            Refresh
-          </Button>
-        </p>
-      )}
+      {/* Candidate Quick View Slide-Over */}
+      <CandidateQuickView
+        candidate={quickViewCandidate}
+        jobId={quickViewCandidate?.jobId}
+        isOpen={Boolean(quickViewCandidate)}
+        onClose={() => setQuickViewCandidate(null)}
+      />
     </div>
   );
 };

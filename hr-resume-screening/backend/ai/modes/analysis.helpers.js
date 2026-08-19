@@ -320,6 +320,7 @@ module.exports = {
   FIT_LEVELS,
   RECOMMENDATIONS,
   computeFitLevel,
+  candidateHasSkill,
   evaluateSkills,
   detectMandatoryGaps,
   evaluateExperience,

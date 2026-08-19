@@ -167,7 +167,7 @@ const JobsList = ({ lockedStatus = null, title = 'Jobs', eyebrow = 'Recruitment'
   const { data, error, loading, refetch } = useApiResource(
     (config) => getJobsSummary({ sort, search: urlSearch, status, page, limit: PAGE_SIZE }, config),
     [sort, urlSearch, status, page],
-    { keepPreviousData: true }
+    { keepPreviousData: false }
   );
 
   const jobs = data?.data || [];

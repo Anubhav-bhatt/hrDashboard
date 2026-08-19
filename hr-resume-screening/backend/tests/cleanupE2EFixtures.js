@@ -11,7 +11,7 @@
 require('dotenv').config();
 const prisma = require('../config/prisma');
 
-const TAGS = ['e2eclosure', 'e2erank'];
+const TAGS = ['e2eclosure', 'e2erank', 'e2ecomp'];
 
 (async () => {
   const jobs = await prisma.job.findMany({

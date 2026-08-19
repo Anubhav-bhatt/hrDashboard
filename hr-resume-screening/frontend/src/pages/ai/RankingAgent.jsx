@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ListOrdered, Filter, Sparkles, AlertCircle, ArrowLeft, RefreshCw, Users, Scale } from 'lucide-react';
+import { ListOrdered, Filter, Sparkles, AlertCircle, ArrowLeft, RefreshCw, Users, Scale, GitCompare } from 'lucide-react';
 import { Button, Card, InlineAlert } from '../../components/ui';
 import AgentShell from '../../components/ai/AgentShell';
 import AgentInput from '../../components/ai/AgentInput';
@@ -102,6 +102,11 @@ const RankingAgent = () => {
     if (jobId && candidateId) {
       navigate(`/ai/screening?jobId=${jobId}&candidateId=${candidateId}`);
     }
+  };
+
+  const handleCompareCandidates = (candidateIds) => {
+    if (!candidateIds || candidateIds.length < 2) return;
+    navigate(`/ai/comparison?jobId=${jobId}&candidateIds=${candidateIds.join(',')}&source=ranking`);
   };
 
   return (
@@ -267,15 +272,18 @@ const RankingAgent = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    icon={Scale}
-                    disabled
-                    title="Compare top candidates (coming in next phase)"
-                  >
-                    Compare Top Candidates
-                  </Button>
+                  {result.rankedCandidates && result.rankedCandidates.length >= 2 && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      icon={Scale}
+                      onClick={() => handleCompareCandidates(result.rankedCandidates.slice(0, Math.min(3, result.rankedCandidates.length)).map((r) => r.candidateId))}
+                      title="Compare top candidates side-by-side"
+                      id="compare-top-candidates-btn"
+                    >
+                      Compare Top {Math.min(3, result.rankedCandidates.length)}
+                    </Button>
+                  )}
                 </div>
               </div>
 
@@ -295,6 +303,7 @@ const RankingAgent = () => {
               <RankingResultTable
                 rows={result.rankedCandidates}
                 onScreenCandidate={handleScreenCandidate}
+                onCompareCandidates={handleCompareCandidates}
               />
             ) : (
               <InlineAlert

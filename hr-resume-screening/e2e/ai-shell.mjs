@@ -88,6 +88,7 @@ const captureAuthState = async () => {
   const page = await context.newPage();
 
   await page.goto(`${BASE}/login`, { waitUntil: 'networkidle' });
+  await page.locator('#email').waitFor({ state: 'visible', timeout: 15000 });
   await page.fill('#email', EMAIL);
   await page.fill('#password', PASSWORD);
   await page.click('button[type=submit]');
@@ -152,6 +153,7 @@ try {
 
     for (const route of ['/ai', '/ai/screening', '/ai/ranking', '/ai/comparison', '/ai/insights']) {
       await page.goto(`${BASE}${route}`, { waitUntil: 'networkidle' });
+      await page.waitForURL('**/login**', { timeout: 10000 }).catch(() => {});
       check(page.url().includes('/login'), `anonymous ${route} redirects to sign-in`, page.url());
     }
 
@@ -513,9 +515,11 @@ try {
     // stays in the document at every width and only stops being rendered.
     if (width < 1024) {
       await page.goto(`${BASE}/ai`, { waitUntil: 'networkidle' });
-      check(!(await aiNav(page).first().isVisible()), `${width}px â€” the desktop rail is not shown`);
+      const menuBtn = page.locator('button[aria-label="Open navigation menu"]').first();
+      await menuBtn.waitFor({ state: 'visible', timeout: 15000 });
+      check(!(await aiNav(page).first().isVisible()), `${width}px — the desktop rail is not shown`);
 
-      await page.locator('button[aria-label="Open navigation menu"]').click();
+      await menuBtn.click();
       await page.waitForTimeout(500);
 
       const visibleAiNavs = await countVisible(aiNav(page));

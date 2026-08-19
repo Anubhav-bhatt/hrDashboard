@@ -436,6 +436,16 @@ const CandidateProfile = () => {
                 </Button>
               )}
 
+              <Button
+                variant="secondary"
+                size="md"
+                className="text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800"
+                icon={Sparkles}
+                onClick={() => navigate(`/ai/screening?jobId=${candidate.jobId}&candidateId=${candidate._id}`)}
+              >
+                Screen with AI
+              </Button>
+
               <Button variant="secondary" size="md" icon={MessageSquare} onClick={() => setTab('notes')}>
                 Add note
               </Button>

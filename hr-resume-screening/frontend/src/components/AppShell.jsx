@@ -11,36 +11,32 @@ import {
   Settings,
   Sparkles,
   Users,
+  Upload,
+  Mail,
+  Bot,
+  Search,
+  Command,
+  HelpCircle,
   X
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useAiConfig } from '../context/AiConfigContext';
+import { AGENT_MODES } from '../constants/agentModes';
 import { useToast } from './ToastProvider';
 import { ThemeToggleButton } from './ThemeSelector';
+import CommandPalette from './CommandPalette';
 import { Avatar, Button, cx } from './ui';
-import { AGENT_MODE_LIST } from '../constants/agentModes';
 
 export const SIDEBAR_STORAGE_KEY = 'hr-dashboard-sidebar-collapsed';
-export const AI_GROUP_STORAGE_KEY = 'hr-dashboard-ai-group-open';
+export const AI_GROUPS_STORAGE_KEY = 'hr-dashboard-ai-group-collapsed';
 
-/**
- * Sidebar navigation — four destinations, one per thing a recruiter works on.
- *
- * Creating a job, closed jobs, candidate import and the Outlook connection are
- * all still available, but they live inside the workflow they belong to rather
- * than competing for space here: creating and closing happen in Jobs, importing
- * happens inside a job, and the mailbox connection lives in Settings. A section
- * stays highlighted for every route beneath it, so a recruiter always knows
- * where they are.
- */
-const NAV_ITEMS = [
+const MAIN_NAV_ITEMS = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, matchPaths: ['/', '/dashboard'] },
   { to: '/jobs', label: 'Jobs', icon: Briefcase, matchPrefix: '/jobs' },
   { to: '/candidates', label: 'Candidates', icon: Users, matchPrefix: '/candidates' },
   { to: '/settings', label: 'Settings', icon: Settings, matchPrefix: '/settings' }
 ];
 
-/** Reads the persisted sidebar preference. */
 const readCollapsed = () => {
   try {
     return window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === 'true';
@@ -49,104 +45,84 @@ const readCollapsed = () => {
   }
 };
 
-/**
- * Reads the persisted AI group state, defaulting to open.
- *
- * Open by default because a collapsed group hides five destinations behind a
- * click a recruiter has no reason to suspect is there. Once they collapse it, the
- * choice sticks.
- */
-const readAiGroupOpen = () => {
+const readAiGroupCollapsed = () => {
   try {
-    return window.localStorage.getItem(AI_GROUP_STORAGE_KEY) !== 'false';
+    return window.localStorage.getItem(AI_GROUPS_STORAGE_KEY) === 'true';
   } catch {
-    return true;
+    return false;
   }
 };
 
-/**
- * Tooltip shown beside a collapsed sidebar item.
- *
- * Appears on hover and on keyboard focus — focus matters because an icon-only
- * control gives a keyboard user no other way to learn what it does.
- */
 const CollapsedTooltip = ({ label }) => (
   <span
     role="tooltip"
-    className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 z-50 whitespace-nowrap
-               rounded-control border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800
-               opacity-0 translate-x-[-4px] transition-all duration-fast
-               group-hover:opacity-100 group-hover:translate-x-0
-               group-focus:opacity-100 group-focus:translate-x-0"
-    style={{ boxShadow: 'var(--shadow-overlay)' }}
+    className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 z-50 whitespace-nowrap rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 py-1 text-xs font-semibold text-slate-800 dark:text-slate-200 shadow-md opacity-0 translate-x-[-4px] transition-all duration-150 group-hover:opacity-100 group-hover:translate-x-0 group-focus:opacity-100 group-focus:translate-x-0"
   >
     {label}
   </span>
 );
 
-/**
- * Application chrome: sidebar navigation on desktop (collapsible), a slide-over
- * drawer on mobile, and a top bar carrying the theme control and account menu.
- *
- * The mailbox connection used to be reported here on every screen. It moved to
- * Settings, which removed an integration status request from every page load and
- * a panel from a rail that a recruiter reads dozens of times a day.
- */
 const AppShell = ({ children }) => {
   const location = useLocation();
   const { user, signOut } = useAuth();
-  const toast = useToast();
-
   const { enabled: aiEnabled, isModeEnabled } = useAiConfig();
+  const toast = useToast();
 
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(readCollapsed);
-  const [aiGroupOpen, setAiGroupOpen] = useState(readAiGroupOpen);
+  const [aiGroupCollapsed, setAiGroupCollapsed] = useState(readAiGroupCollapsed);
 
   const accountRef = useRef(null);
 
-  // Close transient UI on navigation.
+  // Close menus on navigation
   useEffect(() => {
     setMobileNavOpen(false);
     setAccountOpen(false);
   }, [location.pathname, location.search]);
+
+  // Keyboard shortcut for Command Palette (Cmd+K / Ctrl+K)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setCommandPaletteOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const toggleCollapsed = useCallback(() => {
     setCollapsed((previous) => {
       const next = !previous;
       try {
         window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(next));
-      } catch {
-        // Preference simply will not persist across reloads.
-      }
+      } catch {}
       return next;
     });
   }, []);
 
   const toggleAiGroup = useCallback(() => {
-    setAiGroupOpen((previous) => {
+    setAiGroupCollapsed((previous) => {
       const next = !previous;
       try {
-        window.localStorage.setItem(AI_GROUP_STORAGE_KEY, String(next));
-      } catch {
-        // Preference simply will not persist across reloads.
-      }
+        window.localStorage.setItem(AI_GROUPS_STORAGE_KEY, String(next));
+      } catch {}
       return next;
     });
   }, []);
 
-  // Dismiss the account menu on outside click or Escape.
+  // Account dropdown click outside
   useEffect(() => {
     if (!accountOpen) return undefined;
-
     const onPointerDown = (event) => {
       if (accountRef.current && !accountRef.current.contains(event.target)) setAccountOpen(false);
     };
     const onKeyDown = (event) => {
       if (event.key === 'Escape') setAccountOpen(false);
     };
-
     document.addEventListener('mousedown', onPointerDown);
     document.addEventListener('keydown', onKeyDown);
     return () => {
@@ -155,7 +131,7 @@ const AppShell = ({ children }) => {
     };
   }, [accountOpen]);
 
-  // Lock body scroll behind the mobile drawer.
+  // Lock body scroll on mobile nav
   useEffect(() => {
     document.body.style.overflow = mobileNavOpen ? 'hidden' : '';
     return () => {
@@ -168,10 +144,11 @@ const AppShell = ({ children }) => {
     toast.info('You have been signed out.');
   };
 
-  /** A section is active when the current path sits anywhere beneath it. */
   const isSectionActive = (item) => {
-    // Explicit path list, for a section reachable at more than one exact URL.
-    if (item.matchPaths) return item.matchPaths.includes(location.pathname);
+    if (item.matchPaths) {
+      if (item.matchPaths.includes(location.pathname)) return true;
+      if (location.search && item.matchPaths.includes(`${location.pathname}${location.search}`)) return true;
+    }
     if (item.end) return location.pathname === item.to;
     if (item.matchPrefix) {
       return location.pathname === item.matchPrefix || location.pathname.startsWith(`${item.matchPrefix}/`);
@@ -179,368 +156,379 @@ const AppShell = ({ children }) => {
     return location.pathname === item.to;
   };
 
-  /**
-   * Exact matching for AI destinations.
-   *
-   * Every agent route lives beneath `/ai`, so the prefix rule used for `/jobs`
-   * would leave the assistant highlighted while a recruiter is on the ranking
-   * page. Each agent owns exactly one URL, so an exact comparison is both correct
-   * and simpler.
-   */
   const isAiModeActive = (mode) => location.pathname.replace(/\/+$/, '') === mode.route;
 
-  /**
-   * @param {boolean} isCollapsed Render the icon-only variant
-   */
-  const SidebarContent = ({ isCollapsed = false }) => (
-    <>
-      <div className={cx('flex items-center gap-2.5', isCollapsed ? 'justify-center px-0' : 'px-1')}>
+  // Build breadcrumb segments
+  const getBreadcrumbs = () => {
+    const path = location.pathname;
+    if (path === '/' || path === '/dashboard') return [{ label: 'Dashboard', to: '/' }];
+    if (path.startsWith('/jobs/create') || path.startsWith('/jobs/new')) return [{ label: 'Jobs', to: '/jobs' }, { label: 'Create Job' }];
+    if (path.startsWith('/jobs/closed')) return [{ label: 'Jobs', to: '/jobs' }, { label: 'Closed Jobs' }];
+    if (path.startsWith('/jobs/')) return [{ label: 'Jobs', to: '/jobs' }, { label: 'Job Workspace' }];
+    if (path === '/jobs') return [{ label: 'Jobs', to: '/jobs' }];
+    if (path.startsWith('/candidates/')) return [{ label: 'Candidates', to: '/candidates' }, { label: 'Profile' }];
+    if (path === '/candidates') return [{ label: 'Candidates', to: '/candidates' }];
+    if (path.startsWith('/import')) return [{ label: 'Import', to: '/import' }];
+    if (path === '/ai') return [{ label: 'AI Tools', to: '/ai' }, { label: 'Workspace' }];
+    if (path === '/ai/screening') return [{ label: 'AI Tools', to: '/ai' }, { label: 'Screening Agent' }];
+    if (path === '/ai/ranking') return [{ label: 'AI Tools', to: '/ai' }, { label: 'Ranking Agent' }];
+    if (path === '/ai/comparison') return [{ label: 'AI Tools', to: '/ai' }, { label: 'Comparison Agent' }];
+    if (path === '/ai/insights') return [{ label: 'AI Tools', to: '/ai' }, { label: 'Insights Agent' }];
+    if (path === '/settings') return [{ label: 'Settings', to: '/settings' }];
+    return [{ label: 'Overview', to: '/' }];
+  };
+
+  const allAiModes = Object.values(AGENT_MODES);
+
+  const SidebarNav = ({ isCollapsed = false }) => (
+    <div className="flex flex-col h-full">
+      {/* Brand Header */}
+      <div className={cx('flex items-center gap-2.5 h-14 border-b border-slate-100 dark:border-slate-800/80 shrink-0', isCollapsed ? 'justify-center px-0' : 'px-4')}>
         <Link
           to="/"
-          className="flex items-center gap-2.5 py-1 rounded-control min-w-0"
-          aria-label="Resume Screening — go to dashboard"
+          className="flex items-center gap-2.5 rounded-md min-w-0"
+          aria-label="HR Screening OS"
         >
-          {/* w-4.5 is not a Tailwind step, so this icon previously fell back to
-              Lucide's 24px default and overflowed its 36px badge. */}
-          <span className="w-9 h-9 rounded-control bg-brand-600 flex items-center justify-center text-white shrink-0">
-            <Sparkles className="w-[18px] h-[18px]" aria-hidden="true" />
+          <span className="w-8 h-8 rounded-lg bg-indigo-600 dark:bg-indigo-500 flex items-center justify-center text-white shrink-0 shadow-xs">
+            <Sparkles className="w-4 h-4" aria-hidden="true" />
           </span>
           {!isCollapsed && (
             <span className="min-w-0">
-              <span className="text-card-title text-slate-900 leading-tight truncate block">HR Screening</span>
-              <span className="text-[11px] text-slate-500 block">Resume screening</span>
+              <span className="text-sm font-bold text-slate-900 dark:text-slate-100 leading-none block">HR Screening</span>
+              <span className="text-[10px] text-slate-400 font-medium block mt-0.5">Enterprise OS</span>
             </span>
           )}
         </Link>
       </div>
 
-      <nav
-        className={cx('mt-7 space-y-0.5', isCollapsed && 'flex flex-col items-center')}
-        aria-label="Main navigation"
-      >
-        {NAV_ITEMS.map((item) => {
-          const sectionActive = isSectionActive(item);
+      {/* Navigation Content */}
+      <div className="flex-1 overflow-y-auto scroll-slim py-4 space-y-4">
+        {/* Main Workspace Navigation */}
+        <nav aria-label="Main navigation" className="space-y-1">
+          {!isCollapsed && (
+            <p className="px-4 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+              WORKSPACE
+            </p>
+          )}
+          <div className="space-y-0.5 px-2">
+            {MAIN_NAV_ITEMS.map((item) => {
+              const active = isSectionActive(item);
+              const Icon = item.icon;
 
-          return (
-            <div key={item.to} className={cx(isCollapsed && 'w-full flex flex-col items-center')}>
-              <NavLink
-                to={item.to}
-                end={item.end}
-                className={cx(
-                  'group relative flex items-center rounded-control text-body font-medium transition-colors duration-fast',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1',
-                  isCollapsed ? 'justify-center w-10 h-10' : 'gap-2.5 px-3 h-9',
-                  // Subtle brand tint plus a stronger label — never a saturated block.
-                  sectionActive
-                    ? 'bg-brand-50 text-brand-700 font-semibold'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                )}
-                aria-current={sectionActive ? 'page' : undefined}
-                aria-label={isCollapsed ? item.label : undefined}
-              >
-                {/* Small accent indicator rather than a large filled block. */}
-                {sectionActive && !isCollapsed && (
-                  <span
-                    className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-0.5 rounded-r bg-brand-600"
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={cx(
+                    'group relative flex items-center rounded-lg text-xs font-medium transition-colors',
+                    isCollapsed ? 'justify-center w-9 h-9 mx-auto' : 'gap-2.5 px-3 py-2',
+                    active
+                      ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 font-semibold'
+                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100'
+                  )}
+                  aria-current={active ? 'page' : undefined}
+                  aria-label={item.label}
+                >
+                  <Icon
+                    className={cx(
+                      'w-4 h-4 shrink-0',
+                      active ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300'
+                    )}
                     aria-hidden="true"
                   />
-                )}
-                <item.icon
-                  className={cx('w-[18px] h-[18px] shrink-0', sectionActive ? 'text-brand-600' : 'text-slate-400 group-hover:text-slate-600')}
-                  aria-hidden="true"
-                />
-                {!isCollapsed && item.label}
-                {isCollapsed && <CollapsedTooltip label={item.label} />}
-              </NavLink>
+                  {!isCollapsed && <span className="truncate">{item.label}</span>}
+                  {isCollapsed && <CollapsedTooltip label={item.label} />}
+                </NavLink>
+              );
+            })}
+          </div>
+        </nav>
 
-            </div>
-          );
-        })}
-      </nav>
+        {/* AI Recruitment Section */}
+        {aiEnabled && (
+          <nav aria-label="AI Recruitment" className="space-y-1">
+            {!isCollapsed ? (
+              <div className="px-2">
+                <button
+                  type="button"
+                  aria-controls="ai-recruitment-group"
+                  aria-expanded={!aiGroupCollapsed}
+                  onClick={toggleAiGroup}
+                  className="w-full flex items-center justify-between px-2 py-1 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                >
+                  <span>AI Recruitment</span>
+                  <ChevronDown
+                    className={cx('w-3.5 h-3.5 transition-transform duration-150', aiGroupCollapsed && '-rotate-90')}
+                  />
+                </button>
 
-      {/* AI Recruitment — a separate, clearly labelled group below the four
-          workspace destinations. Additive: with AI_ENABLED=false nothing here
-          renders and the rail is byte-for-byte what it was before. */}
-      {aiEnabled && (
-        <nav
-          className={cx('mt-6 pt-5 border-t border-slate-200', isCollapsed && 'flex flex-col items-center w-full')}
-          aria-label="AI Recruitment"
-        >
-          {isCollapsed ? (
-            // Collapsed rail: no room for a group header, so the items stand on
-            // their own with the shared sparkle marking them as one family.
-            <div className="flex flex-col items-center gap-0.5 w-full">
-              {AGENT_MODE_LIST.map((mode) => {
-                const modeEnabled = isModeEnabled(mode.id);
-                const active = isAiModeActive(mode);
+                {!aiGroupCollapsed && (
+                  <div id="ai-recruitment-group" className="space-y-0.5 mt-1">
+                    {allAiModes.map((mode) => {
+                      const enabled = isModeEnabled(mode.id);
+                      const active = enabled && isAiModeActive(mode);
+                      const Icon = mode.icon;
 
-                if (!modeEnabled) return null;
+                      if (!enabled) {
+                        return (
+                          <div
+                            key={mode.id}
+                            aria-disabled="true"
+                            className="flex items-center justify-between rounded-lg text-xs font-medium gap-2.5 px-3 py-2 text-slate-400 dark:text-slate-600 cursor-not-allowed opacity-75"
+                          >
+                            <span className="flex items-center gap-2.5 min-w-0">
+                              <Icon className="w-4 h-4 shrink-0 text-slate-400 dark:text-slate-600" aria-hidden="true" />
+                              <span className="truncate">{mode.name}</span>
+                            </span>
+                            <span className="text-[10px] uppercase font-semibold text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-800 rounded px-1 py-0.2">
+                              Soon
+                            </span>
+                          </div>
+                        );
+                      }
 
-                return (
-                  <NavLink
-                    key={mode.id}
-                    to={mode.route}
-                    // Exact matching. Without it NavLink treats /ai as active on
-                    // every /ai/* route and marks the assistant aria-current
-                    // alongside the real destination.
-                    end
-                    className={cx(
-                      'group relative flex items-center justify-center w-10 h-10 rounded-control transition-colors duration-fast',
-                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1',
-                      active ? 'bg-brand-50 text-brand-700' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                    )}
-                    aria-current={active ? 'page' : undefined}
-                    aria-label={mode.name}
-                  >
-                    <mode.icon
-                      className={cx('w-[18px] h-[18px] shrink-0', active ? 'text-brand-600' : 'text-slate-400 group-hover:text-slate-600')}
-                      aria-hidden="true"
-                    />
-                    <CollapsedTooltip label={mode.name} />
-                  </NavLink>
-                );
-              })}
-            </div>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={toggleAiGroup}
-                className="w-full flex items-center gap-2 px-3 h-8 rounded-control text-label uppercase text-slate-500
-                           hover:text-slate-900 hover:bg-slate-100 transition-colors duration-fast
-                           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-                aria-expanded={aiGroupOpen}
-                aria-controls="ai-recruitment-group"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-brand-500 shrink-0" aria-hidden="true" />
-                <span className="flex-1 text-left">AI Recruitment</span>
-                <ChevronDown
-                  className={cx('w-3.5 h-3.5 shrink-0 transition-transform duration-fast', !aiGroupOpen && '-rotate-90')}
-                  aria-hidden="true"
-                />
-              </button>
-
-              {aiGroupOpen && (
-                <div id="ai-recruitment-group" className="mt-1 space-y-0.5">
-                  {AGENT_MODE_LIST.map((mode) => {
-                    const modeEnabled = isModeEnabled(mode.id);
-                    const active = isAiModeActive(mode);
-
-                    // A mode whose flag is off is shown but not navigable. It
-                    // reads as "not yet" rather than vanishing, which is what a
-                    // recruiter needs to understand the state of the section.
-                    if (!modeEnabled) {
                       return (
-                        <span
+                        <NavLink
                           key={mode.id}
-                          aria-disabled="true"
-                          className="flex items-center gap-2.5 px-3 h-9 rounded-control text-body text-slate-400 cursor-not-allowed"
+                          to={mode.route}
+                          end
+                          className={cx(
+                            'group relative flex items-center rounded-lg text-xs font-medium transition-colors gap-2.5 px-3 py-2',
+                            active
+                              ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 font-semibold'
+                              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100'
+                          )}
+                          aria-current={active ? 'page' : undefined}
+                          aria-label={mode.name}
                         >
-                          <mode.icon className="w-[18px] h-[18px] shrink-0 text-slate-300" aria-hidden="true" />
-                          <span className="flex-1 min-w-0 truncate">{mode.name}</span>
-                          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 shrink-0">
-                            Soon
-                          </span>
-                        </span>
-                      );
-                    }
-
-                    return (
-                      <NavLink
-                        key={mode.id}
-                        to={mode.route}
-                        // See the collapsed rail above: /ai would otherwise stay
-                        // active across every agent route.
-                        end
-                        className={cx(
-                          'group relative flex items-center gap-2.5 px-3 h-9 rounded-control text-body font-medium transition-colors duration-fast',
-                          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1',
-                          active
-                            ? 'bg-brand-50 text-brand-700 font-semibold'
-                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                        )}
-                        aria-current={active ? 'page' : undefined}
-                      >
-                        {active && (
-                          <span
-                            className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-0.5 rounded-r bg-brand-600"
+                          <Icon
+                            className={cx(
+                              'w-4 h-4 shrink-0',
+                              active ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300'
+                            )}
                             aria-hidden="true"
                           />
-                        )}
-                        <mode.icon
-                          className={cx('w-[18px] h-[18px] shrink-0', active ? 'text-brand-600' : 'text-slate-400 group-hover:text-slate-600')}
-                          aria-hidden="true"
-                        />
-                        {mode.name}
-                      </NavLink>
+                          <span className="truncate">{mode.name}</span>
+                        </NavLink>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-0.5 px-2">
+                {allAiModes.map((mode) => {
+                  const enabled = isModeEnabled(mode.id);
+                  const active = enabled && isAiModeActive(mode);
+                  const Icon = mode.icon;
+
+                  if (!enabled) {
+                    return (
+                      <div
+                        key={mode.id}
+                        aria-disabled="true"
+                        className="group relative flex items-center justify-center w-9 h-9 mx-auto rounded-lg text-xs font-medium text-slate-400 dark:text-slate-600 opacity-60 cursor-not-allowed"
+                      >
+                        <Icon className="w-4 h-4 shrink-0" aria-hidden="true" />
+                        <CollapsedTooltip label={`${mode.name} (Soon)`} />
+                      </div>
                     );
-                  })}
-                </div>
-              )}
-            </>
-          )}
-        </nav>
-      )}
-    </>
-  );
+                  }
 
-  return (
-    <div className="min-h-screen bg-slate-50">
-      <a
-        href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:z-[60] focus:top-3 focus:left-3 focus:px-4 focus:py-2 focus:bg-white focus:rounded-control focus:shadow-overlay focus:text-meta focus:font-semibold"
-      >
-        Skip to main content
-      </a>
-
-      {/* Desktop sidebar */}
-      <aside
-        className={cx(
-          'hidden lg:flex fixed inset-y-0 left-0 flex-col border-r border-slate-200 bg-white py-5 z-30',
-          'transition-[width] duration-slow',
-          collapsed ? 'w-sidebar-collapsed px-3' : 'w-sidebar px-4'
+                  return (
+                    <NavLink
+                      key={mode.id}
+                      to={mode.route}
+                      end
+                      className={cx(
+                        'group relative flex items-center justify-center w-9 h-9 mx-auto rounded-lg text-xs font-medium transition-colors',
+                        active
+                          ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 font-semibold'
+                          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100'
+                      )}
+                      aria-current={active ? 'page' : undefined}
+                      aria-label={mode.name}
+                    >
+                      <Icon
+                        className={cx(
+                          'w-4 h-4 shrink-0',
+                          active ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300'
+                        )}
+                        aria-hidden="true"
+                      />
+                      <CollapsedTooltip label={mode.name} />
+                    </NavLink>
+                  );
+                })}
+              </div>
+            )}
+          </nav>
         )}
-      >
-        <SidebarContent isCollapsed={collapsed} />
+      </div>
 
-        {/* Collapse control, sitting on the rail edge */}
+      {/* Sidebar Footer */}
+      <div className="p-2 border-t border-slate-100 dark:border-slate-800/80 shrink-0">
         <button
           type="button"
           onClick={toggleCollapsed}
-          className="absolute -right-3 top-16 w-6 h-6 rounded-pill border border-slate-200 bg-white
-                     text-slate-400 hover:text-slate-700 hover:border-slate-300
-                     flex items-center justify-center transition-colors duration-fast"
-          style={{ boxShadow: 'var(--shadow-card)' }}
+          className="hidden lg:flex w-full items-center justify-center p-2 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 dark:hover:text-slate-200 transition-colors text-xs"
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          aria-expanded={!collapsed}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
-          {collapsed ? (
-            <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
-          ) : (
-            <ChevronLeft className="w-3.5 h-3.5" aria-hidden="true" />
-          )}
+          {collapsed ? <ChevronRight className="w-4 h-4" /> : <div className="flex items-center gap-2 w-full px-2"><ChevronLeft className="w-4 h-4" /><span>Collapse rail</span></div>}
         </button>
+      </div>
+    </div>
+  );
+
+  const breadcrumbs = getBreadcrumbs();
+
+  return (
+    <div className="min-h-screen flex bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+      {/* Desktop Sidebar */}
+      <aside
+        className={cx(
+          'hidden lg:flex flex-col shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200/80 dark:border-slate-800/80 transition-all duration-200 select-none z-30 sticky top-0 h-screen',
+          collapsed ? 'w-16' : 'w-56'
+        )}
+      >
+        <SidebarNav isCollapsed={collapsed} />
       </aside>
 
-      {/* Mobile drawer */}
+      {/* Mobile Drawer Backdrop & Drawer */}
       {mobileNavOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 flex">
+        <>
           <div
-            className="absolute inset-0 animate-fade-in"
-            style={{ backgroundColor: 'rgb(var(--overlay-scrim) / var(--overlay-scrim-opacity))' }}
+            className="fixed inset-0 z-40 bg-slate-950/50 backdrop-blur-xs lg:hidden animate-fade-in"
             onClick={() => setMobileNavOpen(false)}
             aria-hidden="true"
           />
           <aside
-            className="relative w-72 max-w-[85vw] bg-white px-4 py-5 flex flex-col shadow-overlay animate-slide-in-right"
             role="dialog"
             aria-modal="true"
-            aria-label="Navigation menu"
+            aria-label="Mobile navigation drawer"
+            className="fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col lg:hidden animate-fade-in"
           >
-            <Button
-              variant="ghost"
-              size="iconSm"
-              icon={X}
-              onClick={() => setMobileNavOpen(false)}
-              className="absolute top-4 right-3"
-              aria-label="Close navigation menu"
-            />
-            {/* Always expanded on mobile — the drawer has room for labels. */}
-            <SidebarContent isCollapsed={false} />
+            <SidebarNav isCollapsed={false} />
           </aside>
-        </div>
+        </>
       )}
 
-      <div className={cx('transition-[padding] duration-slow', collapsed ? 'lg:pl-sidebar-collapsed' : 'lg:pl-sidebar')}>
-        {/* Top bar */}
-        <header className="sticky top-0 z-20 h-14 border-b border-slate-200 bg-white/90 backdrop-blur flex items-center gap-3 px-4 sm:px-6 lg:px-8">
-          <Button
-            variant="ghost"
-            size="iconSm"
-            icon={Menu}
-            className="lg:hidden"
-            onClick={() => setMobileNavOpen(true)}
-            aria-label="Open navigation menu"
-            aria-expanded={mobileNavOpen}
-          />
-
-          <div className="lg:hidden flex items-center gap-2 min-w-0">
-            <span className="w-7 h-7 rounded-control bg-brand-600 flex items-center justify-center text-white shrink-0">
-              <Sparkles className="w-4 h-4" aria-hidden="true" />
-            </span>
-            <span className="text-card-title truncate">Resume Screening</span>
-          </div>
-
-          <div className="flex-1" />
-
-          <ThemeToggleButton />
-
-          {/* Account menu */}
-          <div className="relative" ref={accountRef}>
+      {/* Main Column */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Contextual Top Header */}
+        <header className="h-14 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 sticky top-0 z-20 flex items-center justify-between px-4 sm:px-6 gap-3">
+          {/* Left: Mobile trigger & Breadcrumbs */}
+          <div className="flex items-center gap-3 min-w-0">
             <button
               type="button"
-              onClick={() => setAccountOpen((v) => !v)}
-              className="flex items-center gap-2 pl-1 pr-2 py-1 rounded-control hover:bg-slate-100 transition-colors duration-fast"
-              aria-expanded={accountOpen}
-              aria-haspopup="menu"
+              className="lg:hidden p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+              onClick={() => setMobileNavOpen(true)}
+              aria-label="Open navigation menu"
             >
-              <Avatar name={user?.name || user?.email} size="sm" />
-              <span className="hidden sm:block text-meta font-semibold text-slate-800 max-w-[10rem] truncate">
-                {user?.name || user?.email}
-              </span>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
+              <Menu className="w-5 h-5" />
             </button>
 
-            {accountOpen && (
-              <div
-                role="menu"
-                className="absolute right-0 mt-2 w-64 card p-0 overflow-hidden animate-slide-up"
-                style={{ boxShadow: 'var(--shadow-overlay)' }}
+            {/* Breadcrumb path */}
+            <nav className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-medium truncate" aria-label="Breadcrumb">
+              {breadcrumbs.map((crumb, idx) => {
+                const isLast = idx === breadcrumbs.length - 1;
+                return (
+                  <React.Fragment key={crumb.label}>
+                    {idx > 0 && <span className="text-slate-300 dark:text-slate-600">/</span>}
+                    {isLast ? (
+                      <span className="font-bold text-slate-900 dark:text-slate-100 truncate">{crumb.label}</span>
+                    ) : (
+                      <Link to={crumb.to} className="hover:text-slate-900 dark:hover:text-slate-200 transition-colors">
+                        {crumb.label}
+                      </Link>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </nav>
+          </div>
+
+          {/* Right: Quick Search + Theme + Account */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Cmd+K Search Trigger */}
+            <button
+              type="button"
+              onClick={() => setCommandPaletteOpen(true)}
+              className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/70 dark:hover:bg-slate-700/70 text-slate-500 dark:text-slate-400 text-xs transition-colors"
+              aria-label="Search and quick commands (Cmd+K)"
+            >
+              <Search className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Search...</span>
+              <kbd className="hidden sm:inline-flex items-center gap-0.5 text-[10px] font-mono text-slate-400 bg-white dark:bg-slate-900 px-1.5 py-0.2 rounded border border-slate-200 dark:border-slate-700">
+                ⌘K
+              </kbd>
+            </button>
+
+            {/* Theme Toggle */}
+            <ThemeToggleButton />
+
+            {/* Account Menu */}
+            <div className="relative" ref={accountRef}>
+              <button
+                type="button"
+                onClick={() => setAccountOpen((prev) => !prev)}
+                className="flex items-center gap-2 p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors focus-visible:ring-2 focus-visible:ring-brand-500"
+                aria-expanded={accountOpen}
+                aria-haspopup="menu"
+                aria-label="User account menu"
               >
-                <div className="px-4 py-3 border-b border-slate-100">
-                  <p className="text-meta font-semibold text-slate-900 truncate">{user?.name}</p>
-                  <p className="text-xs text-slate-500 truncate">{user?.email}</p>
-                  <span className="badge badge-brand mt-2">
-                    {user?.role === 'ADMIN' ? 'Administrator' : 'Recruiter'}
-                  </span>
+                <Avatar name={user?.name || 'Recruiter'} size="sm" />
+              </button>
+
+              {accountOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 mt-2 w-56 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl py-1.5 z-50 text-xs animate-fade-in"
+                >
+                  <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800">
+                    <p className="font-bold text-slate-900 dark:text-slate-100 truncate">{user?.name || 'Recruiter'}</p>
+                    <p className="text-[11px] text-slate-400 truncate">{user?.email || 'user@company.com'}</p>
+                    <span className="inline-block mt-1 px-1.5 py-0.2 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold uppercase">
+                      {user?.role || 'RECRUITER'}
+                    </span>
+                  </div>
+
+                  <Link
+                    to="/settings"
+                    role="menuitem"
+                    className="flex items-center gap-2 px-3 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+                    onClick={() => setAccountOpen(false)}
+                  >
+                    <Settings className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Settings & Sourcing</span>
+                  </Link>
+
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={handleSignOut}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-left border-t border-slate-100 dark:border-slate-800 mt-1"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Sign out</span>
+                  </button>
                 </div>
-
-                {/* Theme, mailbox and account details all live in Settings now.
-                    The top-bar toggle remains for a quick light/dark flip. */}
-                <Link
-                  to="/settings"
-                  role="menuitem"
-                  className="w-full flex items-center gap-2.5 px-4 py-3 text-meta font-medium text-slate-700 hover:bg-slate-50 transition-colors duration-fast border-b border-slate-100"
-                >
-                  <Settings className="w-4 h-4 text-slate-400" aria-hidden="true" />
-                  Settings
-                </Link>
-
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={handleSignOut}
-                  className="w-full flex items-center gap-2.5 px-4 py-3 text-meta font-medium text-slate-700 hover:bg-slate-50 transition-colors duration-fast"
-                >
-                  <LogOut className="w-4 h-4 text-slate-400" aria-hidden="true" />
-                  Sign out
-                </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </header>
 
-        <main id="main-content" className="px-4 sm:px-6 lg:px-8 py-6 lg:py-8 max-w-[1400px] mx-auto">
+        {/* Page Content Container */}
+        <main id="main-content" className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
           {children}
         </main>
-
-        <footer className="px-4 sm:px-6 lg:px-8 pb-8 max-w-[1400px] mx-auto">
-          <p className="text-xs text-slate-400 border-t border-slate-200 pt-5">
-            Relevance scores are decision-support signals only. Every hiring decision stays with your recruiters.
-          </p>
-        </footer>
       </div>
+
+      {/* Global Command Palette */}
+      <CommandPalette
+        isOpen={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+      />
     </div>
   );
 };

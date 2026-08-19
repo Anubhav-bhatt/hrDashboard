@@ -49,6 +49,7 @@ const ScreeningAgent = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
+  const [showCriteriaDetails, setShowCriteriaDetails] = useState(false);
 
   useEffect(() => {
     if (urlJobId && urlJobId !== jobId) setJobId(urlJobId);
@@ -313,52 +314,68 @@ const ScreeningAgent = () => {
               </Card>
             )}
 
-            {/* Criteria Review Table */}
+            {/* Collapsible Criteria Review ("Why this score?") */}
             {result.criteria && result.criteria.length > 0 && (
-              <Card>
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-3">
-                  Detailed Criteria Review
-                </h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm border-collapse">
-                    <thead>
-                      <tr className="border-b border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        <th className="py-2.5 px-3">Criterion</th>
-                        <th className="py-2.5 px-3">Type</th>
-                        <th className="py-2.5 px-3">Status</th>
-                        <th className="py-2.5 px-3">Evidence</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                      {result.criteria.map((crit, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
-                          <td className="py-2.5 px-3 font-medium text-slate-900 dark:text-slate-100">
-                            {crit.criterion}
-                          </td>
-                          <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400 text-xs">
-                            {crit.type}
-                          </td>
-                          <td className="py-2.5 px-3">
-                            <span
-                              className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${
-                                crit.status === 'MATCH'
-                                  ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
-                                  : crit.status === 'GAP'
-                                  ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300'
-                                  : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                              }`}
-                            >
-                              {crit.status}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-3 text-xs text-slate-600 dark:text-slate-400">
-                            {crit.evidence}
-                          </td>
+              <Card className="space-y-3">
+                <button
+                  type="button"
+                  onClick={() => setShowCriteriaDetails((prev) => !prev)}
+                  className="w-full flex items-center justify-between text-left focus-visible:ring-2 focus-visible:ring-brand-500 rounded-md"
+                  aria-expanded={showCriteriaDetails}
+                >
+                  <div className="flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      Detailed Criteria Review
+                    </h3>
+                  </div>
+                  <span className="text-xs text-indigo-600 dark:text-indigo-400 font-semibold hover:underline">
+                    {showCriteriaDetails ? 'Collapse' : 'Expand'}
+                  </span>
+                </button>
+
+                {showCriteriaDetails && (
+                  <div className="overflow-x-auto pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <table className="w-full text-left text-sm border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                          <th className="py-2.5 px-3">Criterion</th>
+                          <th className="py-2.5 px-3">Type</th>
+                          <th className="py-2.5 px-3">Status</th>
+                          <th className="py-2.5 px-3">Evidence</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                        {result.criteria.map((crit, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
+                            <td className="py-2.5 px-3 font-medium text-slate-900 dark:text-slate-100">
+                              {crit.criterion}
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400 text-xs">
+                              {crit.type}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${
+                                  crit.status === 'MATCH'
+                                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
+                                    : crit.status === 'GAP'
+                                    ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300'
+                                    : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                                }`}
+                              >
+                                {crit.status}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-xs text-slate-600 dark:text-slate-400">
+                              {crit.evidence}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </Card>
             )}
 

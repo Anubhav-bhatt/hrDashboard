@@ -19,12 +19,10 @@ const RecentHires = ({ hires = [], loading = false }) => (
         title="Recent hires"
         description="Candidates selected when a job was closed."
         actions={
-          hires.length > 0 && (
-            <Link to="/jobs/closed" className="btn btn-sm btn-ghost">
-              View closed jobs
-              <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
-            </Link>
-          )
+          <Link to="/jobs/closed" className="btn btn-sm btn-ghost text-xs">
+            View closed jobs
+            <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+          </Link>
         }
       />
     </div>

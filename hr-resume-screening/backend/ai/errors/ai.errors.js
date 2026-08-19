@@ -30,7 +30,15 @@ const AI_ERROR_CODES = Object.freeze({
   RANKING_JOB_REQUIRED: 400,
   RANKING_INVALID_SCOPE: 400,
   RANKING_NO_CANDIDATES: 400,
-  RANKING_INVALID_FILTER: 400
+  RANKING_INVALID_FILTER: 400,
+  /** Comparison-specific errors */
+  COMPARISON_JOB_REQUIRED: 400,
+  COMPARISON_CANDIDATES_REQUIRED: 400,
+  COMPARISON_TOO_FEW_CANDIDATES: 400,
+  COMPARISON_TOO_MANY_CANDIDATES: 400,
+  COMPARISON_DUPLICATE_CANDIDATE: 400,
+  COMPARISON_CANDIDATE_MISMATCH: 400,
+  COMPARISON_CANDIDATE_NOT_FOUND: 404
 });
 
 /**
@@ -121,6 +129,28 @@ const rankingNoCandidates = () =>
 const rankingInvalidFilter = (message) =>
   new AiError('RANKING_INVALID_FILTER', message || 'Invalid filter parameters for candidate ranking.');
 
+// Comparison factories
+const comparisonJobRequired = () =>
+  new AiError('COMPARISON_JOB_REQUIRED', 'Comparison requires a selected job.');
+
+const comparisonCandidatesRequired = () =>
+  new AiError('COMPARISON_CANDIDATES_REQUIRED', 'Comparison requires selected candidates.');
+
+const comparisonTooFewCandidates = () =>
+  new AiError('COMPARISON_TOO_FEW_CANDIDATES', 'Comparison requires at least 2 candidates.');
+
+const comparisonTooManyCandidates = () =>
+  new AiError('COMPARISON_TOO_MANY_CANDIDATES', 'Comparison supports a maximum of 5 candidates.');
+
+const comparisonDuplicateCandidate = () =>
+  new AiError('COMPARISON_DUPLICATE_CANDIDATE', 'Comparison requires unique candidate selections.');
+
+const comparisonCandidateMismatch = () =>
+  new AiError('COMPARISON_CANDIDATE_MISMATCH', 'One or more selected candidates do not belong to the selected job.');
+
+const comparisonCandidateNotFound = (id) =>
+  new AiError('COMPARISON_CANDIDATE_NOT_FOUND', `Candidate ${id || ''} could not be found for comparison.`);
+
 module.exports = {
   AI_ERROR_CODES,
   AiError,
@@ -136,5 +166,12 @@ module.exports = {
   rankingJobRequired,
   rankingInvalidScope,
   rankingNoCandidates,
-  rankingInvalidFilter
+  rankingInvalidFilter,
+  comparisonJobRequired,
+  comparisonCandidatesRequired,
+  comparisonTooFewCandidates,
+  comparisonTooManyCandidates,
+  comparisonDuplicateCandidate,
+  comparisonCandidateMismatch,
+  comparisonCandidateNotFound
 };

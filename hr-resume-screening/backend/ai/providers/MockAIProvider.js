@@ -15,6 +15,7 @@
 const { AIProvider } = require('./AIProvider');
 const {
   computeFitLevel,
+  candidateHasSkill,
   evaluateSkills,
   detectMandatoryGaps,
   evaluateExperience,
@@ -334,6 +335,311 @@ class MockAIProvider extends AIProvider {
   }
 
   /**
+   * Deterministically compares 2-5 candidates for a job.
+   *
+   * @param {Object} evidence
+   * @returns {Object} Structured comparison data
+   */
+  evaluateComparison(evidence) {
+    const { job, candidates = [], candidateCount, instruction } = evidence;
+    const reqs = job.requirements || {};
+    const requiredSkills = reqs.requiredSkills || [];
+    const preferredSkills = reqs.preferredSkills || [];
+    const minExp = reqs.minimumExperience ?? 0;
+
+    let comparisonFocusApplied = false;
+    let comparisonFocusReason = null;
+
+    // 1. Evaluate individual candidates (preserving selection order)
+    const evaluatedCandidates = candidates.map(({ candidate, score }) => {
+      const candSkills = candidate.skills || [];
+      const skillEval = evaluateSkills(requiredSkills, preferredSkills, candSkills);
+      const candExp = candidate.experience?.statedYears ?? candidate.experience?.computedYears ?? null;
+      const expEval = evaluateExperience(minExp, candExp);
+
+      const isScored = Boolean(score && score.isScored && score.overall !== null && score.overall !== undefined);
+      const matchScore = isScored ? score.overall : null;
+      const fitLevel = computeFitLevel(matchScore, isScored);
+
+      const priority = evaluatePriorityInstruction(instruction, candidate, reqs);
+      if (priority.applied) {
+        comparisonFocusApplied = true;
+        comparisonFocusReason = priority.reason;
+      }
+
+      const strengths = [];
+      for (const skill of skillEval.matchedRequired) {
+        strengths.push(`✓ ${skill} (Required)`);
+      }
+      for (const skill of skillEval.matchedPreferred) {
+        strengths.push(`✓ ${skill} (Preferred)`);
+      }
+      if (expEval.meetsRequirement && candExp !== null && minExp > 0) {
+        strengths.push(`✓ Experience (${candExp} yrs >= ${minExp} yrs)`);
+      }
+
+      const gaps = [];
+      for (const missing of skillEval.missingRequired) {
+        gaps.push(`Missing mandatory: ${missing}`);
+      }
+      for (const missing of skillEval.missingPreferred) {
+        gaps.push(`Missing preferred: ${missing}`);
+      }
+      if (expEval.status === 'GAP') {
+        gaps.push(`Experience below minimum (${candExp ?? 0} yrs < ${minExp} yrs)`);
+      }
+
+      const dataWarnings = [];
+      if (!isScored) {
+        dataWarnings.push('Candidate has no stored match score record');
+      }
+      if (candExp === null) {
+        dataWarnings.push('Experience years not stated or parsed');
+      }
+      if (candSkills.length === 0) {
+        dataWarnings.push('No skills parsed in profile');
+      }
+
+      const prioritySignals = priority.applied ? priority.matches.map((m) => `Matches focus: ${m}`) : [];
+
+      return {
+        candidateId: candidate.candidateId,
+        candidateName: candidate.name || 'Unnamed candidate',
+        matchScore,
+        fitLevel,
+        isScored,
+        statedYears: candExp,
+        skills: candSkills,
+        status: candidate.status?.hrStatus || 'APPLIED',
+        isShortlisted: Boolean(candidate.status?.isShortlisted),
+        strengths,
+        gaps,
+        mandatoryGaps: skillEval.missingRequired,
+        matchedRequiredCount: skillEval.matchedRequired.length,
+        dataWarnings,
+        priorityMatch: priority.applied,
+        prioritySignals
+      };
+    });
+
+    // 2. Criteria Evaluation Grid (Rows: Criteria, Columns: Candidates)
+    const criteria = [];
+
+    // Criteria: Stored Match Score
+    criteria.push({
+      criterion: 'overall_score',
+      type: 'score',
+      label: 'Match Score',
+      values: evaluatedCandidates.map((c) => ({
+        candidateId: c.candidateId,
+        status: c.isScored ? 'MATCH' : 'INSUFFICIENT_DATA',
+        evidence: c.isScored ? `${c.matchScore}%` : 'Unscored'
+      }))
+    });
+
+    // Criteria: Fit Level
+    criteria.push({
+      criterion: 'fit_level',
+      type: 'fit',
+      label: 'Fit Level',
+      values: evaluatedCandidates.map((c) => ({
+        candidateId: c.candidateId,
+        status: c.fitLevel === 'VERY_STRONG' || c.fitLevel === 'STRONG' ? 'MATCH' : (c.fitLevel === 'MODERATE' ? 'PARTIAL' : (c.fitLevel === 'WEAK' ? 'GAP' : 'INSUFFICIENT_DATA')),
+        evidence: c.fitLevel
+      }))
+    });
+
+    // Criteria: Required Skills
+    for (const skill of requiredSkills) {
+      criteria.push({
+        criterion: skill,
+        type: 'required_skill',
+        label: `${skill} (Required)`,
+        values: evaluatedCandidates.map((c) => {
+          const has = candidateHasSkill(c.skills, skill);
+          return {
+            candidateId: c.candidateId,
+            status: has ? 'MATCH' : 'GAP',
+            evidence: has ? 'Present in profile' : 'Not found in profile'
+          };
+        })
+      });
+    }
+
+    // Criteria: Preferred Skills
+    for (const skill of preferredSkills) {
+      criteria.push({
+        criterion: skill,
+        type: 'preferred_skill',
+        label: `${skill} (Preferred)`,
+        values: evaluatedCandidates.map((c) => {
+          const has = candidateHasSkill(c.skills, skill);
+          return {
+            candidateId: c.candidateId,
+            status: has ? 'MATCH' : 'GAP',
+            evidence: has ? 'Present in profile' : 'Not found in profile'
+          };
+        })
+      });
+    }
+
+    // Criteria: Experience
+    if (minExp > 0) {
+      criteria.push({
+        criterion: 'experience',
+        type: 'experience',
+        label: `Experience (Min ${minExp} yrs)`,
+        values: evaluatedCandidates.map((c) => {
+          if (c.statedYears === null) {
+            return {
+              candidateId: c.candidateId,
+              status: 'UNKNOWN',
+              evidence: 'Not specified'
+            };
+          }
+          const meets = c.statedYears >= minExp;
+          return {
+            candidateId: c.candidateId,
+            status: meets ? 'MATCH' : 'GAP',
+            evidence: `${c.statedYears} years`
+          };
+        })
+      });
+    }
+
+    // 3. Best By Dimension (Evidence-based observations)
+    const bestByDimension = [];
+
+    // Highest Match Score
+    const scoredCandidates = evaluatedCandidates.filter((c) => c.isScored && c.matchScore !== null);
+    if (scoredCandidates.length > 0) {
+      const highestScore = Math.max(...scoredCandidates.map((c) => c.matchScore));
+      const leaders = scoredCandidates.filter((c) => c.matchScore === highestScore);
+      bestByDimension.push({
+        dimension: 'Highest Match Score',
+        candidateId: leaders[0].candidateId,
+        candidateName: leaders[0].candidateName,
+        reason: `${leaders[0].candidateName} leads with an existing match score of ${highestScore}%.`
+      });
+    }
+
+    // Strongest Mandatory Skill Coverage
+    const maxMandatory = Math.max(...evaluatedCandidates.map((c) => c.matchedRequiredCount));
+    if (maxMandatory > 0) {
+      const mandatoryLeaders = evaluatedCandidates.filter((c) => c.matchedRequiredCount === maxMandatory);
+      bestByDimension.push({
+        dimension: 'Mandatory Requirements',
+        candidateId: mandatoryLeaders[0].candidateId,
+        candidateName: mandatoryLeaders[0].candidateName,
+        reason: `${mandatoryLeaders[0].candidateName} covers ${maxMandatory} of ${requiredSkills.length} mandatory skills (${mandatoryLeaders[0].mandatoryGaps.length === 0 ? 'zero gaps' : `${mandatoryLeaders[0].mandatoryGaps.length} missing`}).`
+      });
+    }
+
+    // Most Experience
+    const expCandidates = evaluatedCandidates.filter((c) => c.statedYears !== null);
+    if (expCandidates.length > 0) {
+      const maxExp = Math.max(...expCandidates.map((c) => c.statedYears));
+      const expLeaders = expCandidates.filter((c) => c.statedYears === maxExp);
+      if (maxExp > 0) {
+        bestByDimension.push({
+          dimension: 'Total Experience',
+          candidateId: expLeaders[0].candidateId,
+          candidateName: expLeaders[0].candidateName,
+          reason: `${expLeaders[0].candidateName} has the most stated experience (${maxExp} years).`
+        });
+      }
+    }
+
+    // Focus Alignment
+    if (comparisonFocusApplied) {
+      const focusMatches = evaluatedCandidates.filter((c) => c.priorityMatch);
+      if (focusMatches.length > 0) {
+        bestByDimension.push({
+          dimension: 'Focus Alignment',
+          candidateId: focusMatches[0].candidateId,
+          candidateName: focusMatches[0].candidateName,
+          reason: `${focusMatches[0].candidateName} matches the stated focus: "${instruction}".`
+        });
+      }
+    }
+
+    // 4. Key Trade-offs Analysis
+    const tradeoffs = [];
+    if (evaluatedCandidates.length >= 2) {
+      const c1 = evaluatedCandidates[0];
+      const c2 = evaluatedCandidates[1];
+
+      // Compare c1 vs c2
+      if (c1.matchScore !== null && c2.matchScore !== null) {
+        if (c1.matchScore > c2.matchScore) {
+          tradeoffs.push(
+            `${c1.candidateName} holds a higher match score (${c1.matchScore}% vs ${c2.matchScore}%), but review individual skill alignment below.`
+          );
+        } else if (c2.matchScore > c1.matchScore) {
+          tradeoffs.push(
+            `${c2.candidateName} holds a higher match score (${c2.matchScore}% vs ${c1.matchScore}%), but review individual skill alignment below.`
+          );
+        }
+      }
+
+      if (c1.mandatoryGaps.length !== c2.mandatoryGaps.length) {
+        const fewer = c1.mandatoryGaps.length < c2.mandatoryGaps.length ? c1 : c2;
+        const more = c1.mandatoryGaps.length < c2.mandatoryGaps.length ? c2 : c1;
+        tradeoffs.push(
+          `${fewer.candidateName} has fewer mandatory requirement gaps (${fewer.mandatoryGaps.length}) compared to ${more.candidateName} (${more.mandatoryGaps.length} gaps).`
+        );
+      }
+
+      if (c1.statedYears !== null && c2.statedYears !== null && c1.statedYears !== c2.statedYears) {
+        const moreExp = c1.statedYears > c2.statedYears ? c1 : c2;
+        const lessExp = c1.statedYears > c2.statedYears ? c2 : c1;
+        tradeoffs.push(
+          `${moreExp.candidateName} offers more years of experience (${moreExp.statedYears}y vs ${lessExp.statedYears}y).`
+        );
+      }
+    }
+
+    // Default trade-off if list is empty
+    if (tradeoffs.length === 0) {
+      tradeoffs.push('Candidates present comparable profiles; compare specific skill criteria in the matrix below.');
+    }
+
+    // 5. Warnings
+    const warnings = [];
+    const unscoredCount = evaluatedCandidates.filter((c) => !c.isScored).length;
+    if (unscoredCount > 0) {
+      warnings.push(`${unscoredCount} candidate(s) do not have authoritative match scores.`);
+    }
+
+    const withMandatoryGaps = evaluatedCandidates.filter((c) => c.mandatoryGaps.length > 0);
+    if (withMandatoryGaps.length > 0) {
+      warnings.push(
+        `${withMandatoryGaps.map((c) => c.candidateName).join(', ')} have missing mandatory job skills.`
+      );
+    }
+
+    // 6. Summary
+    const summary = `Side-by-side comparison of ${evaluatedCandidates.length} candidate(s) for ${job.title || 'the selected role'}. Review the criteria breakdown and trade-offs above to inform your selection.`;
+
+    return {
+      jobId: job.id,
+      jobTitle: job.title || 'Untitled job',
+      candidateCount: evaluatedCandidates.length,
+      comparisonFocus: instruction || null,
+      comparisonFocusApplied,
+      comparisonFocusReason: instruction && !comparisonFocusApplied
+        ? 'The mock comparison engine could not map the instruction to supported structured criteria.'
+        : comparisonFocusReason,
+      candidates: evaluatedCandidates,
+      criteria,
+      tradeoffs,
+      bestByDimension,
+      summary,
+      warnings
+    };
+  }
+
+  /**
    * @param {import('../types/ai.types').AIRequest} request
    * @returns {Promise<import('../types/ai.types').AIProviderResult>}
    */
@@ -351,6 +657,8 @@ class MockAIProvider extends AIProvider {
       structuredData = this.evaluateScreening(evidence);
     } else if (mode === 'ranking' && evidence) {
       structuredData = this.evaluateRanking(evidence);
+    } else if (mode === 'comparison' && evidence) {
+      structuredData = this.evaluateComparison(evidence);
     } else {
       structuredData = {
         placeholder: true,
@@ -374,3 +682,4 @@ class MockAIProvider extends AIProvider {
 }
 
 module.exports = { MockAIProvider, PROVIDER_NAME, MODEL_NAME, MODE_CONTENT };
+

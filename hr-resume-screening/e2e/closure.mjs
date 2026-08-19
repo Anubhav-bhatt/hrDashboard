@@ -188,24 +188,25 @@ try {
 
   /* ------------------------------------------- Active/Closed search filters */
   section('Job search and Active/Closed filtering');
-  await page.goto(`${BASE}/jobs?search=${TAG}`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/jobs?search=${TAG}`, { waitUntil: 'networkidle' });
   await page.locator('#job-search').waitFor({ state: 'visible', timeout: 20000 });
-  await page.waitForTimeout(1200);
+  await page.waitForSelector(`text=${job.title}`, { timeout: 15000 });
+  await page.waitForTimeout(600);
 
   check((await page.locator('#job-search').inputValue()) === TAG, 'the search term is restored from the URL on load');
   let body = await text();
   check(body.includes(job.title), 'the searched job is listed');
   check(/\bActive\b/.test(body), 'an open job shows an Active badge');
-  check(/1 job found/i.test(body), 'the result count is shown', body.slice(0, 200));
+  check(/1 job found/i.test(body), 'the result count is shown', body);
 
   // Two tabs, not three: a recruiter is either working live roles or reviewing
   // history, so an "All" tab that mixed them was dropped.
   const tabs = page.locator('[aria-label="Filter jobs by status"] button');
   check((await tabs.count()) === 2, 'Active / Closed tabs are present');
-  check(/Active\s*1/.test(body) && /Closed\s*0/.test(body), 'tab counts come from the backend', body.slice(0, 200));
+  check(/Active\s*1/.test(body) && /Closed\s*0/.test(body), 'tab counts come from the backend', body);
 
   await tabs.nth(1).click(); // Closed
-  await page.waitForTimeout(1200);
+  await page.waitForTimeout(1500);
   check(page.url().includes('status=CLOSED'), 'selecting Closed writes the filter to the URL', page.url());
   // With a search term active, the search is the reason nothing matched, so the
   // no-results state is the honest message rather than "no closed jobs yet".

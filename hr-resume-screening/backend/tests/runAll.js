@@ -23,7 +23,8 @@ const SUITES = [
   { name: 'AI API (POST /api/ai/run)', file: 'aiApi.test.js', requiresDatabase: true },
   { name: 'AI tool layer', file: 'aiTools.test.js', requiresDatabase: true },
   { name: 'Screening Agent (mode=screening)', file: 'screeningAgent.test.js', requiresDatabase: false },
-  { name: 'Ranking Agent (mode=ranking)', file: 'rankingAgent.test.js', requiresDatabase: false }
+  { name: 'Ranking Agent (mode=ranking)', file: 'rankingAgent.test.js', requiresDatabase: false },
+  { name: 'Comparison Agent (mode=comparison)', file: 'comparisonAgent.test.js', requiresDatabase: false }
 ];
 
 const runSuite = (file) =>

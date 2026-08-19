@@ -1,5 +1,5 @@
-import React from 'react';
-import { AlertCircle, CheckCircle2, Sparkles, ExternalLink, Search } from 'lucide-react';
+import React, { useState } from 'react';
+import { AlertCircle, CheckCircle2, Sparkles, ExternalLink, Search, GitCompare } from 'lucide-react';
 import { Badge, StatusBadge, Button, cx } from '../ui';
 
 const FIT_BADGES = {
@@ -40,16 +40,106 @@ const Points = ({ items = [], tone = 'strength' }) => {
   );
 };
 
-const RankingResultTable = ({ rows = [], onScreenCandidate, className }) => {
+const RankingResultTable = ({
+  rows = [],
+  onScreenCandidate,
+  onCompareCandidates,
+  className
+}) => {
+  const [selectedIds, setSelectedIds] = useState([]);
+
   if (!Array.isArray(rows) || rows.length === 0) return null;
+
+  const toggleSelect = (id) => {
+    setSelectedIds((prev) => {
+      if (prev.includes(id)) {
+        return prev.filter((item) => item !== id);
+      }
+      if (prev.length >= 5) {
+        return prev;
+      }
+      return [...prev, id];
+    });
+  };
+
+  const handleCompareSelected = () => {
+    if (selectedIds.length >= 2 && selectedIds.length <= 5 && onCompareCandidates) {
+      onCompareCandidates(selectedIds);
+    }
+  };
+
+  const handleCompareTop = (count) => {
+    const topIds = rows.slice(0, count).map((r) => r.candidateId);
+    if (topIds.length >= 2 && onCompareCandidates) {
+      onCompareCandidates(topIds);
+    }
+  };
+
+  const selectedCount = selectedIds.length;
+  const canCompareSelected = selectedCount >= 2 && selectedCount <= 5;
 
   return (
     <div className={cx('min-w-0 space-y-4', className)}>
+      {/* Action Toolbar for Ranking -> Comparison Handoff */}
+      {onCompareCandidates && rows.length >= 2 && (
+        <div className="card p-3 bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="primary"
+              size="sm"
+              icon={GitCompare}
+              disabled={!canCompareSelected}
+              onClick={handleCompareSelected}
+              id="compare-selected-btn"
+            >
+              Compare Selected ({selectedCount})
+            </Button>
+            {selectedCount > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedIds([])}
+                className="text-xs"
+              >
+                Clear
+              </Button>
+            )}
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {selectedCount < 2 ? '(Select 2–5 candidates)' : `${selectedCount} selected for comparison`}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {rows.length >= 2 && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => handleCompareTop(2)}
+                className="text-xs"
+              >
+                Compare Top 2
+              </Button>
+            )}
+            {rows.length >= 3 && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => handleCompareTop(3)}
+                className="text-xs"
+              >
+                Compare Top 3
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Desktop View: Table */}
       <div className="hidden md:block card p-0 overflow-x-auto scroll-slim">
         <table className="table w-full text-left border-collapse">
           <thead>
             <tr className="border-b border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              {onCompareCandidates && <th scope="col" className="w-10 py-3 px-3 text-center">Select</th>}
               <th scope="col" className="w-14 py-3 px-3">Rank</th>
               <th scope="col" className="py-3 px-3">Candidate</th>
               <th scope="col" className="w-24 py-3 px-3">Match Score</th>
@@ -63,9 +153,29 @@ const RankingResultTable = ({ rows = [], onScreenCandidate, className }) => {
             {rows.map((row) => {
               const fit = FIT_BADGES[row.fitLevel] || FIT_BADGES.MODERATE;
               const hasMandatoryGaps = Array.isArray(row.mandatoryGaps) && row.mandatoryGaps.length > 0;
+              const isSelected = selectedIds.includes(row.candidateId);
+              const atMax = selectedCount >= 5 && !isSelected;
 
               return (
-                <tr key={row.candidateId} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/30 transition-colors">
+                <tr
+                  key={row.candidateId}
+                  className={cx(
+                    'transition-colors',
+                    isSelected ? 'bg-indigo-50/50 dark:bg-indigo-950/20' : 'hover:bg-slate-50/60 dark:hover:bg-slate-900/30'
+                  )}
+                >
+                  {onCompareCandidates && (
+                    <td className="py-3 px-3 text-center">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        disabled={atMax}
+                        onChange={() => toggleSelect(row.candidateId)}
+                        className="w-4 h-4 rounded border-slate-300 text-brand-600 focus-visible:ring-2 focus-visible:ring-brand-500 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                        aria-label={`Select ${row.candidateName || 'candidate'} for comparison`}
+                      />
+                    </td>
+                  )}
                   <td className="py-3 px-3">
                     <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs">
                       #{row.rank}
@@ -136,11 +246,29 @@ const RankingResultTable = ({ rows = [], onScreenCandidate, className }) => {
         {rows.map((row) => {
           const fit = FIT_BADGES[row.fitLevel] || FIT_BADGES.MODERATE;
           const hasMandatoryGaps = Array.isArray(row.mandatoryGaps) && row.mandatoryGaps.length > 0;
+          const isSelected = selectedIds.includes(row.candidateId);
+          const atMax = selectedCount >= 5 && !isSelected;
 
           return (
-            <li key={row.candidateId} className="card card-pad space-y-3">
+            <li
+              key={row.candidateId}
+              className={cx(
+                'card card-pad space-y-3 transition-colors',
+                isSelected ? 'border-brand-500 bg-indigo-50/30 dark:bg-indigo-950/20' : ''
+              )}
+            >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2">
+                  {onCompareCandidates && (
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      disabled={atMax}
+                      onChange={() => toggleSelect(row.candidateId)}
+                      className="w-4 h-4 rounded border-slate-300 text-brand-600 focus-visible:ring-2 focus-visible:ring-brand-500 cursor-pointer"
+                      aria-label={`Select ${row.candidateName || 'candidate'} for comparison`}
+                    />
+                  )}
                   <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs">
                     #{row.rank}
                   </span>
