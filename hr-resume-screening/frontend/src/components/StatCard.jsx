@@ -37,7 +37,8 @@ const StatCard = ({
   trend,
   trendLabel,
   loading = false,
-  emptyValue = '0'
+  emptyValue = '0',
+  variant = 'default'
 }) => {
   const iconTone = TONES[tone] || TONES.brand;
 
@@ -51,6 +52,27 @@ const StatCard = ({
 
   const TrendIcon = trend > 0 ? TrendingUp : trend < 0 ? TrendingDown : Minus;
   const trendTone = trend > 0 ? 'text-emerald-600' : trend < 0 ? 'text-rose-600' : 'text-slate-400';
+
+  /*
+   * The compact variant leads with the figure and drops the icon and the arrow.
+   *
+   * On the dashboard's snapshot row the four cards are read as a set — one
+   * glance across a line of numbers — so the number goes first and the label
+   * becomes its caption. The icons earned their place on the old detail cards,
+   * where each stood alone; repeated four times across a summary row they only
+   * compete with the figures. The link, its accessible name and the NaN guard
+   * are shared with the default variant, so nothing that depends on those
+   * changes behaviour.
+   */
+  const compactBody = (
+    <>
+      <p className="text-metric text-slate-900 tabular-nums leading-none">{loading ? '—' : displayValue}</p>
+      <p className="text-body text-slate-600 mt-2">{label}</p>
+      {(trendLabel || subtitle) && (
+        <p className="text-meta text-slate-500 mt-1 truncate">{trendLabel || subtitle}</p>
+      )}
+    </>
+  );
 
   const body = (
     <>
@@ -85,8 +107,10 @@ const StatCard = ({
     </>
   );
 
+  const content = variant === 'compact' ? compactBody : body;
+
   if (!to) {
-    return <div className="card card-pad">{body}</div>;
+    return <div className="card card-pad">{content}</div>;
   }
 
   return (
@@ -95,7 +119,7 @@ const StatCard = ({
       className="card-interactive card-pad group block"
       aria-label={`${label}: ${displayValue}${subtitle ? `. ${subtitle}` : ''}`}
     >
-      {body}
+      {content}
     </Link>
   );
 };
