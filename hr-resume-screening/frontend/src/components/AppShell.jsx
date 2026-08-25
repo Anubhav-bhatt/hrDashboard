@@ -195,7 +195,7 @@ const AppShell = ({ children }) => {
           {!isCollapsed && (
             <span className="min-w-0">
               <span className="text-sm font-bold text-slate-900 leading-none block">HR Screening</span>
-              <span className="text-[10px] text-slate-400 font-medium block mt-0.5">Enterprise OS</span>
+              <span className="text-[10px] text-slate-500 font-medium block mt-0.5">Enterprise OS</span>
             </span>
           )}
         </Link>
@@ -206,7 +206,7 @@ const AppShell = ({ children }) => {
         {/* Main Workspace Navigation */}
         <nav aria-label="Main navigation" className="space-y-1">
           {!isCollapsed && (
-            <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+            <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
               WORKSPACE
             </p>
           )}
@@ -258,7 +258,7 @@ const AppShell = ({ children }) => {
                   aria-controls="ai-recruitment-group"
                   aria-expanded={!aiGroupCollapsed}
                   onClick={toggleAiGroup}
-                  className="w-full flex items-center justify-between px-2 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider hover:text-slate-600 transition-colors"
+                  className="w-full flex items-center justify-between px-2 py-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider hover:text-slate-600 transition-colors"
                 >
                   <span>AI Recruitment</span>
                   <ChevronDown
@@ -506,7 +506,7 @@ const AppShell = ({ children }) => {
                 >
                   <div className="px-3 py-2 border-b border-slate-100">
                     <p className="font-bold text-slate-900 truncate">{user?.name || 'Recruiter'}</p>
-                    <p className="text-[11px] text-slate-400 truncate">{user?.email || 'user@company.com'}</p>
+                    <p className="text-[11px] text-slate-500 truncate">{user?.email || 'user@company.com'}</p>
                     <span className="inline-block mt-1 px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 text-[10px] font-bold uppercase">
                       {user?.role || 'RECRUITER'}
                     </span>

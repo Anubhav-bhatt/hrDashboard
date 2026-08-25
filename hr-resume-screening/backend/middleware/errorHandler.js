@@ -55,6 +55,18 @@ const errorHandler = (err, req, res, next) => {
     message = 'The database is currently unavailable. Please try again shortly.';
   }
 
+  // Catch-all for any Prisma error the branches above did not name — most often
+  // PrismaClientUnknownRequestError, which a driver-level rejection produces (an
+  // identifier containing a NUL byte, for instance). Its message embeds the
+  // generated query and the absolute path of the calling file, and without this
+  // it was forwarded to the client verbatim outside production, contradicting
+  // the invariant stated at the top of this file. The status is left alone: an
+  // unnamed Prisma fault is not something to reclassify on a guess.
+  if (typeof err.name === 'string' && err.name.startsWith('PrismaClient') && message === err.message) {
+    errorCode = errorCode || 'DATABASE_ERROR';
+    message = 'The request could not be completed. Please check the supplied values and try again.';
+  }
+
   if (err instanceof SyntaxError && 'body' in err) {
     statusCode = 400;
     errorCode = 'MALFORMED_JSON';

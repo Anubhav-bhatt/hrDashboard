@@ -736,5 +736,86 @@ test('serialisers tolerate null and missing input', () => {
   });
 });
 
+suite.group('Error handler — Prisma text is never forwarded to the client');
+
+const { errorHandler } = require('../middleware/errorHandler');
+
+/** Runs the middleware against a fake res and returns the JSON payload + status. */
+const runErrorHandler = (err) => {
+  let status = 200;
+  let payload = null;
+  const res = {
+    statusCode: 200,
+    status(code) {
+      status = code;
+      return this;
+    },
+    json(body) {
+      payload = body;
+      return this;
+    }
+  };
+  errorHandler(err, { method: 'GET', originalUrl: '/api/candidates/x' }, res, () => {});
+  return { status, payload };
+};
+
+/**
+ * Regression: an identifier containing a NUL byte makes the driver reject the
+ * query, and Prisma raises PrismaClientUnknownRequestError. That class was named
+ * by none of the mapping branches, so its message — which embeds the generated
+ * query and the absolute path of the calling file — was returned to the browser
+ * verbatim outside production.
+ */
+const unknownRequestError = () => {
+  const error = new Error(
+    '\nInvalid `prisma.candidate.findUnique()` invocation in\n' +
+      'C:\\Users\\someone\\project\\backend\\services\\candidateService.js:120:45\n\n' +
+      'Error occurred during query execution'
+  );
+  error.name = 'PrismaClientUnknownRequestError';
+  error.clientVersion = '5.22.0';
+  return error;
+};
+
+test('PrismaClientUnknownRequestError message is replaced with a safe one', () => {
+  const { payload } = runErrorHandler(unknownRequestError());
+  assert.ok(!/Invalid `prisma/.test(payload.message), 'raw Prisma text reached the client');
+  assert.ok(!/[A-Za-z]:\\Users\\/.test(payload.message), 'an absolute server path reached the client');
+  assert.strictEqual(payload.code, 'DATABASE_ERROR');
+});
+
+test('an unnamed Prisma fault is not silently reclassified as a client error', () => {
+  const { status } = runErrorHandler(unknownRequestError());
+  assert.strictEqual(status, 500);
+});
+
+test('mapped Prisma codes keep their own message and status', () => {
+  const duplicate = new Error('Unique constraint failed on the fields: (`resumeHash`)');
+  duplicate.code = 'P2002';
+  const { status, payload } = runErrorHandler(duplicate);
+  assert.strictEqual(status, 409);
+  assert.strictEqual(payload.code, 'DUPLICATE_RECORD');
+  assert.ok(!/Unique constraint failed/.test(payload.message));
+});
+
+test('PrismaClientValidationError keeps its 400 mapping', () => {
+  const validation = new Error('Argument where is missing. Generated query: SELECT ...');
+  validation.name = 'PrismaClientValidationError';
+  const { status, payload } = runErrorHandler(validation);
+  assert.strictEqual(status, 400);
+  assert.strictEqual(payload.code, 'INVALID_QUERY');
+  assert.ok(!/Generated query/.test(payload.message));
+});
+
+test('a non-Prisma application error keeps its own message', () => {
+  const appError = new Error('This candidate profile could not be found.');
+  appError.statusCode = 404;
+  appError.code = 'CANDIDATE_NOT_FOUND';
+  const { status, payload } = runErrorHandler(appError);
+  assert.strictEqual(status, 404);
+  assert.strictEqual(payload.message, 'This candidate profile could not be found.');
+  assert.strictEqual(payload.code, 'CANDIDATE_NOT_FOUND');
+});
+
 const { failed } = suite.summary();
 process.exit(failed > 0 ? 1 : 0);
