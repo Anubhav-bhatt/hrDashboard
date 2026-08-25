@@ -126,7 +126,7 @@ export const CommandPalette = ({ isOpen, onClose }) => {
       aria-label="Command Palette"
     >
       <div
-        className="w-full max-w-xl bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[70vh]"
+        className="w-full max-w-xl bg-white border border-slate-200 rounded-card shadow-overlay overflow-hidden flex flex-col max-h-[70vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Search Header */}

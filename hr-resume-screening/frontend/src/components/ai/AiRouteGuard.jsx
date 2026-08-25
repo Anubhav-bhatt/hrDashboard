@@ -1,7 +1,8 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Lock, Sparkles } from 'lucide-react';
-import { EmptyState, Spinner } from '../ui';
+import { EmptyState } from '../ui';
+import RouteSkeleton from '../ui/RouteSkeleton';
 import { useAiConfig } from '../../context/AiConfigContext';
 
 /**
@@ -31,7 +32,7 @@ import { useAiConfig } from '../../context/AiConfigContext';
 const AiRouteGuard = ({ modeId, children }) => {
   const { enabled, loading, isModeEnabled } = useAiConfig();
 
-  if (loading) return <Spinner label="Checking availability…" />;
+  if (loading) return <RouteSkeleton variant="ai" label="Checking AI workspace availability..." />;
 
   if (!enabled) {
     return (

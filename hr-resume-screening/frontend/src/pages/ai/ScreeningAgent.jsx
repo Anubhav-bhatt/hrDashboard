@@ -324,12 +324,12 @@ const ScreeningAgent = () => {
                   aria-expanded={showCriteriaDetails}
                 >
                   <div className="flex items-center gap-2">
-                    <Layers className="w-4 h-4 text-indigo-600" />
+                    <Layers className="w-4 h-4 text-brand-600" />
                     <h3 className="text-sm font-semibold text-slate-900">
                       Detailed Criteria Review
                     </h3>
                   </div>
-                  <span className="text-xs text-indigo-600 font-semibold hover:underline">
+                  <span className="text-xs text-brand-600 font-semibold hover:underline">
                     {showCriteriaDetails ? 'Collapse' : 'Expand'}
                   </span>
                 </button>

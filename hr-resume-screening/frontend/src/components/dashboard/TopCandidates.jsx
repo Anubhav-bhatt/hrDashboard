@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Trophy } from 'lucide-react';
+import { ArrowRight, Eye, Trophy } from 'lucide-react';
 import { Avatar, Badge, Card, CardHeader, EmptyState, Skeleton, cx } from '../ui';
 import { formatExperience, getScoreMeta } from '../../utils/format';
 
@@ -9,8 +9,21 @@ import { formatExperience, getScoreMeta } from '../../utils/format';
  *
  * Only scored candidates appear — an unscored candidate has no position in a
  * ranking, and showing it as 0% would misrepresent it as a poor match.
+ *
+ * `onSelectCandidate` is optional. When a caller supplies it, each row also
+ * offers a preview control that opens the quick view instead of navigating, so
+ * a recruiter can skim several candidates without losing the page they are on.
+ * The row itself stays a link to the full profile either way — the preview is
+ * an addition, never a replacement. It is a sibling of the link rather than a
+ * child because a button nested inside an anchor is invalid HTML.
  */
-const TopCandidates = ({ candidates = [], loading = false, jobTitle = null, viewAllTo = '/candidates?sort=score_desc' }) => (
+const TopCandidates = ({
+  candidates = [],
+  loading = false,
+  jobTitle = null,
+  viewAllTo = '/candidates?sort=score_desc',
+  onSelectCandidate = null
+}) => (
   <Card padding="p-0">
     <div className="p-5 pb-3">
       <CardHeader
@@ -60,10 +73,10 @@ const TopCandidates = ({ candidates = [], loading = false, jobTitle = null, view
             : candidate.skills || [];
 
           return (
+            <div key={candidate._id} className="group flex items-stretch hover:bg-slate-50 transition-colors duration-fast">
             <Link
-              key={candidate._id}
               to={`/candidates/${candidate._id}`}
-              className="group flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors duration-fast focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-inset"
+              className="flex flex-1 min-w-0 items-center gap-3 px-4 py-3 focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-inset"
               aria-label={`Rank ${index + 1}: ${candidate.name}, ${score}% match`}
             >
               <span
@@ -108,6 +121,19 @@ const TopCandidates = ({ candidates = [], loading = false, jobTitle = null, view
                 aria-hidden="true"
               />
             </Link>
+
+            {onSelectCandidate && (
+              <button
+                type="button"
+                onClick={() => onSelectCandidate(candidate)}
+                className="px-3 shrink-0 text-slate-400 hover:text-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-inset transition-colors duration-fast"
+                aria-label={`Preview ${candidate.name} without leaving this page`}
+                title="Quick preview"
+              >
+                <Eye className="w-4 h-4" aria-hidden="true" />
+              </button>
+            )}
+            </div>
           );
         })
       )}

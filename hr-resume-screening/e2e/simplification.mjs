@@ -215,7 +215,7 @@ try {
   /* ---------------------------- Tests 67-68: candidate list simplification */
   section('Tests 67-70 — candidate list and profile');
   await page.goto(`${BASE}/candidates`, { waitUntil: 'domcontentloaded' });
-  await page.locator('a[aria-label^="Open profile for"]').first().waitFor({ state: 'visible', timeout: 25000 });
+  await page.locator('button[aria-label^="Quick look at"]').first().waitFor({ state: 'visible', timeout: 25000 });
 
   // Toolbar holds search, sort and a Filters button — not every filter.
   for (const gone of ['#filter-score', '#filter-experience', '#filter-location', '#filter-skill']) {
@@ -255,9 +255,10 @@ try {
   /* ------------------------------------- Test 70: score breakdown hidden */
   section('Test 70 — score breakdown is hidden but reachable');
   await page.goto(`${BASE}/candidates`, { waitUntil: 'domcontentloaded' });
-  await page.locator('a[aria-label^="Open profile for"]').first().waitFor({ state: 'visible', timeout: 25000 });
-  await page.locator('a[aria-label^="Open profile for"]').first().click();
-  await page.waitForURL('**/candidates/**', { timeout: 20000 });
+  await page.locator('button[aria-label^="Quick look at"]').first().waitFor({ state: 'visible', timeout: 25000 });
+  await page.locator('button[aria-label^="Quick look at"]').first().click();
+  await page.getByRole('dialog', { name: /candidate quick look/i }).getByRole('button', { name: /open full profile/i }).click();
+  await page.waitForURL((url) => /^\/candidates\/[^/]+$/.test(url.pathname), { timeout: 20000 });
   await page.waitForTimeout(2500);
 
   const profile = await text();

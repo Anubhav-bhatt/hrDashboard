@@ -10,7 +10,8 @@
     "test:ai": "node ai-shell.mjs",
     "test:ai:agents": "node ai-screening-ranking.mjs",
     "test:ai:comparison": "node ai-comparison.mjs",
-    "test:all": "node scenarios.mjs && node accessibility.mjs && node theme-and-shell.mjs && node closure.mjs && node simplification.mjs && node ai-shell.mjs && node ai-screening-ranking.mjs && node ai-comparison.mjs"
+    "test:candidate-cards": "node candidate-cards.mjs",
+    "test:all": "node scenarios.mjs && node accessibility.mjs && node theme-and-shell.mjs && node closure.mjs && node simplification.mjs && node candidate-cards.mjs && node ai-shell.mjs && node ai-screening-ranking.mjs && node ai-comparison.mjs"
   },
   "dependencies": {
     "playwright": "^1.62.1"

@@ -289,8 +289,8 @@ const RankingAgent = () => {
 
               {/* Preference Applied Banner */}
               {result.instructionApplied && (
-                <div className="mt-3 p-2.5 rounded bg-purple-50 border border-purple-200 text-xs text-purple-900 flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-purple-600 flex-shrink-0" />
+                <div className="mt-3 p-2.5 rounded bg-violet-50 border border-violet-200 text-xs text-violet-900 flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-violet-600 flex-shrink-0" />
                   <span>
                     <strong>Preference Applied:</strong> {result.instructionDetails || result.instruction} (Applied as tie-breaker without altering stored scores)
                   </span>

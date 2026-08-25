@@ -176,7 +176,7 @@ try {
   // sample the page before the search field and status tabs exist.
   await page.locator('#candidate-search').waitFor({ state: 'visible', timeout: 20000 });
   await page.locator('button[aria-pressed]').first().waitFor({ state: 'visible', timeout: 20000 });
-  await page.locator('a[aria-label^="Open profile for"]').first().waitFor({ state: 'visible', timeout: 20000 });
+  await page.locator('button[aria-label^="Quick look at"]').first().waitFor({ state: 'visible', timeout: 20000 });
 
   const listAudit = await page.evaluate(() => {
     const selects = Array.from(document.querySelectorAll('select'));
@@ -186,7 +186,7 @@ try {
         (s) => (s.labels && s.labels.length > 0) || s.getAttribute('aria-label')
       ),
       searchLabelled: Boolean(search && ((search.labels && search.labels.length) || search.getAttribute('aria-label'))),
-      cardsAreLinks: Array.from(document.querySelectorAll('[aria-label^="Open profile for"]')).every((el) => el.tagName === 'A'),
+      cardsAreButtons: Array.from(document.querySelectorAll('[aria-label^="Quick look at"]')).every((el) => el.tagName === 'BUTTON'),
       // A button nested inside an anchor is invalid and unpredictable to activate.
       nestedInteractive: document.querySelectorAll('a button, button a, a a').length,
       statusTabsHavePressed: Array.from(document.querySelectorAll('button[aria-pressed]')).length
@@ -195,13 +195,14 @@ try {
 
   check(listAudit.selectsLabelled, 'every filter and sort control has a label');
   check(listAudit.searchLabelled, 'the search field has a label');
-  check(listAudit.cardsAreLinks, 'candidate cards are anchors, keyboard operable by default');
+  check(listAudit.cardsAreButtons, 'candidate card bodies are semantic buttons, keyboard operable by default');
   check(listAudit.nestedInteractive === 0, 'no interactive element nested inside another', String(listAudit.nestedInteractive));
   check(listAudit.statusTabsHavePressed > 0, 'status filter buttons expose their pressed state');
 
   /* ----------------------------------------------- candidate profile ---- */
   section('Candidate profile');
-  await page.locator('a[aria-label^="Open profile for"]').first().click();
+  await page.locator('button[aria-label^="Quick look at"]').first().click();
+  await page.getByRole('dialog', { name: /candidate quick look/i }).getByRole('button', { name: /open full profile/i }).click();
   await page.getByRole('tab', { name: /overview/i }).waitFor({ state: 'visible', timeout: 20000 });
 
   const tabAudit = await page.evaluate(() => {

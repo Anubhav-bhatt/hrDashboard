@@ -24,6 +24,15 @@ const ramp = (name, steps) =>
 
 const NEUTRAL_STEPS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
 const ACCENT_STEPS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
+const PRODUCT_FONT_STACK = [
+  'Quicksand',
+  'ui-sans-serif',
+  'system-ui',
+  '-apple-system',
+  'BlinkMacSystemFont',
+  'Segoe UI',
+  'sans-serif'
+];
 
 /** @type {import('tailwindcss').Config} */
 export default {
@@ -85,17 +94,31 @@ export default {
         }
       },
       fontFamily: {
-        sans: [
-          'Inter',
-          '-apple-system',
-          'BlinkMacSystemFont',
-          'Segoe UI',
-          'Roboto',
-          'Helvetica Neue',
-          'Arial',
-          'sans-serif'
-        ],
+        sans: PRODUCT_FONT_STACK,
+        body: PRODUCT_FONT_STACK,
+        heading: PRODUCT_FONT_STACK,
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace']
+      },
+      fontWeight: {
+        normal: '400',
+        // Legacy component intent is retained without expanding the product
+        // beyond the Quicksand Regular + Bold pairing. Quiet emphasis stays
+        // regular; strong emphasis resolves to the single bold face.
+        medium: '400',
+        semibold: '700',
+        bold: '700',
+        extrabold: '700',
+        black: '700'
+      },
+      letterSpacing: {
+        tighter: '0',
+        tight: '0',
+        normal: '0',
+        // Restrained tracking is reserved for uppercase micro-labels. Headings
+        // and body copy use the zero-tracking values above.
+        wide: '0.015em',
+        wider: '0.025em',
+        widest: '0.04em'
       },
       fontSize: {
         /*
@@ -103,23 +126,23 @@ export default {
          * sizes. Six steps only, and weight is part of the step so a heading
          * cannot accidentally be rendered at the wrong weight:
          *
-         *   display     28px semibold  page titles
-         *   page-title  22px semibold  page titles on narrow screens
-         *   section     18px semibold  section headings
-         *   card-title  15px semibold  card headings
+         *   display     28px bold      page titles
+         *   page-title  22px bold      page titles on narrow screens
+         *   section     18px bold      section headings
+         *   card-title  15px bold      card headings
          *   body        14px regular   default copy
          *   meta        13px regular   secondary copy
-         *   label       12px semibold  uppercase eyebrows and field labels
-         *   metric      30px semibold  KPI figures
+         *   label       12px bold      uppercase eyebrows and field labels
+         *   metric      30px bold      KPI figures
          */
-        display: ['1.75rem', { lineHeight: '2.125rem', letterSpacing: '-0.02em', fontWeight: '600' }],
-        'page-title': ['1.375rem', { lineHeight: '1.75rem', letterSpacing: '-0.015em', fontWeight: '600' }],
-        section: ['1.125rem', { lineHeight: '1.625rem', letterSpacing: '-0.011em', fontWeight: '600' }],
-        'card-title': ['0.9375rem', { lineHeight: '1.375rem', fontWeight: '600' }],
-        body: ['0.875rem', { lineHeight: '1.375rem' }],
-        meta: ['0.8125rem', { lineHeight: '1.25rem' }],
-        label: ['0.75rem', { lineHeight: '1rem', letterSpacing: '0.02em', fontWeight: '600' }],
-        metric: ['1.875rem', { lineHeight: '2.25rem', letterSpacing: '-0.025em', fontWeight: '600' }]
+        display: ['1.75rem', { lineHeight: '2.125rem', letterSpacing: '0', fontWeight: '700' }],
+        'page-title': ['1.375rem', { lineHeight: '1.75rem', letterSpacing: '0', fontWeight: '700' }],
+        section: ['1.125rem', { lineHeight: '1.625rem', letterSpacing: '0', fontWeight: '700' }],
+        'card-title': ['0.9375rem', { lineHeight: '1.375rem', letterSpacing: '0', fontWeight: '700' }],
+        body: ['0.875rem', { lineHeight: '1.375rem', letterSpacing: '0', fontWeight: '400' }],
+        meta: ['0.8125rem', { lineHeight: '1.25rem', letterSpacing: '0', fontWeight: '400' }],
+        label: ['0.75rem', { lineHeight: '1rem', letterSpacing: '0', fontWeight: '700' }],
+        metric: ['1.875rem', { lineHeight: '2.25rem', letterSpacing: '0', fontWeight: '700' }]
       },
       spacing: {
         // 4px-based scale used throughout the app.

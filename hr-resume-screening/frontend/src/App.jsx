@@ -7,6 +7,7 @@ import AiRouteGuard from './components/ai/AiRouteGuard';
 import AppShell from './components/AppShell';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ProfileSkeleton, Spinner } from './components/ui';
+import RouteSkeleton from './components/ui/RouteSkeleton';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import JobsList from './pages/JobsList';
@@ -168,7 +169,7 @@ function App() {
               <Route
                 path="/jobs/:jobId/import"
                 element={
-                  <RequireAuth>
+                  <RequireAuth fallback={<RouteSkeleton variant="upload" label="Preparing resume import..." />}>
                     <ImportCandidates />
                   </RequireAuth>
                 }
@@ -203,7 +204,7 @@ function App() {
               <Route
                 path="/ai"
                 element={
-                  <RequireAuth>
+                  <RequireAuth fallback={<RouteSkeleton variant="ai" label="Loading AI Assistant..." />}>
                     <AiRouteGuard>
                       <AIAssistant />
                     </AiRouteGuard>
@@ -213,7 +214,7 @@ function App() {
               <Route
                 path="/ai/screening"
                 element={
-                  <RequireAuth>
+                  <RequireAuth fallback={<RouteSkeleton variant="ai" label="Loading candidate screening..." />}>
                     <AiRouteGuard modeId="screening">
                       <ScreeningAgent />
                     </AiRouteGuard>
@@ -223,7 +224,7 @@ function App() {
               <Route
                 path="/ai/ranking"
                 element={
-                  <RequireAuth>
+                  <RequireAuth fallback={<RouteSkeleton variant="ai" label="Loading candidate ranking..." />}>
                     <AiRouteGuard modeId="ranking">
                       <RankingAgent />
                     </AiRouteGuard>
@@ -233,7 +234,7 @@ function App() {
               <Route
                 path="/ai/comparison"
                 element={
-                  <RequireAuth>
+                  <RequireAuth fallback={<RouteSkeleton variant="ai" label="Loading candidate comparison..." />}>
                     <AiRouteGuard modeId="comparison">
                       <ComparisonAgent />
                     </AiRouteGuard>
@@ -243,7 +244,7 @@ function App() {
               <Route
                 path="/ai/insights"
                 element={
-                  <RequireAuth>
+                  <RequireAuth fallback={<RouteSkeleton variant="ai" label="Loading recruitment insights..." />}>
                     <AiRouteGuard modeId="insights">
                       <InsightsAgent />
                     </AiRouteGuard>

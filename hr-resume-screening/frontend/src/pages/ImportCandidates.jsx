@@ -8,7 +8,6 @@ import {
   Upload,
   Search,
   CheckCircle2,
-  AlertCircle,
   Loader2,
   Users,
   Play,
@@ -26,7 +25,8 @@ import {
   processCandidates,
   uploadBulkCandidates
 } from '../services/api';
-import { Card, EmptyState, PageHeader, ProgressBar, Spinner } from '../components/ui';
+import { Card, EmptyState, InlineAlert, PageHeader, ProgressBar } from '../components/ui';
+import RouteSkeleton from '../components/ui/RouteSkeleton';
 
 const ImportCandidates = () => {
   const { jobId } = useParams();
@@ -345,7 +345,7 @@ const ImportCandidates = () => {
   };
 
   if (loadingJob) {
-    return <Spinner label="Preparing the resume import workspace…" />;
+    return <RouteSkeleton variant="upload" label="Preparing the resume import workspace..." />;
   }
 
   const pdfCount = bulkFiles.filter(f => f.ext === '.pdf').length;
@@ -535,7 +535,7 @@ const ImportCandidates = () => {
 
             {/* BULK PREVIEW & MONITORING SECTION */}
             {bulkFiles.length > 0 && (
-              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+              <div className="card card-pad-lg space-y-6">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-4 gap-4">
                   <div>
                     <h3 className="text-base font-bold text-slate-900 flex items-center space-x-2">
@@ -553,7 +553,7 @@ const ImportCandidates = () => {
                         type="button"
                         onClick={handleStartBulkProcessing}
                         disabled={bulkProcessing || bulkFiles.filter(f => f.status === 'WAITING').length === 0}
-                        className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs rounded-xl shadow transition-colors disabled:opacity-50 flex items-center space-x-2"
+                        className="btn btn-md btn-primary"
                       >
                         {bulkProcessing ? (
                           <>
@@ -570,7 +570,7 @@ const ImportCandidates = () => {
                     ) : (
                       <Link
                         to={`/jobs/${jobId}/candidates`}
-                        className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow transition-colors inline-flex items-center space-x-2"
+                        className="btn btn-md btn-success-soft"
                       >
                         <Users className="w-4 h-4" />
                         <span>View Ranked Candidates</span>
@@ -581,7 +581,7 @@ const ImportCandidates = () => {
                       type="button"
                       onClick={handleClearBulk}
                       disabled={bulkProcessing}
-                      className="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-colors disabled:opacity-50"
+                      className="btn btn-md btn-ghost"
                     >
                       Clear Selection
                     </button>
@@ -684,9 +684,9 @@ const ImportCandidates = () => {
                 )}
 
                 {/* File-Level Status Table */}
-                <div className="border border-slate-200 rounded-xl overflow-hidden shadow-inner">
-                  <div className="max-h-72 overflow-y-auto">
-                    <table className="w-full text-left text-xs text-slate-700">
+                <div className="overflow-hidden rounded-card border border-slate-200">
+                  <div className="max-h-72 overflow-auto scroll-slim">
+                    <table className="data-table min-w-[44rem] text-xs text-slate-700">
                       <thead className="bg-slate-100 sticky top-0 font-semibold text-slate-500 uppercase border-b border-slate-200">
                         <tr>
                           <th className="px-4 py-2.5">File Name</th>
@@ -696,7 +696,7 @@ const ImportCandidates = () => {
                           <th className="px-4 py-2.5 text-right">Details</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-200 bg-white font-mono">
+                      <tbody className="divide-y divide-slate-200 bg-white font-normal">
                         {bulkFiles.slice(0, 150).map((item, idx) => (
                           <tr key={idx} className="hover:bg-slate-50">
                             <td className="px-4 py-2 font-bold text-slate-900 truncate max-w-xs">{item.fileName}</td>
@@ -739,7 +739,7 @@ const ImportCandidates = () => {
         {/* TAB 2: MICROSOFT OUTLOOK INTEGRATION */}
         {activeTab === 'outlook' && (
           <div className="mt-6 space-y-6">
-            <div className="p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-slate-50 border-slate-200">
+            <div className="rounded-card border border-slate-200 bg-slate-50 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="flex items-center space-x-3">
                 <div className={`p-2.5 rounded-lg text-white ${outlookConnected ? 'bg-emerald-600' : 'bg-amber-500'}`}>
                   <Mail className="w-5 h-5" />
@@ -758,7 +758,7 @@ const ImportCandidates = () => {
                 <button
                   type="button"
                   onClick={handleDisconnectOutlook}
-                  className="px-3.5 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition-colors shrink-0"
+                  className="btn btn-sm btn-secondary shrink-0"
                 >
                   Disconnect Account
                 </button>
@@ -766,23 +766,18 @@ const ImportCandidates = () => {
                 <button
                   type="button"
                   onClick={() => { window.location.href = `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/outlook/connect`; }}
-                  className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-lg shadow transition-colors shrink-0"
+                  className="btn btn-sm btn-primary shrink-0"
                 >
                   Connect Outlook
                 </button>
               )}
             </div>
 
-            {outlookError && (
-              <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center space-x-2 text-red-800 text-xs font-medium">
-                <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
-                <span>{outlookError}</span>
-              </div>
-            )}
+            {outlookError && <InlineAlert tone="error" message={outlookError} />}
 
             {/* Outlook Search Form */}
             {outlookConnected && (
-              <form onSubmit={handleFindOutlookApplications} className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
+              <form onSubmit={handleFindOutlookApplications} className="card card-pad-lg space-y-4">
                 <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center space-x-2">
                   <Search className="w-4 h-4 text-brand-600" />
                   <span>Search Outlook Mailbox</span>
@@ -790,11 +785,11 @@ const ImportCandidates = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <label className="text-xs font-semibold text-slate-700 block mb-1">Mail Folder</label>
+                    <label className="field-label">Mail Folder</label>
                     <select
                       value={selectedFolder}
                       onChange={(e) => setSelectedFolder(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-900 focus:outline-none"
+                      className="select"
                     >
                       {folders.map(f => (
                         <option key={f.id} value={f.id}>{f.name}</option>
@@ -803,22 +798,22 @@ const ImportCandidates = () => {
                   </div>
 
                   <div>
-                    <label className="text-xs font-semibold text-slate-700 block mb-1">From Date</label>
+                    <label className="field-label">From Date</label>
                     <input
                       type="date"
                       value={fromDate}
                       onChange={(e) => setFromDate(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-900 focus:outline-none"
+                      className="input"
                     />
                   </div>
 
                   <div>
-                    <label className="text-xs font-semibold text-slate-700 block mb-1">To Date</label>
+                    <label className="field-label">To Date</label>
                     <input
                       type="date"
                       value={toDate}
                       onChange={(e) => setToDate(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-900 focus:outline-none"
+                      className="input"
                     />
                   </div>
                 </div>
@@ -827,7 +822,7 @@ const ImportCandidates = () => {
                   <button
                     type="submit"
                     disabled={searchingOutlook}
-                    className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs rounded-xl shadow transition-colors disabled:opacity-50 flex items-center space-x-2"
+                    className="btn btn-md btn-primary"
                   >
                     {searchingOutlook ? (
                       <>
@@ -847,7 +842,7 @@ const ImportCandidates = () => {
 
             {/* Outlook Search Summary Results */}
             {outlookSummary && (
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 space-y-4">
+              <div className="rounded-card border border-slate-200 bg-slate-50 p-6 space-y-4">
                 <div className="flex items-center justify-between border-b border-slate-200 pb-3">
                   <h4 className="text-sm font-bold text-slate-900">
                     Mailbox Scan Results ({outlookSummary.emailsScanned} Emails Scanned)
@@ -856,7 +851,7 @@ const ImportCandidates = () => {
                     type="button"
                     onClick={handleProcessOutlookResumes}
                     disabled={outlookProcessing || outlookSummary.resumesDiscovered === 0}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow transition-colors disabled:opacity-50 flex items-center space-x-2"
+                    className="btn btn-sm btn-success-soft"
                   >
                     {outlookProcessing ? (
                       <>

@@ -61,6 +61,7 @@ playwright-report/
 test-results/
 screenshots/
 e2e/shots/
+**/e2e/artifacts/
 
 # ---------------------------------------------------------------------------
 # Editors & OS

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { Filter, Search, SlidersHorizontal, Users, X } from 'lucide-react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { ArrowRight, Filter, GitCompare, Search, SlidersHorizontal, Users, X } from 'lucide-react';
 import {
   getAllCandidates,
   getCandidateFilterOptions,
@@ -12,9 +12,11 @@ import { useApiResource } from '../../hooks/useApiResource';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { useToast } from '../ToastProvider';
 import CandidateCard from '../CandidateCard';
+import CandidateQuickView from '../CandidateQuickView';
 import Pagination from '../Pagination';
-import { Button, Card, EmptyState, ErrorState, FilterChip, ListSkeleton, StatusBadge, cx } from '../ui';
+import { Avatar, Button, Card, EmptyState, ErrorState, FilterChip, Skeleton, cx } from '../ui';
 import Drawer from '../ui/Drawer';
+import { CandidateActionButtons, getCandidateActions } from './CandidateActions';
 import { HR_STATUS_META } from '../../utils/format';
 
 export const SORT_OPTIONS = [
@@ -62,6 +64,34 @@ const STATUS_TABS = [
  */
 const BEST_MATCH_TAB = { id: 'best', label: 'Best matches' };
 
+const CandidateGridSkeleton = () => (
+  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3 xl:gap-6" aria-label="Loading candidates">
+    {Array.from({ length: 8 }, (_, index) => (
+      <div key={index} className="card min-h-[17.5rem] p-5">
+        <div className="flex items-start justify-between">
+          <Skeleton className="h-10 w-10 rounded-pill" />
+          <div className="space-y-2">
+            <Skeleton className="ml-auto h-6 w-14" />
+            <Skeleton className="ml-auto h-2 w-16" />
+          </div>
+        </div>
+        <Skeleton className="mt-5 h-5 w-2/3" />
+        <Skeleton className="mt-2 h-4 w-full" />
+        <Skeleton className="mt-2 h-4 w-3/4" />
+        <div className="mt-5 flex gap-2">
+          <Skeleton className="h-6 w-16 rounded-pill" />
+          <Skeleton className="h-6 w-20 rounded-pill" />
+          <Skeleton className="h-6 w-14 rounded-pill" />
+        </div>
+        <div className="mt-8 flex justify-between">
+          <Skeleton className="h-5 w-20" />
+          <Skeleton className="h-6 w-20 rounded" />
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
 /** Filter keys mirrored into the query string. */
 const FILTER_KEYS = [
   'search',
@@ -95,6 +125,7 @@ const FILTER_KEYS = [
  */
 const CandidateBrowser = ({ jobId = null, defaultSort = 'score_desc', extraFilters = null, onLoaded }) => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const toast = useToast();
 
   const params = useMemo(() => {
@@ -114,6 +145,10 @@ const CandidateBrowser = ({ jobId = null, defaultSort = 'score_desc', extraFilte
   // presenting every control at once.
   const [showFilters, setShowFilters] = useState(false);
   const [statusUpdating, setStatusUpdating] = useState(null);
+  const [statusErrors, setStatusErrors] = useState({});
+  const [quickViewCandidate, setQuickViewCandidate] = useState(null);
+  const [mobileActionsCandidate, setMobileActionsCandidate] = useState(null);
+  const [comparisonCandidates, setComparisonCandidates] = useState([]);
 
   useEffect(() => {
     setSearchInput(params.search || '');
@@ -174,6 +209,26 @@ const CandidateBrowser = ({ jobId = null, defaultSort = 'score_desc', extraFilte
   const skillOptions = filterData?.data?.skills || [];
   const locationOptions = filterData?.data?.locations || [];
   const qualificationOptions = filterData?.data?.qualifications || [];
+  const comparisonJobId = comparisonCandidates[0]?.jobId || null;
+  const comparisonIds = useMemo(
+    () => new Set(comparisonCandidates.map((candidate) => candidate._id)),
+    [comparisonCandidates]
+  );
+  const quickViewIndex = quickViewCandidate
+    ? candidates.findIndex((candidate) => candidate._id === quickViewCandidate._id)
+    : -1;
+
+  // Keep an open drawer in sync after a successful status update without
+  // discarding it when a filter removes the candidate from the current page.
+  useEffect(() => {
+    if (!data) return;
+    const syncCandidate = (current) => {
+      if (!current) return null;
+      return candidates.find((candidate) => candidate._id === current._id) || current;
+    };
+    setQuickViewCandidate(syncCandidate);
+    setMobileActionsCandidate(syncCandidate);
+  }, [data]);
 
   const activeFilters = useMemo(
     () =>
@@ -217,34 +272,132 @@ const CandidateBrowser = ({ jobId = null, defaultSort = 'score_desc', extraFilte
     );
   };
 
-  const handleStatusChange = async (candidate, status) => {
-    const previous = candidate.hrStatus;
-    setStatusUpdating(candidate._id);
+  const replaceCandidateStatus = useCallback((candidateId, status) => {
+    const update = (candidate) =>
+      candidate?._id === candidateId ? { ...candidate, hrStatus: status, isSelected: status === 'SELECTED' } : candidate;
 
     setData((current) =>
-      current
-        ? { ...current, data: current.data.map((c) => (c._id === candidate._id ? { ...c, hrStatus: status } : c)) }
-        : current
+      current ? { ...current, data: current.data.map(update) } : current
     );
+    setQuickViewCandidate(update);
+    setMobileActionsCandidate(update);
+    setComparisonCandidates((current) => current.map(update));
+  }, [setData]);
+
+  const handleStatusChange = useCallback(async (candidate, status) => {
+    if (!candidate || status === candidate.hrStatus || statusUpdating) return;
+
+    setStatusUpdating(candidate._id);
+    setStatusErrors((current) => ({ ...current, [candidate._id]: null }));
 
     try {
       await updateCandidateStatus(candidate.jobId, candidate._id, status);
-      toast.success(`${candidate.name} marked as ${HR_STATUS_META[status]?.label || status}.`);
-      if (params.hrStatus) refetch();
-    } catch (err) {
-      setData((current) =>
-        current
-          ? { ...current, data: current.data.map((c) => (c._id === candidate._id ? { ...c, hrStatus: previous } : c)) }
-          : current
+      replaceCandidateStatus(candidate._id, status);
+      toast.success(
+        status === 'SHORTLISTED'
+          ? 'Candidate shortlisted'
+          : `${candidate.name} marked as ${HR_STATUS_META[status]?.label || status}.`
       );
-      toast.error(toApiError(err).message);
+      if (params.hrStatus && params.hrStatus !== status) refetch();
+    } catch (err) {
+      const apiError = toApiError(err);
+      if (status === 'SHORTLISTED') {
+        setStatusErrors((current) => ({ ...current, [candidate._id]: apiError.message }));
+      }
+      toast.error(apiError.message);
     } finally {
       setStatusUpdating(null);
     }
-  };
+  }, [params.hrStatus, refetch, replaceCandidateStatus, statusUpdating, toast]);
+
+  const handleView = useCallback((candidate) => {
+    setMobileActionsCandidate(null);
+    setQuickViewCandidate(candidate);
+  }, []);
+
+  const moveQuickView = useCallback((direction) => {
+    setQuickViewCandidate((current) => {
+      if (!current) return current;
+      const index = candidates.findIndex((candidate) => candidate._id === current._id);
+      const next = candidates[index + direction];
+      return next || current;
+    });
+  }, [candidates]);
+
+  const handlePreviousCandidate = useCallback(() => moveQuickView(-1), [moveQuickView]);
+  const handleNextCandidate = useCallback(() => moveQuickView(1), [moveQuickView]);
+
+  const handleOpenFullProfile = useCallback((candidate) => {
+    setQuickViewCandidate(null);
+    navigate(`/candidates/${candidate._id}`);
+  }, [navigate]);
+
+  const handleScreen = useCallback((candidate) => {
+    const query = new URLSearchParams({ jobId: candidate.jobId, candidateId: candidate._id });
+    navigate(`/ai/screening?${query.toString()}`);
+  }, [navigate]);
+
+  const handleToggleCompare = useCallback((candidate) => {
+    setComparisonCandidates((current) => {
+      const alreadySelected = current.some((item) => item._id === candidate._id);
+      if (alreadySelected) return current.filter((item) => item._id !== candidate._id);
+
+      if (current.length >= 5) {
+        toast.error('You can compare up to 5 candidates at once.');
+        return current;
+      }
+      if (current.length > 0 && current[0].jobId !== candidate.jobId) {
+        toast.error('Comparison candidates must belong to the same job.');
+        return current;
+      }
+
+      return [...current, {
+        _id: candidate._id,
+        jobId: candidate.jobId,
+        name: candidate.name,
+        hrStatus: candidate.hrStatus
+      }];
+    });
+  }, [toast]);
+
+  const handleShortlist = useCallback((candidate) => {
+    handleStatusChange(candidate, 'SHORTLISTED');
+  }, [handleStatusChange]);
+
+  const handleCompareSelected = useCallback(() => {
+    if (!comparisonJobId || comparisonCandidates.length < 2 || comparisonCandidates.length > 5) return;
+    const query = new URLSearchParams({
+      jobId: comparisonJobId,
+      candidateIds: comparisonCandidates.map((candidate) => candidate._id).join(','),
+      source: 'candidates'
+    });
+    navigate(`/ai/comparison?${query.toString()}`);
+  }, [comparisonCandidates, comparisonJobId, navigate]);
+
+  const getActionsFor = useCallback((candidate) => getCandidateActions({
+    candidate,
+    isCompared: comparisonIds.has(candidate._id),
+    comparisonDisabled:
+      (Boolean(comparisonJobId) && comparisonJobId !== candidate.jobId) ||
+      (comparisonCandidates.length >= 5 && !comparisonIds.has(candidate._id)),
+    isShortlisting: statusUpdating === candidate._id,
+    onView: handleView,
+    onScreen: handleScreen,
+    onCompare: handleToggleCompare,
+    onShortlist: handleShortlist
+  }), [
+    comparisonCandidates.length,
+    comparisonIds,
+    comparisonJobId,
+    handleScreen,
+    handleShortlist,
+    handleToggleCompare,
+    handleView,
+    statusUpdating
+  ]);
 
   return (
-    <div className="space-y-5">
+    <div className={cx('space-y-5', comparisonCandidates.length > 0 && 'pb-28')}>
       <Card padding="card-pad-sm" className="space-y-3">
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
@@ -556,10 +709,51 @@ const CandidateBrowser = ({ jobId = null, defaultSort = 'score_desc', extraFilte
         </div>
       </Drawer>
 
+      <CandidateQuickView
+        candidate={quickViewCandidate}
+        isOpen={Boolean(quickViewCandidate)}
+        onClose={() => setQuickViewCandidate(null)}
+        onOpenFullProfile={handleOpenFullProfile}
+        onStatusChange={handleStatusChange}
+        onPrevious={handlePreviousCandidate}
+        onNext={handleNextCandidate}
+        hasPrevious={quickViewIndex > 0}
+        hasNext={quickViewIndex >= 0 && quickViewIndex < candidates.length - 1}
+        statusUpdating={statusUpdating === quickViewCandidate?._id}
+        actions={quickViewCandidate ? getActionsFor(quickViewCandidate) : []}
+      />
+
+      <Drawer
+        open={Boolean(mobileActionsCandidate)}
+        onClose={() => setMobileActionsCandidate(null)}
+        title={mobileActionsCandidate?.name || 'Candidate actions'}
+        description="Choose an action for this candidate."
+      >
+        {mobileActionsCandidate && (
+          <CandidateActionButtons
+            actions={getActionsFor(mobileActionsCandidate)}
+            layout="list"
+            onAction={() => setMobileActionsCandidate(null)}
+          />
+        )}
+      </Drawer>
+
+      <div className="flex flex-wrap items-end justify-between gap-3 pt-1">
+        <div>
+          <h2 className="text-section text-slate-900">Candidate results</h2>
+          <p className="mt-1 text-meta text-slate-500">
+            {pagination?.total === undefined
+              ? 'Loading the current candidate result set.'
+              : `${pagination.total} candidate${pagination.total === 1 ? '' : 's'} in this result set.`}
+          </p>
+        </div>
+        {refetching && <span className="text-xs font-medium text-slate-500" role="status">Updating results...</span>}
+      </div>
+
       {error && !data ? (
         <ErrorState title="Unable to load candidates" error={error} onRetry={refetch} />
       ) : loading && !data ? (
-        <ListSkeleton rows={5} />
+        <CandidateGridSkeleton />
       ) : candidates.length === 0 ? (
         <EmptyState
           icon={Users}
@@ -590,44 +784,35 @@ const CandidateBrowser = ({ jobId = null, defaultSort = 'score_desc', extraFilte
       ) : (
         <>
           <div
-            className={cx('space-y-3 transition-opacity duration-fast', refetching && 'opacity-60')}
+            className={cx(
+              'grid grid-cols-1 gap-4 transition-opacity duration-fast md:grid-cols-2 md:gap-x-5 md:gap-y-6 xl:grid-cols-3 xl:gap-x-6 xl:gap-y-8',
+              refetching && 'opacity-60'
+            )}
             aria-busy={refetching}
           >
-            {candidates.map((candidate) => (
-              <CandidateCard
-                key={candidate._id}
-                candidate={candidate}
-                showJob={!jobId}
-                actions={
-                  // A hired candidate's status is final, so the control becomes
-                  // a read-only badge rather than a dropdown the server rejects.
-                  candidate.hrStatus === 'SELECTED' ? (
-                    <div className="sm:mt-1">
-                      <StatusBadge status="SELECTED" />
-                    </div>
-                  ) : (
-                    <label className="sm:mt-1">
-                      <span className="sr-only">Change status for {candidate.name}</span>
-                      <select
-                        value={candidate.hrStatus || 'REVIEW'}
-                        onChange={(e) => handleStatusChange(candidate, e.target.value)}
-                        disabled={statusUpdating === candidate._id}
-                        className="select h-8 py-0 pl-2.5 text-xs w-auto max-w-[8.5rem]"
-                      >
-                        {/* Selection happens by closing the job, not here. */}
-                        {Object.entries(HR_STATUS_META)
-                          .filter(([value]) => value !== 'SELECTED')
-                          .map(([value, meta]) => (
-                            <option key={value} value={value}>
-                              {meta.label}
-                            </option>
-                          ))}
-                      </select>
-                    </label>
-                  )
-                }
-              />
-            ))}
+            {candidates.map((candidate) => {
+              const isCompared = comparisonIds.has(candidate._id);
+              const comparisonDisabled =
+                (Boolean(comparisonJobId) && comparisonJobId !== candidate.jobId) ||
+                (comparisonCandidates.length >= 5 && !isCompared);
+
+              return (
+                <CandidateCard
+                  key={candidate._id}
+                  candidate={candidate}
+                  isCompared={isCompared}
+                  comparisonDisabled={comparisonDisabled}
+                  isShortlisting={statusUpdating === candidate._id}
+                  error={statusErrors[candidate._id]}
+                  onView={handleView}
+                  onScreen={handleScreen}
+                  onCompare={handleToggleCompare}
+                  onShortlist={handleShortlist}
+                  onOpenMobileActions={setMobileActionsCandidate}
+                  onRetry={handleShortlist}
+                />
+              );
+            })}
           </div>
 
           <Pagination
@@ -640,6 +825,42 @@ const CandidateBrowser = ({ jobId = null, defaultSort = 'score_desc', extraFilte
             className="pt-2"
           />
         </>
+      )}
+
+      {comparisonCandidates.length > 0 && (
+        <div className="candidate-selection-bar" role="region" aria-label="Candidate comparison selection">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex -space-x-2 shrink-0" aria-hidden="true">
+              {comparisonCandidates.slice(0, 4).map((candidate) => (
+                <Avatar key={candidate._id} name={candidate.name} size="sm" className="ring-2 ring-white" />
+              ))}
+            </div>
+            <div className="min-w-0" aria-live="polite">
+              <p className="text-meta font-semibold text-slate-900">
+                {comparisonCandidates.length} candidate{comparisonCandidates.length === 1 ? '' : 's'} selected
+              </p>
+              <p className="hidden sm:block text-xs text-slate-500 truncate">
+                {comparisonCandidates.map((candidate) => candidate.name).join(', ')}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button variant="ghost" size="sm" onClick={() => setComparisonCandidates([])}>
+              Clear
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              icon={GitCompare}
+              onClick={handleCompareSelected}
+              disabled={comparisonCandidates.length < 2}
+            >
+              <span className="hidden sm:inline">Compare candidates</span>
+              <span className="sm:hidden">Compare</span>
+              <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   );

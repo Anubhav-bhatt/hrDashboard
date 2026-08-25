@@ -118,7 +118,7 @@ const CloseJobDialog = ({ jobTitle, candidates, submitting, error, onConfirm, on
                   <label
                     key={candidate.id}
                     className={[
-                      'flex items-center gap-3 rounded-input border p-3 cursor-pointer transition-colors duration-fast',
+                      'flex items-center gap-3 rounded-control border p-3 cursor-pointer transition-colors duration-fast',
                       'focus-within:ring-2 focus-within:ring-brand-500 focus-within:ring-offset-1',
                       checked
                         ? 'border-brand-500 bg-brand-50'
@@ -154,7 +154,7 @@ const CloseJobDialog = ({ jobTitle, candidates, submitting, error, onConfirm, on
               })}
             </div>
 
-            <div className="mt-4 rounded-input bg-slate-50 border border-slate-200 p-3">
+            <div className="mt-4 rounded-control bg-slate-50 border border-slate-200 p-3">
               <p className="text-meta font-medium text-slate-700">Closing this job will:</p>
               <ul className="mt-2 space-y-1 text-meta text-slate-600 list-disc pl-4">
                 <li>Mark the selected candidate as Selected</li>
@@ -165,7 +165,7 @@ const CloseJobDialog = ({ jobTitle, candidates, submitting, error, onConfirm, on
             </div>
 
             {error && (
-              <p role="alert" className="mt-3 text-meta text-rose-700 bg-rose-50 border border-rose-200 rounded-input p-3">
+              <p role="alert" className="mt-3 text-meta text-rose-700 bg-rose-50 border border-rose-200 rounded-control p-3">
                 {error}
               </p>
             )}

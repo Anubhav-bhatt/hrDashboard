@@ -65,7 +65,7 @@ const ComparisonResultGrid = ({
   return (
     <div className={cx('space-y-6 min-w-0', className)}>
       {/* Top Header / Context Bar */}
-      <div className="card bg-gradient-to-r from-slate-50 to-indigo-50/40 border-slate-200">
+      <div className="card bg-gradient-to-r from-slate-50 to-brand-50/40 border-slate-200">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <span className="text-xs font-semibold uppercase tracking-wider text-brand-600">
@@ -105,9 +105,9 @@ const ComparisonResultGrid = ({
         {/* Comparison Focus Banner if present */}
         {comparisonFocus && (
           <div className="mt-3 pt-3 border-t border-slate-200/80 flex items-start gap-2 text-xs">
-            <Sparkles className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
+            <Sparkles className="w-4 h-4 text-violet-600 shrink-0 mt-0.5" />
             <div>
-              <span className="font-semibold text-purple-900">
+              <span className="font-semibold text-violet-900">
                 Focus: "{comparisonFocus}"
               </span>
               <span className="text-slate-600 ml-1.5">
@@ -138,7 +138,7 @@ const ComparisonResultGrid = ({
               className="card flex flex-col justify-between hover:shadow-md transition-shadow relative overflow-hidden"
             >
               {cand.priorityMatch && (
-                <div className="absolute top-0 right-0 bg-purple-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-bl">
+                <div className="absolute top-0 right-0 bg-violet-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-bl">
                   Focus Match
                 </div>
               )}

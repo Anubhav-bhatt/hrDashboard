@@ -57,7 +57,7 @@ export const JobSummaryCard = ({
         <div className="flex items-start justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
             <JobStatusBadge status={job.status} />
-            <span className="text-[11px] font-medium text-slate-400">
+            <span className="text-[11px] font-normal text-slate-400">
               {job.department || 'General'}
             </span>
           </div>
@@ -79,7 +79,7 @@ export const JobSummaryCard = ({
 
             {menuOpen && (
               <div
-                className="absolute right-0 mt-1 w-48 rounded-xl bg-white border border-slate-200 shadow-xl py-1 z-30 text-xs animate-fade-in"
+          className="absolute right-0 mt-1 w-48 rounded-card bg-white border border-slate-200 shadow-overlay py-1 z-30 text-xs animate-fade-in"
                 onClick={(e) => e.stopPropagation()}
               >
                 <Link
@@ -107,7 +107,7 @@ export const JobSummaryCard = ({
                       className="flex items-center gap-2 px-3 py-2 text-slate-700 hover:bg-slate-50"
                       onClick={() => setMenuOpen(false)}
                     >
-                      <Bot className="w-3.5 h-3.5 text-indigo-600" />
+                      <Bot className="w-3.5 h-3.5 text-brand-600" />
                       <span>Rank Candidates (AI)</span>
                     </Link>
 
@@ -134,7 +134,7 @@ export const JobSummaryCard = ({
         {/* Job Title */}
         <Link
           to={bodyHref}
-          className="font-bold text-base text-slate-900 hover:text-indigo-600 transition-colors line-clamp-2 mt-2 block"
+          className="font-bold text-base text-slate-900 hover:text-brand-600 transition-colors line-clamp-2 mt-2 block"
         >
           {job.title}
         </Link>
@@ -158,7 +158,7 @@ export const JobSummaryCard = ({
             {job.requiredSkills.slice(0, 3).map((skill, idx) => (
               <span
                 key={idx}
-                className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-600"
+                className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-normal bg-slate-100 text-slate-600"
               >
                 {skill}
               </span>
@@ -185,7 +185,7 @@ export const JobSummaryCard = ({
                     <p className="text-[10px] text-slate-500 truncate">{hire.currentRole || 'Candidate'}</p>
                   </div>
                   {typeof hire.overallScore === 'number' && (
-                    <span className="text-xs font-extrabold text-emerald-600 tabular-nums">
+                    <span className="text-xs font-bold text-emerald-600 tabular-nums">
                       {hire.overallScore}%
                     </span>
                   )}
@@ -206,20 +206,20 @@ export const JobSummaryCard = ({
         <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/40 flex items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-3">
             <div>
-              <span className="font-extrabold text-slate-900">{job.candidateCount || 0}</span>
+              <span className="font-bold text-slate-900">{job.candidateCount || 0}</span>
               <span className="text-slate-400 ml-1">applicants</span>
             </div>
             {job.shortlistedCount > 0 && (
-              <div className="text-emerald-600 font-semibold">
-                <span>{job.shortlistedCount}</span>
-                <span className="ml-1">shortlisted</span>
+              <div className="text-emerald-600">
+                <span className="font-bold tabular-nums">{job.shortlistedCount}</span>
+                <span className="ml-1 font-normal">shortlisted</span>
               </div>
             )}
           </div>
 
           <Link
             to={bodyHref}
-            className="btn btn-sm btn-ghost text-xs font-semibold hover:bg-slate-100 text-indigo-600"
+            className="btn btn-sm btn-ghost text-xs hover:bg-slate-100 text-brand-600"
           >
             Review
             <ArrowRight className="w-3 h-3 ml-1" />

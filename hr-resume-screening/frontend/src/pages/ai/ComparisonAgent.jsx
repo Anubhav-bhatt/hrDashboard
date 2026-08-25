@@ -161,7 +161,7 @@ const ComparisonAgent = () => {
             </div>
 
             {source === 'ranking' && (
-              <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 self-start sm:self-auto">
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded bg-brand-50 text-brand-700 border border-brand-200 self-start sm:self-auto">
                 <GitCompare className="w-3.5 h-3.5" /> Handoff from Ranking
               </span>
             )}
