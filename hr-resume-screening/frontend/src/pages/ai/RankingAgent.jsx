@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ListOrdered, Filter, Sparkles, AlertCircle, ArrowLeft, RefreshCw, Users, Scale, GitCompare } from 'lucide-react';
 import { Button, Card, InlineAlert } from '../../components/ui';
 import AgentShell from '../../components/ai/AgentShell';
@@ -12,6 +12,12 @@ import RankingResultTable from '../../components/ai/RankingResultTable';
 import { JobPicker } from '../../components/ai/AgentPickers';
 import { AGENT_MODES } from '../../constants/agentModes';
 import { runAgent } from '../../services/aiService';
+import {
+  buildAgentPath,
+  useRecruitmentContext,
+  useResolvedJobId,
+  SOURCE_WORKFLOWS
+} from '../../context/RecruitmentContext';
 
 const RANKING_STEPS = [
   'Loading job requirements',
@@ -34,8 +40,18 @@ const SUGGESTED_PREFERENCES = [
 
 const RankingAgent = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { setJob, recordRanking } = useRecruitmentContext();
 
-  const [jobId, setJobId] = useState('');
+  /*
+   * The role comes from the URL, or failing that from the working context.
+   *
+   * This screen previously held the job in local state seeded with `''`, so the
+   * `?jobId=` that Job Workspace, the job cards and Comparison's "back to
+   * ranking" all send was read by nothing: every one of those handoffs landed on
+   * an empty picker and made the recruiter choose the role again.
+   */
+  const { jobId, fromContext } = useResolvedJobId(searchParams.get('jobId') || '');
   const [scope, setScope] = useState('ALL');
   const [minScore, setMinScore] = useState('');
   const [instruction, setInstruction] = useState('');
@@ -46,10 +62,19 @@ const RankingAgent = () => {
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
 
+  /*
+   * Selecting a role writes it to the URL and to the working context.
+   *
+   * `replace` rather than push: choosing a role from a dropdown is not a
+   * navigation a recruiter expects the Back button to undo one option at a time.
+   * `setJob` additionally discards any candidate selection held for the previous
+   * role, so nothing from Job A can travel into a ranking of Job B.
+   */
   const onJobChange = (nextJobId) => {
-    setJobId(nextJobId);
+    setJob(nextJobId);
     setResult(null);
     setError(null);
+    setSearchParams(nextJobId ? { jobId: nextJobId } : {}, { replace: true });
   };
 
   const handleRank = async () => {
@@ -86,6 +111,12 @@ const RankingAgent = () => {
       const structured = response?.structuredData || response?.data?.structuredData || response;
       if (structured && (structured.rankedCandidates || structured.jobTitle)) {
         setResult(structured);
+        // Remember the resulting order so Comparison can offer these candidates
+        // without the recruiter picking them out of the full pool again.
+        recordRanking(
+          jobId,
+          (structured.rankedCandidates || []).map((entry) => entry.candidateId || entry.id).filter(Boolean)
+        );
       } else {
         setError('No structured ranking data returned.');
       }
@@ -100,13 +131,13 @@ const RankingAgent = () => {
   const handleScreenCandidate = (candidate) => {
     const candidateId = candidate.candidateId || candidate.id;
     if (jobId && candidateId) {
-      navigate(`/ai/screening?jobId=${jobId}&candidateId=${candidateId}`);
+      navigate(buildAgentPath('screening', { jobId, candidateId, source: SOURCE_WORKFLOWS.ranking }));
     }
   };
 
   const handleCompareCandidates = (candidateIds) => {
     if (!candidateIds || candidateIds.length < 2) return;
-    navigate(`/ai/comparison?jobId=${jobId}&candidateIds=${candidateIds.join(',')}&source=ranking`);
+    navigate(buildAgentPath('comparison', { jobId, candidateIds, source: SOURCE_WORKFLOWS.ranking }));
   };
 
   return (
@@ -115,7 +146,16 @@ const RankingAgent = () => {
       setup={
         <Card>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <JobPicker id="agent-job-picker" value={jobId} onChange={onJobChange} />
+            <div className="min-w-0">
+              <JobPicker id="agent-job-picker" value={jobId} onChange={onJobChange} />
+              {/* Prefilling silently would leave a recruiter unsure which role a
+                  ranking actually ran against. State the assumption instead. */}
+              {fromContext && (
+                <p className="text-meta text-slate-500 mt-1.5">
+                  Using the role you were working on. Change it above if that is not right.
+                </p>
+              )}
+            </div>
 
             <fieldset className="min-w-0">
               <legend className="field-label">Candidate scope</legend>

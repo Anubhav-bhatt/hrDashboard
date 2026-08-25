@@ -1,7 +1,8 @@
-﻿import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy } from 'react';
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AiConfigProvider } from './context/AiConfigContext';
+import { RecruitmentProvider } from './context/RecruitmentContext';
 import { ToastProvider } from './components/ToastProvider';
 import AiRouteGuard from './components/ai/AiRouteGuard';
 import AppShell from './components/AppShell';
@@ -46,7 +47,7 @@ const InsightsAgent = lazy(() => import('./pages/ai/InsightsAgent'));
 /**
  * Gate for every screen that shows candidate or job data.
  *
- * While the session is being established nothing is rendered but a spinner â€”
+ * While the session is being established nothing is rendered but a spinner —
  * rendering children first would flash protected data before the redirect.
  * The attempted location is carried along so sign-in can return the recruiter
  * to where they were headed.
@@ -55,14 +56,14 @@ const RequireAuth = ({ children, fallback }) => {
   const { isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
 
-  if (isLoading) return <Spinner label="Checking your sessionâ€¦" className="min-h-screen" />;
+  if (isLoading) return <Spinner label="Checking your session…" className="min-h-screen" />;
   if (!isAuthenticated) return <Navigate to="/login" state={{ from: location }} replace />;
 
   return (
     <AppShell>
       {/* Lazily-loaded routes show their own shaped skeleton while the chunk
           arrives, so a code-split screen does not flash an empty page. */}
-      <Suspense fallback={fallback || <Spinner label="Loadingâ€¦" />}>{children}</Suspense>
+      <Suspense fallback={fallback || <Spinner label="Loading…" />}>{children}</Suspense>
     </AppShell>
   );
 };
@@ -86,7 +87,10 @@ function App() {
           {/* Inside AuthProvider: the flag endpoint is authenticated, so it is
               only queried once a recruiter has a session. */}
           <AiConfigProvider>
-            <Routes>
+            {/* Also inside AuthProvider, because the working context is per
+                account and is discarded when the signed-in user changes. */}
+            <RecruitmentProvider>
+              <Routes>
               <Route path="/login" element={<Login />} />
 
               <Route
@@ -197,7 +201,7 @@ function App() {
               />
 
               {/* AI Recruitment. Every route sits inside the same RequireAuth
-                  wrapper as the rest of the dashboard â€” there is no separate AI
+                  wrapper as the rest of the dashboard — there is no separate AI
                   auth path and no anonymous variant. AiRouteGuard then applies the
                   feature flags, so a disabled agent shows a stated reason instead
                   of a blank page. */}
@@ -260,7 +264,8 @@ function App() {
                   </RequireAuth>
                 }
               />
-            </Routes>
+              </Routes>
+            </RecruitmentProvider>
           </AiConfigProvider>
         </AuthProvider>
       </ToastProvider>

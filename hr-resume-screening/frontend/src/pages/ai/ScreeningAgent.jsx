@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { Search, CheckCircle2, AlertTriangle, AlertCircle, Info, RefreshCw, ArrowLeft, Layers } from 'lucide-react';
 import { Button, Card, InlineAlert } from '../../components/ui';
 import AgentShell from '../../components/ai/AgentShell';
@@ -11,6 +11,12 @@ import AgentProgress from '../../components/ai/AgentProgress';
 import { CandidatePicker, JobPicker } from '../../components/ai/AgentPickers';
 import { AGENT_MODES } from '../../constants/agentModes';
 import { runAgent } from '../../services/aiService';
+import {
+  buildAgentPath,
+  useRecruitmentContext,
+  useResolvedJobId,
+  SOURCE_WORKFLOWS
+} from '../../context/RecruitmentContext';
 
 const SCREENING_STEPS = [
   'Loading job requirements',
@@ -38,12 +44,33 @@ const ScreeningAgent = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
+  const { setJob, lastComparisonCandidateIds } = useRecruitmentContext();
+
   const urlJobId = searchParams.get('jobId') || '';
   const urlCandidateId = searchParams.get('candidateId') || '';
+  const urlSource = searchParams.get('source') || '';
 
-  const [jobId, setJobId] = useState(urlJobId);
+  const { jobId, fromContext } = useResolvedJobId(urlJobId);
   const [candidateId, setCandidateId] = useState(urlCandidateId);
   const [instruction, setInstruction] = useState('');
+
+  /*
+   * Where this screening was opened from, so the way back is accurate.
+   *
+   * Screening is a detour: a recruiter reaches it from a comparison, a ranking or
+   * a profile and wants to return to what they were reading. Offering a single
+   * generic "Back" that guesses would drop them somewhere they never were, so the
+   * origin travels in the URL and only a recognised one produces a return link.
+   */
+  const returnTo =
+    urlSource === SOURCE_WORKFLOWS.comparison && lastComparisonCandidateIds.length >= 2
+      ? {
+          label: 'Back to comparison',
+          to: buildAgentPath('comparison', { jobId, candidateIds: lastComparisonCandidateIds })
+        }
+      : urlSource === SOURCE_WORKFLOWS.ranking
+        ? { label: 'Back to ranking', to: buildAgentPath('ranking', { jobId }) }
+        : null;
 
   const [loading, setLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
@@ -51,19 +78,19 @@ const ScreeningAgent = () => {
   const [result, setResult] = useState(null);
   const [showCriteriaDetails, setShowCriteriaDetails] = useState(false);
 
+  // The job is resolved above; only the candidate needs mirroring from the URL.
   useEffect(() => {
-    if (urlJobId && urlJobId !== jobId) setJobId(urlJobId);
     if (urlCandidateId && urlCandidateId !== candidateId) setCandidateId(urlCandidateId);
-  }, [urlJobId, urlCandidateId]);
+  }, [urlCandidateId]);
 
   const canAnalyse = Boolean(jobId && candidateId) && !loading;
 
   const onJobChange = (nextJobId) => {
-    setJobId(nextJobId);
+    setJob(nextJobId);
     setCandidateId('');
     setResult(null);
     setError(null);
-    setSearchParams(nextJobId ? { jobId: nextJobId } : {});
+    setSearchParams(nextJobId ? { jobId: nextJobId } : {}, { replace: true });
   };
 
   const onCandidateChange = (nextCandidateId) => {
@@ -71,7 +98,14 @@ const ScreeningAgent = () => {
     setResult(null);
     setError(null);
     if (jobId && nextCandidateId) {
-      setSearchParams({ jobId, candidateId: nextCandidateId });
+      // `source` is carried through: screening a second candidate from the same
+      // comparison should not strip the way back to it.
+      setSearchParams(
+        urlSource
+          ? { jobId, candidateId: nextCandidateId, source: urlSource }
+          : { jobId, candidateId: nextCandidateId },
+        { replace: true }
+      );
     }
   };
 
@@ -118,9 +152,9 @@ const ScreeningAgent = () => {
     setResult(null);
     setError(null);
     if (jobId) {
-      setSearchParams({ jobId });
+      setSearchParams(urlSource ? { jobId, source: urlSource } : { jobId }, { replace: true });
     } else {
-      setSearchParams({});
+      setSearchParams({}, { replace: true });
     }
   };
 
@@ -132,8 +166,26 @@ const ScreeningAgent = () => {
       mode={AGENT_MODES.screening}
       setup={
         <Card>
+          {/* Only rendered when the origin is known, so it can never send a
+              recruiter somewhere they did not come from. */}
+          {returnTo && (
+            <div className="mb-4 pb-3 border-b border-slate-100">
+              <Link to={returnTo.to} className="btn btn-sm btn-ghost">
+                <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" />
+                {returnTo.label}
+              </Link>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <JobPicker id="agent-job-picker" value={jobId} onChange={onJobChange} />
+            <div className="min-w-0">
+              <JobPicker id="agent-job-picker" value={jobId} onChange={onJobChange} />
+              {fromContext && (
+                <p className="text-meta text-slate-500 mt-1.5">
+                  Using the role you were working on. Change it above if that is not right.
+                </p>
+              )}
+            </div>
             <CandidatePicker id="agent-candidate-picker" jobId={jobId} value={candidateId} onChange={onCandidateChange} />
           </div>
 

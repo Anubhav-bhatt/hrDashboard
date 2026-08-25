@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   GitCompare,
@@ -18,6 +18,12 @@ import ComparisonResultGrid from '../../components/ai/ComparisonResultGrid';
 import { CandidateMultiPicker, JobPicker } from '../../components/ai/AgentPickers';
 import { AGENT_MODES } from '../../constants/agentModes';
 import { runAgent } from '../../services/aiService';
+import {
+  buildAgentPath,
+  useRecruitmentContext,
+  useResolvedJobId,
+  SOURCE_WORKFLOWS
+} from '../../context/RecruitmentContext';
 
 export const MIN_COMPARISON_CANDIDATES = 2;
 export const MAX_COMPARISON_CANDIDATES = 5;
@@ -40,7 +46,10 @@ const ComparisonAgent = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  const [jobId, setJobId] = useState(() => searchParams.get('jobId') || '');
+  const { setJob, recordComparison, lastComparisonCandidateIds } = useRecruitmentContext();
+
+  // URL first, working context second — same rule as every other agent surface.
+  const { jobId, fromContext } = useResolvedJobId(searchParams.get('jobId') || '');
   const [candidateIds, setCandidateIds] = useState(() => {
     const raw = searchParams.get('candidateIds');
     if (!raw) return [];
@@ -54,15 +63,12 @@ const ComparisonAgent = () => {
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
 
-  // Sync state when URL params change (e.g. from Ranking handoff)
+  // Sync candidate selection and origin when URL params change (Ranking handoff,
+  // candidate-grid handoff, or a pasted link). The job itself is resolved above.
   useEffect(() => {
-    const paramJobId = searchParams.get('jobId');
     const paramCandidateIds = searchParams.get('candidateIds');
     const paramSource = searchParams.get('source');
 
-    if (paramJobId && paramJobId !== jobId) {
-      setJobId(paramJobId);
-    }
     if (paramCandidateIds) {
       const parsed = paramCandidateIds.split(',').map((s) => s.trim()).filter(Boolean);
       if (parsed.length > 0 && parsed.join(',') !== candidateIds.join(',')) {
@@ -74,17 +80,42 @@ const ComparisonAgent = () => {
     }
   }, [searchParams]);
 
+  /*
+   * Entered with no candidates named: restore the last comparison for this role.
+   *
+   * This is what makes returning from Screening — or opening Comparison from the
+   * sidebar mid-task — resume the comparison the recruiter was reading rather
+   * than presenting an empty picker. Guarded by a ref so it seeds once and never
+   * fights a later deliberate clearing of the selection.
+   */
+  const seededFromContext = useRef(false);
+  useEffect(() => {
+    if (seededFromContext.current) return;
+    if (searchParams.get('candidateIds')) {
+      seededFromContext.current = true;
+      return;
+    }
+    if (jobId && lastComparisonCandidateIds.length >= MIN_COMPARISON_CANDIDATES) {
+      seededFromContext.current = true;
+      setCandidateIds(lastComparisonCandidateIds.slice(0, MAX_COMPARISON_CANDIDATES));
+      setSource(SOURCE_WORKFLOWS.comparison);
+    }
+  }, [jobId, lastComparisonCandidateIds, searchParams]);
+
   const count = candidateIds.length;
   const canCompare = Boolean(jobId) && count >= MIN_COMPARISON_CANDIDATES && count <= MAX_COMPARISON_CANDIDATES;
 
   const onJobChange = (nextJobId) => {
-    setJobId(nextJobId);
-    // Candidates belong to the job that was selected when they were picked.
+    // Candidates belong to the job that was selected when they were picked, so
+    // setJob discards the stored selection for the previous role as well as the
+    // local one — otherwise a re-entry would seed Job A's candidates into Job B.
+    setJob(nextJobId);
     setCandidateIds([]);
     setResult(null);
     setError(null);
     setSource('');
-    setSearchParams(nextJobId ? { jobId: nextJobId } : {});
+    seededFromContext.current = true;
+    setSearchParams(nextJobId ? { jobId: nextJobId } : {}, { replace: true });
   };
 
   const handleCompare = useCallback(async () => {
@@ -111,6 +142,9 @@ const ComparisonAgent = () => {
       clearInterval(stepInterval);
       setActiveStep(COMPARISON_STEPS.length - 1);
       setResult(res.structuredData || res);
+      // Remember what this comparison ran on, so leaving for Screening and
+      // coming back returns to the same set rather than an empty picker.
+      recordComparison(jobId, candidateIds);
     } catch (err) {
       clearInterval(stepInterval);
       console.error('[ComparisonAgent] Execution error:', err);
@@ -138,11 +172,18 @@ const ComparisonAgent = () => {
   };
 
   const handleBackToRanking = () => {
-    navigate(`/ai/ranking${jobId ? `?jobId=${jobId}` : ''}`);
+    navigate(buildAgentPath('ranking', { jobId }));
   };
 
   const handleScreenCandidate = (jId, cId) => {
-    navigate(`/ai/screening?jobId=${jId || jobId}&candidateId=${cId}`);
+    // `source` lets Screening offer an accurate way back to this comparison.
+    navigate(
+      buildAgentPath('screening', {
+        jobId: jId || jobId,
+        candidateId: cId,
+        source: SOURCE_WORKFLOWS.comparison
+      })
+    );
   };
 
   return (
@@ -168,11 +209,18 @@ const ComparisonAgent = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <JobPicker
-              id="comparison-job-picker"
-              value={jobId}
-              onChange={onJobChange}
-            />
+            <div className="min-w-0">
+              <JobPicker
+                id="comparison-job-picker"
+                value={jobId}
+                onChange={onJobChange}
+              />
+              {fromContext && (
+                <p className="text-meta text-slate-500 mt-1.5">
+                  Using the role you were working on. Change it above if that is not right.
+                </p>
+              )}
+            </div>
             <CandidateMultiPicker
               jobId={jobId}
               value={candidateIds}
