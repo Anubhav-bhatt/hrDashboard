@@ -87,13 +87,33 @@ try {
   await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
   await page.locator('nav[aria-label="Main navigation"]').first().waitFor({ state: 'visible', timeout: 20000 });
 
+  /*
+   * Primary navigation is the three workspace destinations; Settings and Closed
+   * Jobs moved into a Management group when the AI section was added, so the
+   * sidebar reads as "where I work" then "what I manage" rather than one flat
+   * list. Both halves are asserted, so the split is verified rather than merely
+   * tolerated: nothing has become unreachable, it has only been grouped.
+   */
   const navLinks = page.locator('nav[aria-label="Main navigation"] a');
-  check((await navLinks.count()) === 4, 'the sidebar has exactly four destinations', `got ${await navLinks.count()}`);
+  check(
+    (await navLinks.count()) === 3,
+    'primary navigation is exactly three workspace destinations',
+    `got ${await navLinks.count()}`
+  );
   const labels = (await navLinks.allInnerTexts()).map((t) => t.trim().toLowerCase());
   check(
-    JSON.stringify(labels) === JSON.stringify(['dashboard', 'jobs', 'candidates', 'settings']),
-    'they are Dashboard, Jobs, Candidates, Settings',
+    JSON.stringify(labels) === JSON.stringify(['dashboard', 'jobs', 'candidates']),
+    'they are Dashboard, Jobs, Candidates',
     labels.join(', ')
+  );
+
+  const managementLinks = page.locator('nav[aria-label="Management"] a');
+  const managementLabels = (await managementLinks.allInnerTexts()).map((t) => t.trim().toLowerCase());
+  check(managementLabels.includes('settings'), 'Settings remains reachable in Management', managementLabels.join(', '));
+  check(
+    managementLabels.includes('closed jobs'),
+    'Closed Jobs remains reachable in Management',
+    managementLabels.join(', ')
   );
   for (const gone of ['/jobs/new', '/jobs/closed']) {
     check(

@@ -182,10 +182,14 @@ try {
       check((await group.getByText(label, { exact: true }).count()) > 0, `the group lists ${label}`);
     }
 
-    // The existing destinations must be untouched by the addition.
-    const mainNav = page.locator('nav[aria-label="Main navigation"]');
+    // The existing destinations must be untouched by the addition. Scoped to the
+    // sidebar as a whole rather than to Main navigation alone: Settings sits in
+    // the Management group, so pinning it to one group would test the grouping
+    // rather than the thing that matters here, which is that adding the AI
+    // section removed no existing destination.
+    const sidebarNav = page.locator('nav[aria-label="Main navigation"], nav[aria-label="Management"]');
     for (const label of ['Dashboard', 'Jobs', 'Candidates', 'Settings']) {
-      check((await mainNav.getByText(label, { exact: true }).count()) > 0, `existing nav still lists ${label}`);
+      check((await sidebarNav.getByText(label, { exact: true }).count()) > 0, `existing nav still lists ${label}`);
     }
 
     /* ------------------------------------------------- collapsible group -- */
@@ -438,10 +442,11 @@ try {
     const shell = await bodyText(page);
     check(!/Screening Agent|Ranking Agent|Comparison Agent/i.test(shell), 'no agent is mentioned anywhere in the shell');
 
-    // The recruitment application must be exactly as it was.
-    const mainNav = page.locator('nav[aria-label="Main navigation"]');
+    // The recruitment application must be exactly as it was. Sidebar-wide for the
+    // same reason as above — Settings lives in the Management group.
+    const sidebarNav = page.locator('nav[aria-label="Main navigation"], nav[aria-label="Management"]');
     for (const label of ['Dashboard', 'Jobs', 'Candidates', 'Settings']) {
-      check((await mainNav.getByText(label, { exact: true }).count()) > 0, `${label} still present with AI off`);
+      check((await sidebarNav.getByText(label, { exact: true }).count()) > 0, `${label} still present with AI off`);
     }
 
     for (const route of ['/', '/jobs', '/candidates', '/jobs/closed', '/settings']) {
