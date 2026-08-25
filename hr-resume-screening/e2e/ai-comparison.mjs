@@ -174,8 +174,15 @@ try {
   await checkboxes.nth(2).check();
   check(!(await compareBtn.isDisabled()), 'Compare button remains enabled when 3 candidates are chosen');
 
-  // Enter optional focus
-  await page.fill('#comparison-focus-input', 'Focus on Redis and AWS');
+  // Enter optional focus. It sits behind a disclosure now — it is an optional
+  // refinement, not part of the required setup — so open it first. The field and
+  // the instruction it sends are unchanged.
+  await page.locator('button[aria-controls="comparison-focus-panel"]').click();
+  await page.locator('#comparison-focus-input').fill('Focus on Redis and AWS');
+  check(
+    (await page.locator('#comparison-focus-input').inputValue()) === 'Focus on Redis and AWS',
+    'Optional comparison focus accepts an instruction'
+  );
 
   // Click compare
   await compareBtn.click();

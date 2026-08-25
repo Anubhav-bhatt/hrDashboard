@@ -103,6 +103,12 @@ const runComparisonAgent = async ({
       candidate: {
         candidateId: candidate.candidateId,
         name: candidate.name,
+        // Identity, not evidence. A comparison column headed by a name alone
+        // makes the recruiter recall who each person is; the role they hold is
+        // what distinguishes them at a glance. Already returned by getCandidate,
+        // so this projects an existing field rather than reading anything new.
+        currentRole: candidate.currentRole || null,
+        headline: candidate.headline || null,
         skills: candidate.skills || [],
         experience: candidate.experience || {},
         education: candidate.education || [],

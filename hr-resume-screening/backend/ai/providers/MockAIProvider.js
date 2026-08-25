@@ -405,6 +405,9 @@ class MockAIProvider extends AIProvider {
       return {
         candidateId: candidate.candidateId,
         candidateName: candidate.name || 'Unnamed candidate',
+        // Passed through for column identity. Null when the resume did not state
+        // one — the UI omits the line rather than inventing a role.
+        currentRole: candidate.headline || candidate.currentRole || null,
         matchScore,
         fitLevel,
         isScored,

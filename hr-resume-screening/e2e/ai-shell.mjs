@@ -345,7 +345,15 @@ try {
       await page.getByRole('button', { name: /Compare candidates/i }).isDisabled(),
       'Compare is disabled below the minimum'
     );
-    check(/No comparison yet/i.test(comparisonText), 'a guiding empty state is shown');
+    // The empty state now names the action instead of the absence — "Select at
+    // least 2 candidates to compare" rather than "No comparison yet". Asserted on
+    // the guidance rather than the old wording, and still failing if it ever
+    // degrades to a bare statement that there is no data.
+    check(
+      /select at least 2 candidates to compare|choose a role to compare candidates/i.test(comparisonText),
+      'a guiding empty state names the next step'
+    );
+    check(!/^\s*no data\s*$/im.test(comparisonText), 'the empty state is not a bare "no data"');
 
     /* --------------------------------------------------- insights shell --- */
     section('Insights shell');

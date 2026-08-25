@@ -349,16 +349,30 @@ try {
   await page.waitForTimeout(1800);
   check(!(await text()).includes(job.title), 'the closed job no longer appears among active jobs');
 
-  // Primary navigation is four destinations. Closed jobs is no longer one of
-  // them: it is the Closed tab inside Jobs, which is where a recruiter already
-  // is when they want it. The /jobs/closed route still exists for bookmarks.
+  // Primary navigation is the three workspace destinations. Settings and Closed
+  // Jobs sit in a Management group below them, one click away and asserted
+  // separately, so grouping them cannot quietly become losing them. Closed jobs
+  // is also the Closed tab inside Jobs, which is where a recruiter already is
+  // when they want it; the /jobs/closed route still exists for bookmarks.
   const navLinks = page.locator('nav[aria-label="Main navigation"] a');
-  check((await navLinks.count()) === 4, 'the sidebar offers exactly four destinations', `got ${await navLinks.count()}`);
+  check(
+    (await navLinks.count()) === 3,
+    'the sidebar offers exactly three workspace destinations',
+    `got ${await navLinks.count()}`
+  );
   const navLabels = (await navLinks.allInnerTexts()).map((t) => t.trim().toLowerCase());
   check(
-    ['dashboard', 'jobs', 'candidates', 'settings'].every((label) => navLabels.includes(label)),
-    'they are Dashboard, Jobs, Candidates and Settings',
+    ['dashboard', 'jobs', 'candidates'].every((label) => navLabels.includes(label)),
+    'they are Dashboard, Jobs and Candidates',
     navLabels.join(', ')
+  );
+  const managementLabels = (await page.locator('nav[aria-label="Management"] a').allInnerTexts()).map((t) =>
+    t.trim().toLowerCase()
+  );
+  check(
+    managementLabels.includes('settings') && managementLabels.includes('closed jobs'),
+    'Settings and Closed Jobs remain reachable in Management',
+    managementLabels.join(', ')
   );
 
   // Reaching closed jobs from the portal, via the Closed tab.
