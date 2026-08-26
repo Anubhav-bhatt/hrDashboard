@@ -28,7 +28,20 @@ if (!EMAIL || !PASSWORD) {
   process.exit(1);
 }
 
-const TAG = 'e2ecomp';
+/*
+ * A fixture tag unique to this run.
+ *
+ * The tag used to be the bare prefix, and the suite creates jobs carrying it on
+ * every execution while cleanup lives in a separate script nobody is obliged to
+ * run. So `?search=e2ecomp` matched every previous run's fixtures too, and
+ * assertions expecting one job started failing once a second run had happened —
+ * reporting a defect in the product when the only thing wrong was the database.
+ *
+ * Keeping the prefix means cleanupE2EFixtures.js, which matches on `contains`,
+ * still finds these.
+ */
+const RUN_ID = Math.random().toString(36).slice(2, 8);
+const TAG = `e2ecomp${RUN_ID}`;
 let passed = 0;
 let failed = 0;
 

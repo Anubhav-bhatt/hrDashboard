@@ -34,6 +34,7 @@ const deriveNextAction = (job, threshold) => {
   if (selectedCount > 0 || job.selectedCandidateId) {
     return {
       priority: 0,
+      kind: 'close',
       tone: 'mint',
       icon: CheckCircle2,
       fact: selectedCount > 1 ? `${selectedCount} candidates selected.` : 'A candidate has been selected.',
@@ -47,6 +48,7 @@ const deriveNextAction = (job, threshold) => {
   if (shortlistedCount > 0) {
     return {
       priority: 1,
+      kind: 'decide',
       tone: 'lavender',
       icon: GitCompare,
       fact: `${shortlistedCount} shortlisted candidate${shortlistedCount === 1 ? '' : 's'}.`,
@@ -60,6 +62,7 @@ const deriveNextAction = (job, threshold) => {
   if (candidateCount === 0) {
     return {
       priority: 4,
+      kind: 'add-candidates',
       tone: 'neutral',
       icon: UserPlus,
       fact: 'No candidates yet.',
@@ -73,6 +76,7 @@ const deriveNextAction = (job, threshold) => {
   if (analyzedCount === 0) {
     return {
       priority: 2,
+      kind: 'score',
       tone: 'amber',
       icon: Sparkles,
       fact: `${candidateCount} candidate${candidateCount === 1 ? '' : 's'} waiting to be scored.`,
@@ -86,6 +90,7 @@ const deriveNextAction = (job, threshold) => {
   if (strongMatchCount > 0) {
     return {
       priority: 3,
+      kind: 'review-strong',
       tone: 'sky',
       icon: ClipboardList,
       fact: `${strongMatchCount} strong candidate${strongMatchCount === 1 ? '' : 's'} waiting for review.`,
@@ -98,6 +103,7 @@ const deriveNextAction = (job, threshold) => {
 
   return {
     priority: 5,
+    kind: 'review-all',
     tone: 'neutral',
     icon: ClipboardList,
     fact: `${candidateCount} candidate${candidateCount === 1 ? '' : 's'} scored.`,

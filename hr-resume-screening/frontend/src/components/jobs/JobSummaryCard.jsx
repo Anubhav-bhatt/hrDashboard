@@ -1,37 +1,51 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
-  ArrowRight,
-  Briefcase,
-  CheckCircle2,
-  UserPlus,
-  Users,
-  MoreVertical,
-  Upload,
-  Bot,
-  Sparkles,
   Archive,
+  ArrowRight,
+  Bot,
+  CheckCircle2,
   ExternalLink,
   MapPin,
-  Building
+  MoreVertical,
+  Upload
 } from 'lucide-react';
-import { Avatar, JobStatusBadge, Button, cx } from '../ui';
-import { formatDate, formatExperience, formatRelativeTime } from '../../utils/format';
+import { JobStatusBadge, cx } from '../ui';
+import { formatDate } from '../../utils/format';
 
-const PROCESSING_META = {
-  COMPLETED: { label: 'All scored', variant: 'success' },
-  READY_FOR_ANALYSIS: { label: 'Ready to score', variant: 'warning' },
-  IMPORTING: { label: 'Importing', variant: 'info' },
-  NEW: { label: 'New', variant: 'neutral' }
-};
+/**
+ * One role, scannable in a couple of seconds.
+ *
+ * Deliberately not a small job page: the title, where it is, what it screens
+ * for, how far it has got, and one way in. Everything else — the JD, the full
+ * skill list, salary, qualifications — lives in the workspace, where there is
+ * room to read it.
+ *
+ * A note on fields. This card previously rendered `job.department` with a
+ * fallback of "General" and `job.location` / `job.minExperience` beside it. None
+ * of those three exist: the Job model has no department or location column, so
+ * every card in the product displayed the word "General" as though it were data,
+ * and the other two branches could never render. The real fields are
+ * `requirements.preferredLocations` and `requirements.minimumExperience`, which
+ * is what is read here — and when they are absent the line is simply omitted.
+ */
 
-export const JobSummaryCard = ({
-  job,
-  strongMatchThreshold = 80,
-  compact = false,
-  onCloseJob
-}) => {
-  const navigate = useNavigate();
+/** A metric worth showing, or nothing. Zero is a real answer; null is not. */
+const Metric = ({ value, label, tone = 'default' }) => (
+  <div className="min-w-0">
+    <p
+      className={cx(
+        'text-body font-bold tabular-nums leading-none',
+        tone === 'strong' ? 'text-emerald-700' : 'text-slate-900'
+      )}
+    >
+      {value}
+    </p>
+    <p className="text-meta text-slate-500 mt-1 truncate">{label}</p>
+  </div>
+);
+
+export const JobSummaryCard = ({ job, strongMatchThreshold = 80, compact = false, onCloseJob }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -40,29 +54,42 @@ export const JobSummaryCard = ({
   const canClose = !isClosed && job.shortlistedCount > 0;
   const bodyHref = isClosed ? `/jobs/${job.id}` : `/jobs/${job.id}/candidates`;
 
+  const reqs = job.requirements || {};
+  const location = reqs.preferredLocations?.[0] || null;
+  const minExperience = typeof reqs.minimumExperience === 'number' && reqs.minimumExperience > 0
+    ? reqs.minimumExperience
+    : null;
+  const bestMatch = typeof job.bestMatchScore === 'number' ? job.bestMatchScore : null;
+
   useEffect(() => {
     if (!menuOpen) return undefined;
     const onPointerDown = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
     };
+    // Escape closes it too — a menu that only a mouse can dismiss traps a
+    // keyboard user who opened it by accident.
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
     document.addEventListener('mousedown', onPointerDown);
-    return () => document.removeEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
   }, [menuOpen]);
 
   return (
-    <div className="card hover:shadow-card-hover hover:border-slate-300 transition duration-150 flex flex-col justify-between relative group">
-      {/* Top Details & Header */}
+    <div
+      className="card group relative flex flex-col justify-between
+                 transition-[transform,box-shadow,border-color] duration-slow
+                 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-card-hover
+                 focus-within:border-slate-300 focus-within:shadow-card-hover"
+    >
       <div className={compact ? 'p-4' : 'p-5'}>
-        {/* Status + Department + Action menu */}
         <div className="flex items-start justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <JobStatusBadge status={job.status} />
-            <span className="text-[11px] font-normal text-slate-400">
-              {job.department || 'General'}
-            </span>
-          </div>
+          <JobStatusBadge status={job.status} />
 
-          {/* Contextual ⋯ Action Menu */}
           <div className="relative" ref={menuRef}>
             <button
               type="button"
@@ -71,57 +98,68 @@ export const JobSummaryCard = ({
                 e.stopPropagation();
                 setMenuOpen((prev) => !prev);
               }}
-              className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-              aria-label="Job actions"
+              aria-expanded={menuOpen}
+              aria-haspopup="menu"
+              className="p-1 rounded-control text-slate-400 hover:text-slate-700 hover:bg-slate-100
+                         transition-colors duration-fast focus-visible:outline-none
+                         focus-visible:ring-2 focus-visible:ring-brand-500"
+              aria-label={`Actions for ${job.title}`}
             >
-              <MoreVertical className="w-4 h-4" />
+              <MoreVertical className="w-4 h-4" aria-hidden="true" />
             </button>
 
             {menuOpen && (
               <div
-          className="absolute right-0 mt-1 w-48 rounded-card bg-white border border-slate-200 shadow-overlay py-1 z-30 text-xs animate-fade-in"
+                role="menu"
+                className="absolute right-0 mt-1 w-52 rounded-card bg-white border border-slate-200
+                           shadow-overlay py-1 z-30 animate-fade-in"
                 onClick={(e) => e.stopPropagation()}
               >
                 <Link
                   to={`/jobs/${job.id}`}
-                  className="flex items-center gap-2 px-3 py-2 text-slate-700 hover:bg-slate-50"
+                  role="menuitem"
+                  className="flex items-center gap-2 px-3 py-2 text-meta text-slate-700 hover:bg-slate-50"
                   onClick={() => setMenuOpen(false)}
                 >
-                  <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Job Workspace</span>
+                  <ExternalLink className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
+                  <span>Job workspace</span>
                 </Link>
 
                 {!isClosed && (
                   <>
                     <Link
                       to={`/jobs/${job.id}/import`}
-                      className="flex items-center gap-2 px-3 py-2 text-slate-700 hover:bg-slate-50"
+                      role="menuitem"
+                      className="flex items-center gap-2 px-3 py-2 text-meta text-slate-700 hover:bg-slate-50"
                       onClick={() => setMenuOpen(false)}
                     >
-                      <Upload className="w-3.5 h-3.5 text-slate-400" />
-                      <span>Import Resumes</span>
+                      <Upload className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
+                      <span>Add candidates</span>
                     </Link>
 
                     <Link
                       to={`/ai/ranking?jobId=${job.id}`}
-                      className="flex items-center gap-2 px-3 py-2 text-slate-700 hover:bg-slate-50"
+                      role="menuitem"
+                      className="flex items-center gap-2 px-3 py-2 text-meta text-slate-700 hover:bg-slate-50"
                       onClick={() => setMenuOpen(false)}
                     >
-                      <Bot className="w-3.5 h-3.5 text-brand-600" />
-                      <span>Rank Candidates (AI)</span>
+                      <Bot className="w-3.5 h-3.5 text-brand-600" aria-hidden="true" />
+                      <span>Rank candidates</span>
                     </Link>
 
                     {canClose && onCloseJob && (
                       <button
                         type="button"
-                        className="w-full flex items-center gap-2 px-3 py-2 text-amber-700 hover:bg-amber-50 text-left border-t border-slate-100 mt-1"
+                        role="menuitem"
+                        className="w-full flex items-center gap-2 px-3 py-2 text-meta text-amber-800
+                                   hover:bg-amber-50 text-left border-t border-slate-100 mt-1"
                         onClick={() => {
                           setMenuOpen(false);
                           onCloseJob(job);
                         }}
                       >
-                        <Archive className="w-3.5 h-3.5" />
-                        <span>Close & Select Hire</span>
+                        <Archive className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Select hire &amp; close</span>
                       </button>
                     )}
                   </>
@@ -131,99 +169,112 @@ export const JobSummaryCard = ({
           </div>
         </div>
 
-        {/* Job Title */}
-        <Link
-          to={bodyHref}
-          className="font-bold text-base text-slate-900 hover:text-brand-600 transition-colors line-clamp-2 mt-2 block"
-        >
-          {job.title}
-        </Link>
+        <h3 className="mt-2.5">
+          <Link
+            to={bodyHref}
+            className="text-card-title text-slate-900 hover:text-brand-700 transition-colors duration-fast
+                       line-clamp-2 block rounded focus-visible:outline-none
+                       focus-visible:ring-2 focus-visible:ring-brand-500"
+          >
+            {job.title}
+          </Link>
+        </h3>
 
-        {/* Location & Experience requirements */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 mt-1.5">
-          {job.location && (
-            <span className="flex items-center gap-1">
-              <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-              {job.location}
-            </span>
-          )}
-          {typeof job.minExperience === 'number' && (
-            <span>Min {job.minExperience} yrs exp</span>
-          )}
-        </div>
+        {/* Only rendered when the role actually states one of these. */}
+        {(location || minExperience !== null) && (
+          <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-slate-500 mt-1.5">
+            {location && (
+              <span className="inline-flex items-center gap-1">
+                <MapPin className="w-3 h-3 text-slate-400 shrink-0" aria-hidden="true" />
+                {location}
+              </span>
+            )}
+            {minExperience !== null && <span>Min {minExperience} yrs experience</span>}
+          </p>
+        )}
 
-        {/* Required Skills Chips */}
         {job.requiredSkills?.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-3">
-            {job.requiredSkills.slice(0, 3).map((skill, idx) => (
+          <div className="flex flex-wrap items-center gap-1.5 mt-3">
+            {job.requiredSkills.slice(0, 3).map((skill) => (
               <span
-                key={idx}
-                className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-normal bg-slate-100 text-slate-600"
+                key={skill}
+                className="inline-flex items-center px-2 py-0.5 rounded-control bg-slate-100 text-meta text-slate-600"
               >
                 {skill}
               </span>
             ))}
             {job.requiredSkills.length > 3 && (
-              <span className="text-[10px] text-slate-400 self-center">
-                +{job.requiredSkills.length - 3} more
-              </span>
+              <span className="text-meta text-slate-500">+{job.requiredSkills.length - 3}</span>
             )}
           </div>
         )}
 
-        {/* Closed Role Summary */}
         {isClosed && (
-          <div className="mt-3.5 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+          <div className="mt-4 rounded-control border border-slate-200 bg-slate-50 p-3">
             {hire ? (
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Hired Candidate
+              <>
+                <p className="text-label uppercase text-emerald-700 inline-flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
+                  Hired
                 </p>
                 <div className="flex items-center justify-between gap-2 mt-1.5">
                   <div className="min-w-0">
-                    <p className="font-bold text-xs text-slate-900 truncate">{hire.name}</p>
-                    <p className="text-[10px] text-slate-500 truncate">{hire.currentRole || 'Candidate'}</p>
+                    <p className="text-meta font-bold text-slate-900 truncate">{hire.name}</p>
+                    {hire.currentRole && <p className="text-meta text-slate-500 truncate">{hire.currentRole}</p>}
                   </div>
                   {typeof hire.overallScore === 'number' && (
-                    <span className="text-xs font-bold text-emerald-600 tabular-nums">
+                    <span className="text-meta font-bold text-emerald-700 tabular-nums shrink-0">
                       {hire.overallScore}%
                     </span>
                   )}
                 </div>
-              </div>
+              </>
             ) : (
-              <p className="text-xs text-slate-500">Position filled and closed.</p>
+              <p className="text-meta text-slate-600">Closed without a recorded selection.</p>
             )}
-            <p className="text-[10px] text-slate-400 mt-2 border-t border-slate-200/60 pt-1.5">
-              Closed on {formatDate(job.closedAt)}
+            <p className="text-meta text-slate-500 mt-2 pt-2 border-t border-slate-200">
+              Closed {formatDate(job.closedAt)}
             </p>
           </div>
         )}
       </div>
 
-      {/* Footer Metrics & Actions */}
+      {/*
+        Progress, as four numbers.
+        Best match is omitted rather than shown as 0% when nothing is scored —
+        an unscored pool has no best match, and 0% would read as a bad one.
+      */}
       {!isClosed && (
-        <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/40 flex items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-3">
-            <div>
-              <span className="font-bold text-slate-900">{job.candidateCount || 0}</span>
-              <span className="text-slate-400 ml-1">applicants</span>
-            </div>
-            {job.shortlistedCount > 0 && (
-              <div className="text-emerald-600">
-                <span className="font-bold tabular-nums">{job.shortlistedCount}</span>
-                <span className="ml-1 font-normal">shortlisted</span>
-              </div>
-            )}
+        <div className="px-5 pb-4">
+          {/*
+            Two by two, not one by four.
+            The card sits in a three-column grid, so it is about 370px wide and a
+            quarter of that is ~85px — enough to truncate "Strong 80%+" to
+            "Strong 80…". Two columns give every label room to read in full at
+            every breakpoint the grid produces.
+          */}
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3.5 py-4 border-t border-slate-100">
+            <Metric value={(job.candidateCount || 0).toLocaleString('en-IN')} label="Candidates" />
+            <Metric
+              value={job.strongMatchCount || 0}
+              label={`Strong ${strongMatchThreshold}%+`}
+              tone={job.strongMatchCount > 0 ? 'strong' : 'default'}
+            />
+            <Metric value={job.shortlistedCount || 0} label="Shortlisted" />
+            <Metric value={bestMatch !== null ? `${bestMatch}%` : '—'} label="Best match" />
           </div>
 
-          <Link
-            to={bodyHref}
-            className="btn btn-sm btn-ghost text-xs hover:bg-slate-100 text-brand-600"
-          >
-            Review
-            <ArrowRight className="w-3 h-3 ml-1" />
-          </Link>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-meta text-slate-500">Created {formatDate(job.createdAt)}</span>
+            <Link
+              to={bodyHref}
+              className="btn btn-sm btn-ghost text-brand-700"
+              aria-label={`Open ${job.title}`}
+            >
+              Open job
+              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform duration-fast" aria-hidden="true" />
+            </Link>
+          </div>
         </div>
       )}
     </div>

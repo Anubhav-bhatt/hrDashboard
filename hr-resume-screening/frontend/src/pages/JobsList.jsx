@@ -176,14 +176,29 @@ const JobsList = ({ lockedStatus = null, title = 'Jobs', eyebrow = 'Recruitment'
   const statusCounts = data?.meta?.statusCounts || { all: 0, open: 0, closed: 0 };
   const total = pagination?.total ?? jobs.length;
 
-  const describe = () => {
-    if (loading && !data) return 'Loading roles…';
-    if (urlSearch) return `${total} job${total === 1 ? '' : 's'} found for “${urlSearch}”`;
-    if (isHistory) return `${total} closed role${total === 1 ? '' : 's'} with a selected candidate.`;
-    if (total === 0) return 'Manage your open roles and review their candidates.';
-    if (status === 'CLOSED') return `${total} closed role${total === 1 ? '' : 's'}.`;
-    if (status === 'OPEN') return `${total} active role${total === 1 ? '' : 's'} being screened.`;
-    return `${statusCounts.open} active · ${statusCounts.closed} closed`;
+  /*
+   * The page header states purpose; the count belongs with the results.
+   *
+   * It used to carry both, so the one number a recruiter scans for was embedded
+   * in a sentence at the top of the page, a long way from the grid it described.
+   */
+  const describe = () =>
+    isHistory
+      ? 'Roles that were filled, and who was selected for each.'
+      : 'Manage your open roles and review their candidates.';
+
+  /**
+   * The authoritative result count.
+   *
+   * Taken from the API's pagination total, never from `jobs.length` — the array
+   * is one page of twelve, so on a workspace with thirty roles the page length
+   * would report "12 jobs found" no matter how many actually matched.
+   */
+  const resultCount = () => {
+    // Plain "job", not "active job": the selected tab already says which
+    // lifecycle is being listed, and qualifying the noun twice reads as clutter.
+    const label = `${total.toLocaleString('en-IN')} job${total === 1 ? '' : 's'} found`;
+    return urlSearch ? `${label} for “${urlSearch}”` : label;
   };
 
   /** Empty state wording depends on why nothing is showing. */
@@ -361,6 +376,19 @@ const JobsList = ({ lockedStatus = null, title = 'Jobs', eyebrow = 'Recruitment'
         renderEmpty()
       ) : (
         <>
+          {/* The count sits directly above the grid it describes, and is announced
+              politely so a filter change is reported rather than only shown. */}
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <p className="text-meta text-slate-600" aria-live="polite">
+              {resultCount()}
+            </p>
+            {pagination && pagination.totalPages > 1 && (
+              <p className="text-meta text-slate-500 tabular-nums">
+                Page {pagination.page} of {pagination.totalPages}
+              </p>
+            )}
+          </div>
+
           <div className={cx('grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5', loading && 'opacity-60')}>
             {jobs.map((job) => (
               <JobSummaryCard

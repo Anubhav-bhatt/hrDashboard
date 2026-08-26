@@ -4,7 +4,6 @@ import {
   Award,
   Briefcase,
   Calendar,
-  Clock,
   FileText,
   GraduationCap,
   IndianRupee,
@@ -14,10 +13,8 @@ import {
   Save,
   Search,
   Sparkles,
-  CheckCircle2,
   Lock,
   UserCheck,
-  UserPlus,
   Users,
   X
 } from 'lucide-react';
@@ -54,6 +51,8 @@ import {
 } from '../components/ui';
 import TokenInput from '../components/ui/TokenInput';
 import CandidateBrowser from '../components/candidate/CandidateBrowser';
+import JobLifecycle from '../components/jobs/JobLifecycle';
+import JobNextStep from '../components/jobs/JobNextStep';
 import { formatDate, formatExperience, formatSalary } from '../utils/format';
 
 /** The three things a recruiter comes to a job page for. */
@@ -404,10 +403,11 @@ const JobDetails = () => {
         }
         actions={
           /*
-            One dominant action, chosen from the job's real state:
-            no candidates yet -> add some; a shortlist exists -> make the hiring
-            decision; otherwise -> look at the candidates. A closed job offers
-            nothing operational at all.
+            The header carries one action, and for an open job it is the quiet one.
+            The dominant action now lives in the Recommended next step section
+            below, derived from the same job state — three filled buttons up here
+            competing with a stated recommendation was four primary actions on one
+            screen, which is no recommendation at all.
           */
           isClosed ? (
             job.selectedCandidate && (
@@ -417,45 +417,31 @@ const JobDetails = () => {
               </Link>
             )
           ) : (
-            <>
-              {!hasCandidates ? (
-                <Link to={`/jobs/${id}/import`} className="btn btn-md btn-primary">
-                  <UserPlus className="w-4 h-4" aria-hidden="true" />
-                  Add candidates
-                </Link>
-              ) : (
-                <>
-                  <Link to={`/jobs/${id}/import`} className="btn btn-md btn-secondary">
-                    <UserPlus className="w-4 h-4" aria-hidden="true" />
-                    Add candidates
-                  </Link>
-                  <Link to={`/ai/ranking?jobId=${id}`} className="btn btn-md btn-secondary text-brand-700 border-brand-200">
-                    <Sparkles className="w-4 h-4 text-brand-600" aria-hidden="true" />
-                    Rank (AI)
-                  </Link>
-                  {canClose ? (
-                    // Phrased as the decision the recruiter is making, not as the
-                    // administrative act of closing a record.
-                    <Button variant="primary" onClick={openCloseDialog} loading={loadingShortlist} icon={CheckCircle2}>
-                      Select final candidate
-                    </Button>
-                  ) : (
-                    <Link to={`/jobs/${id}/candidates`} className="btn btn-md btn-primary">
-                      <Users className="w-4 h-4" aria-hidden="true" />
-                      View candidates
-                    </Link>
-                  )}
-                </>
-              )}
-            </>
+            <Link to={`/jobs/${id}/candidates`} className="btn btn-md btn-secondary">
+              <Users className="w-4 h-4" aria-hidden="true" />
+              View candidates
+            </Link>
           )
         }
       />
 
-      {!isClosed && hasCandidates && shortlistedCount === 0 && (
-        <p className="text-meta text-slate-500 -mt-2">
-          Shortlist candidates you want to consider, then select the one you hire.
-        </p>
+      {/* Where this vacancy has got to, and the one thing to do next. Both are
+          derived from the same counts the snapshot below reports, so the page
+          cannot recommend something its own numbers contradict. */}
+      {!isClosed && (
+        <>
+          <JobLifecycle stats={stats} job={job} className="px-1" />
+
+          <JobNextStep
+            job={job}
+            stats={stats}
+            threshold={threshold}
+            onCloseJob={openCloseDialog}
+            onScore={handleReanalyze}
+            closing={loadingShortlist}
+            scoring={analyzing}
+          />
+        </>
       )}
 
       {/* Closed-job banner: what happened, who was hired, and a way to them. */}
@@ -901,63 +887,29 @@ const JobDetails = () => {
         {/* Contextual side panel */}
         <div className="space-y-5">
 
-          {/* Next action */}
-          <Card>
-            <CardHeader title="Next steps" />
-            <div className="mt-3 space-y-2">
-              {isClosed ? (
-                <>
-                  <p className="text-meta text-slate-600">
-                    This role is filled. Candidate imports are disabled for closed jobs, and the full screening
-                    history stays available below.
-                  </p>
-                  <Link to="/jobs/closed" className="btn btn-md btn-secondary w-full">
-                    <Briefcase className="w-4 h-4" aria-hidden="true" />
-                    View in closed jobs
-                  </Link>
-                </>
-              ) : !hasCandidates ? (
-                <>
-                  <p className="text-meta text-slate-600">
-                    No candidates yet. Add resumes to start comparing candidates against this job.
-                  </p>
-                  <Link to={`/jobs/${id}/import`} className="btn btn-md btn-primary w-full">
-                    <UserPlus className="w-4 h-4" aria-hidden="true" />
-                    Add candidates
-                  </Link>
-                </>
-              ) : stats.pendingReviewCount > 0 ? (
-                <>
-                  <p className="text-meta text-slate-600">
-                    {stats.pendingReviewCount} candidate{stats.pendingReviewCount === 1 ? '' : 's'} waiting on your
-                    review.
-                  </p>
-                  <Link
-                    to={`/jobs/${id}/candidates?hrStatus=REVIEW,NEEDS_REVIEW&sort=score_desc`}
-                    className="btn btn-md btn-primary w-full"
-                  >
-                    <Clock className="w-4 h-4" aria-hidden="true" />
-                    Review candidates
-                  </Link>
-                </>
-              ) : (
-                <>
-                  <p className="text-meta text-slate-600">Every candidate on this role has been screened.</p>
-                  <Link to={`/jobs/${id}/candidates`} className="btn btn-md btn-secondary w-full">
-                    <Users className="w-4 h-4" aria-hidden="true" />
-                    View all candidates
-                  </Link>
-                </>
-              )}
-
-              {!isClosed && (
-                <Link to={`/jobs/${id}/import`} className="btn btn-md btn-secondary w-full">
-                  <UserPlus className="w-4 h-4" aria-hidden="true" />
-                  Add candidates
+          {/*
+            Closed roles only.
+            This card used to run a second recommendation for open jobs, ordered
+            on pendingReviewCount while the banner above orders on the screening
+            funnel — so the two could and did disagree, one saying "review the
+            shortlist" while the other said "every candidate has been screened".
+            One recommendation per screen, and it is the banner.
+          */}
+          {isClosed && (
+            <Card>
+              <CardHeader title="Next steps" />
+              <div className="mt-3 space-y-2">
+                <p className="text-meta text-slate-600">
+                  This role is filled. Candidate imports are disabled for closed jobs, and the full screening
+                  history stays available below.
+                </p>
+                <Link to="/jobs/closed" className="btn btn-md btn-secondary w-full">
+                  <Briefcase className="w-4 h-4" aria-hidden="true" />
+                  View in closed jobs
                 </Link>
-              )}
-            </div>
-          </Card>
+              </div>
+            </Card>
+          )}
         </div>
         </div>
       </TabPanel>
