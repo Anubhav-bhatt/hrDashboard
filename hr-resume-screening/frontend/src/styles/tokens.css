@@ -124,8 +124,8 @@
     --skeleton-base: 226 232 240;
     --skeleton-sheen: 255 255 255;
     --skeleton-sheen-opacity: 0.55;
-    --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06);
-    --shadow-card-hover: 0 4px 8px -2px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.06);
+    --shadow-card: none;
+    --shadow-card-hover: 0 2px 6px -2px rgb(15 23 42 / 0.10);
     --shadow-overlay: 0 12px 32px -8px rgb(15 23 42 / 0.18), 0 4px 12px -4px rgb(15 23 42 / 0.10);
     --scrollbar-thumb: 203 213 225;
     --overlay-scrim: 15 23 42;
@@ -247,8 +247,8 @@
     --skeleton-base: 38 46 60;
     --skeleton-sheen: 255 255 255;
     --skeleton-sheen-opacity: 0.06;
-    --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.5), 0 1px 3px 0 rgb(0 0 0 / 0.4);
-    --shadow-card-hover: 0 6px 14px -4px rgb(0 0 0 / 0.6), 0 2px 6px -2px rgb(0 0 0 / 0.5);
+    --shadow-card: none;
+    --shadow-card-hover: 0 3px 10px -4px rgb(0 0 0 / 0.55);
     --shadow-overlay: 0 16px 40px -10px rgb(0 0 0 / 0.7), 0 6px 16px -6px rgb(0 0 0 / 0.5);
     --scrollbar-thumb: 62 73 90;
     --overlay-scrim: 0 0 0;

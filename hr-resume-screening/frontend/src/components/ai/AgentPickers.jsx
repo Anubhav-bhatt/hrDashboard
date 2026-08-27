@@ -173,6 +173,16 @@ export const CandidateMultiPicker = ({
   min = 2,
   max = 5,
   label = 'Candidates',
+  /**
+   * Narrows the list to specific candidates.
+   *
+   * Used when the caller already knows the relevant set and only the choice
+   * within it is open — arriving from a job with seven shortlisted candidates,
+   * for instance, where offering the whole hundred-name pool would be asking a
+   * question nobody had. Null means no restriction.
+   */
+  restrictToIds = null,
+  restrictionLabel = null,
   className
 }) => {
   const groupId = `agent-candidates-${useId()}`;
@@ -183,7 +193,11 @@ export const CandidateMultiPicker = ({
     { enabled: Boolean(jobId) }
   );
 
-  const candidates = jobId ? data?.data || [] : [];
+  const allCandidates = jobId ? data?.data || [] : [];
+  const candidates =
+    restrictToIds && restrictToIds.length > 0
+      ? allCandidates.filter((candidate) => restrictToIds.includes(candidate.id))
+      : allCandidates;
   const atMax = value.length >= max;
 
   const toggle = (candidateId) => {
@@ -200,6 +214,11 @@ export const CandidateMultiPicker = ({
       <legend className="field-label">
         {label} <span className="normal-case font-normal text-slate-400">(choose {min}–{max})</span>
       </legend>
+
+      {/* States the narrowing, so a shorter list never reads as missing data. */}
+      {restrictionLabel && candidates.length > 0 && (
+        <p className="text-xs text-slate-500 mb-1.5">{restrictionLabel}</p>
+      )}
 
       {!jobId && <p className="text-meta text-slate-500">Select a job to choose candidates.</p>}
       {jobId && loading && <p className="text-meta text-slate-500">Loading candidates…</p>}

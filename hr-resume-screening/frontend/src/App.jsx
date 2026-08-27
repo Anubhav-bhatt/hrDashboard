@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-do
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AiConfigProvider } from './context/AiConfigContext';
 import { RecruitmentProvider } from './context/RecruitmentContext';
+import { WorkspaceModeProvider } from './context/WorkspaceModeContext';
 import { ToastProvider } from './components/ToastProvider';
 import AiRouteGuard from './components/ai/AiRouteGuard';
 import AppShell from './components/AppShell';
@@ -38,6 +39,9 @@ const ImportCandidates = lazy(() => import('./pages/ImportCandidates'));
  * pay nothing for its presence, which is what "additive" has to mean in practice
  * as well as in architecture.
  */
+/* Minimal mode is opt-in, so its chunk is only fetched by recruiters who use it. */
+const MinimalistWorkspace = lazy(() => import('./pages/MinimalistWorkspace'));
+
 const AIAssistant = lazy(() => import('./pages/ai/AIAssistant'));
 const ScreeningAgent = lazy(() => import('./pages/ai/ScreeningAgent'));
 const RankingAgent = lazy(() => import('./pages/ai/RankingAgent'));
@@ -90,6 +94,10 @@ function App() {
             {/* Also inside AuthProvider, because the working context is per
                 account and is discarded when the signed-in user changes. */}
             <RecruitmentProvider>
+              {/* Presentation only, and deliberately separate from ThemeProvider:
+                  how much chrome is on screen is a different question from what
+                  colour it is, and the two must compose rather than override. */}
+              <WorkspaceModeProvider>
               <Routes>
               <Route path="/login" element={<Login />} />
 
@@ -256,6 +264,18 @@ function App() {
                 }
               />
 
+              {/* Minimal mode is a real route, not just a flag, so it survives a
+                  refresh, can be linked, and Back behaves the way a recruiter
+                  expects after entering it. */}
+              <Route
+                path="/focus"
+                element={
+                  <RequireAuth fallback={<RouteSkeleton variant="ai" label="Opening minimal mode..." />}>
+                    <MinimalistWorkspace />
+                  </RequireAuth>
+                }
+              />
+
               <Route
                 path="*"
                 element={
@@ -265,6 +285,7 @@ function App() {
                 }
               />
               </Routes>
+              </WorkspaceModeProvider>
             </RecruitmentProvider>
           </AiConfigProvider>
         </AuthProvider>

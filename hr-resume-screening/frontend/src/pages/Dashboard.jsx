@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   Archive,
+  ArrowRight,
   Award,
   BarChart3,
   Briefcase,
@@ -38,6 +39,7 @@ import {
   cx
 } from '../components/ui';
 import { formatRelativeTime, getScoreMeta } from '../utils/format';
+import { useRecruitmentContext } from '../context/RecruitmentContext';
 
 const STAGE_BARS = {
   REVIEW: 'bg-slate-400',
@@ -130,6 +132,7 @@ const NoCandidatesState = ({ jobs }) => {
 
 const Dashboard = () => {
   const { user } = useAuth();
+  const { currentJobId } = useRecruitmentContext();
   const [searchParams, setSearchParams] = useSearchParams();
   const [quickViewCandidate, setQuickViewCandidate] = useState(null);
 
@@ -177,6 +180,10 @@ const Dashboard = () => {
 
   // One derivation, shared by the recommendation banner and the attention cards.
   const attentionItems = useMemo(() => deriveAttentionItems(jobOptions, threshold), [jobOptions, threshold]);
+  const continueJob = useMemo(
+    () => (currentJobId ? jobOptions.find((job) => job.id === currentJobId) || null : null),
+    [currentJobId, jobOptions]
+  );
 
   /*
    * Which of the guided states applies.
@@ -217,13 +224,11 @@ const Dashboard = () => {
       {/* ------------------------------------------------------------ header */}
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <h1 className="text-page-title sm:text-display text-slate-900">
-            {greeting()}, {firstName}
-          </h1>
+          <h1 className="text-page-title sm:text-display text-slate-900">Focus</h1>
           <p className="text-body text-slate-600 mt-1">
             {isJobScoped
               ? `Viewing ${scope.jobTitle} on its own.`
-              : "Here's what needs your attention today."}
+              : `${greeting()}, ${firstName}. Here's what needs your attention.`}
           </p>
         </div>
 
@@ -314,6 +319,26 @@ const Dashboard = () => {
                 skip={1}
               />
             )
+          )}
+
+          {!isJobScoped && continueJob && (
+            <section aria-labelledby="continue-work-heading" className="border-y border-slate-200 py-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-label uppercase text-slate-500">Continue where you left off</p>
+                  <h2 id="continue-work-heading" className="text-card-title text-slate-900 mt-1 truncate">
+                    Continue reviewing {continueJob.title}
+                  </h2>
+                  <p className="text-meta text-slate-600 mt-0.5">
+                    {(continueJob.candidateCount || 0).toLocaleString('en-IN')} candidate{continueJob.candidateCount === 1 ? '' : 's'} in this role.
+                  </p>
+                </div>
+                <Link to={`/jobs/${continueJob.id}/candidates`} className="btn btn-sm btn-secondary shrink-0">
+                  Continue review
+                  <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+                </Link>
+              </div>
+            </section>
           )}
 
           {/* ------------------------------------------ recruitment snapshot */}
@@ -413,27 +438,6 @@ const Dashboard = () => {
               </div>
             )}
           </section>
-
-          {/* ------------------------------------------------ active hiring */}
-          {!isJobScoped && <ActiveHiring jobs={jobOptions} loading={jobsPending} limit={4} />}
-
-          {/* ---------------------------------------------- recent activity */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-6">
-            <RecentActivity
-              candidates={overview?.recentCandidates || []}
-              loading={overviewLoading}
-              viewAllTo={candidatesLink('sort=newest')}
-              limit={5}
-            />
-
-            {/* Hiring outcomes only mean something across roles, so a single-job
-                view stays about that job's own pipeline. */}
-            {!isJobScoped && (
-              <div>
-                <RecentHires hires={overview?.recentHires || []} loading={overviewLoading} />
-              </div>
-            )}
-          </div>
 
           {/*
             Analytics, collapsed by default.
@@ -548,6 +552,10 @@ const Dashboard = () => {
                   </>
                 )}
               </div>
+            )}
+
+            {!isJobScoped && (
+              <RecentHires hires={overview?.recentHires || []} loading={overviewLoading} />
             )}
 
             {/* Top candidates + match distribution for the active scope */}

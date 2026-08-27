@@ -188,7 +188,7 @@ try {
     // rather than the thing that matters here, which is that adding the AI
     // section removed no existing destination.
     const sidebarNav = page.locator('nav[aria-label="Main navigation"], nav[aria-label="Management"]');
-    for (const label of ['Dashboard', 'Jobs', 'Candidates', 'Settings']) {
+    for (const label of ['Focus', 'Jobs', 'Candidates', 'Settings']) {
       check((await sidebarNav.getByText(label, { exact: true }).count()) > 0, `existing nav still lists ${label}`);
     }
 
@@ -453,7 +453,7 @@ try {
     // The recruitment application must be exactly as it was. Sidebar-wide for the
     // same reason as above — Settings lives in the Management group.
     const sidebarNav = page.locator('nav[aria-label="Main navigation"], nav[aria-label="Management"]');
-    for (const label of ['Dashboard', 'Jobs', 'Candidates', 'Settings']) {
+    for (const label of ['Focus', 'Jobs', 'Candidates', 'Settings']) {
       check((await sidebarNav.getByText(label, { exact: true }).count()) > 0, `${label} still present with AI off`);
     }
 

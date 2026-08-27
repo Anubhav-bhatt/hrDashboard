@@ -47,7 +47,7 @@ const Pagination = ({ pagination, onPageChange, onLimitChange, className }) => {
         <p className="text-meta text-slate-500" aria-live="polite">
           Showing <span className="font-semibold text-slate-800 tabular-nums">{from}</span>–
           <span className="font-semibold text-slate-800 tabular-nums">{to}</span> of{' '}
-          <span className="font-semibold text-slate-800 tabular-nums">{total}</span>
+          <span className="font-semibold text-slate-800 tabular-nums">{total.toLocaleString('en-IN')}</span>
         </p>
 
         {onLimitChange && (

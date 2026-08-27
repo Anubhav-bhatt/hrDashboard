@@ -18,7 +18,7 @@ const JobKpi = ({ label, value, icon: Icon, tone = 'slate', hint }) => {
   };
 
   return (
-    <div className="rounded-card border border-slate-200 bg-white px-4 py-3">
+    <div className="min-w-0 border-b border-r border-slate-200 px-4 py-4 last:border-r-0 lg:border-b-0">
       <div className="flex items-center justify-between gap-2">
         <p className="text-label uppercase text-slate-500">{label}</p>
         {Icon && (
@@ -160,7 +160,7 @@ const JobCandidatesPage = () => {
       </div>
 
       {/* Job-scoped KPI row — contextual, not a second dashboard */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 overflow-hidden rounded-card border border-slate-200 bg-white lg:grid-cols-5">
         <JobKpi label="Total candidates" value={stats.candidateCount} icon={Users} tone="brand" />
         <JobKpi
           label={`${threshold}%+ matches`}

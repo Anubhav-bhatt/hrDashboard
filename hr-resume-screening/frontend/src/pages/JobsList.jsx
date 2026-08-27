@@ -389,15 +389,25 @@ const JobsList = ({ lockedStatus = null, title = 'Jobs', eyebrow = 'Recruitment'
             )}
           </div>
 
-          <div className={cx('grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5', loading && 'opacity-60')}>
-            {jobs.map((job) => (
-              <JobSummaryCard
-                key={job.id}
-                job={job}
-                strongMatchThreshold={threshold}
-                onCloseJob={openCloseDialog}
-              />
-            ))}
+          <div className={cx('card p-0 overflow-hidden', loading && 'opacity-60')}>
+            <div className="hidden grid-cols-[minmax(0,1fr)_7rem_6rem_7rem_10rem] items-center border-b border-slate-200 bg-slate-50 px-5 py-3 text-label uppercase text-slate-500 sm:grid">
+              <span>Role</span>
+              <span className="text-right">Candidates</span>
+              <span className="text-right">Strong</span>
+              <span className="text-right">Shortlisted</span>
+              <span className="text-right">Next</span>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {jobs.map((job) => (
+                <JobSummaryCard
+                  key={job.id}
+                  job={job}
+                  compact
+                  strongMatchThreshold={threshold}
+                  onCloseJob={openCloseDialog}
+                />
+              ))}
+            </div>
           </div>
 
           {pagination && pagination.totalPages > 1 && (

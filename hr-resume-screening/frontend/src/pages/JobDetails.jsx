@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Award,
   Briefcase,
@@ -50,7 +50,6 @@ import {
   cx
 } from '../components/ui';
 import TokenInput from '../components/ui/TokenInput';
-import CandidateBrowser from '../components/candidate/CandidateBrowser';
 import JobLifecycle from '../components/jobs/JobLifecycle';
 import JobNextStep from '../components/jobs/JobNextStep';
 import { formatDate, formatExperience, formatSalary } from '../utils/format';
@@ -58,9 +57,19 @@ import { formatDate, formatExperience, formatSalary } from '../utils/format';
 /** The three things a recruiter comes to a job page for. */
 const JOB_TABS = [
   { id: 'overview', label: 'Overview' },
-  { id: 'candidates', label: 'Candidates' },
   { id: 'criteria', label: 'Job criteria' }
 ];
+
+/**
+ * Tabs this page used to own and now delegates.
+ *
+ * "Candidates" mounted a second full candidate browser — the same component,
+ * filters, pagination and selection bar as `/jobs/:jobId/candidates`, one click
+ * away. Two ways to do the same thing on adjacent surfaces is a cost with no
+ * return, so the workspace now previews the strongest candidates and hands the
+ * full browser to the route that already exists. Old links keep working.
+ */
+const DELEGATED_TABS = { candidates: (jobId) => `/jobs/${jobId}/candidates?sort=score_desc` };
 
 const SKILL_SUGGESTIONS = [
   'React', 'TypeScript', 'JavaScript', 'Node.js', 'Express', 'PostgreSQL', 'MongoDB',
@@ -101,13 +110,13 @@ const SnapshotTile = ({ label, value, icon: Icon, tone = 'slate', to, hint }) =>
     </>
   );
 
-  if (!to) return <div className="rounded-card border border-slate-200 bg-white px-4 py-3">{body}</div>;
+  if (!to) return <div className="min-w-0 border-b border-r border-slate-200 px-4 py-4 last:border-r-0 lg:border-b-0">{body}</div>;
 
   return (
     <Link
       to={to}
-      className="rounded-card border border-slate-200 bg-white px-4 py-3 transition duration-fast
-                 hover:border-slate-300 focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2
+      className="min-w-0 border-b border-r border-slate-200 px-4 py-4 transition duration-fast
+                 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2
                  focus-visible:ring-offset-slate-50 block"
       aria-label={`${label}: ${value}`}
     >
@@ -139,6 +148,7 @@ const CriterionRow = ({ icon: Icon, label, children, empty }) => (
  */
 const JobDetails = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
   const toast = useToast();
 
   const { data: jobData, error, loading, refetch } = useApiResource((config) => getJobById(id, config), [id]);
@@ -166,7 +176,16 @@ const JobDetails = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedTab = searchParams.get('tab');
   const activeTab = JOB_TABS.some((tab) => tab.id === requestedTab) ? requestedTab : 'overview';
-  const [jdOpen, setJdOpen] = useState(false);
+  // The JD now lives inside the "More details" disclosure rather than a card of
+  // its own, so one piece of state controls it.
+  const [detailsOpen, setDetailsOpen] = useState(false);
+
+  // A bookmark or shared link pointing at the retired Candidates tab lands on
+  // the browser it was showing, rather than silently falling back to Overview.
+  useEffect(() => {
+    const delegate = requestedTab && DELEGATED_TABS[requestedTab];
+    if (delegate) navigate(delegate(id), { replace: true });
+  }, [id, navigate, requestedTab]);
 
   const setTab = (next) => {
     setSearchParams(
@@ -258,6 +277,9 @@ const JobDetails = () => {
     () => (topData?.data || []).filter((c) => c.matchAnalysis?.overallScore !== undefined),
     [topData]
   );
+
+  /** Read straight off the job record — the requirements summary never guesses. */
+  const requiredSkills = job?.requirements?.requiredSkills || [];
 
   const update = (changes) => {
     setDraft((prev) => ({ ...prev, ...changes }));
@@ -499,7 +521,7 @@ const JobDetails = () => {
       )}
 
       {/* Candidate snapshot — values come from the job summary API */}
-      <section aria-label="Candidate snapshot" className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <section aria-label="Candidate snapshot" className="grid grid-cols-2 overflow-hidden rounded-card border border-slate-200 bg-white lg:grid-cols-4">
         <SnapshotTile
           label="Candidates"
           value={stats?.candidateCount ?? '—'}
@@ -531,21 +553,47 @@ const JobDetails = () => {
         />
       </section>
 
-      {/* Stale-analysis prompt */}
-      {hasCandidates && stats.analyzedCount < stats.candidateCount && (
-        <InlineAlert
-          tone="warning"
-          title="Some candidates are not scored"
-          message={`${stats.candidateCount - stats.analyzedCount} candidate(s) on this role have not been scored against the current criteria.`}
-        />
+      {/*
+        Unscored candidates, with the fix attached.
+
+        Resumes are scored as they are ingested, so this state means something
+        went wrong for those files or the criteria changed underneath them —
+        either way an unscored candidate is invisible to ranking, comparison and
+        best-fits. This used to state the problem and stop there, leaving the
+        recruiter to find the re-score button on the criteria tab. The action now
+        travels with the message.
+      */}
+      {hasCandidates && stats.analyzedCount < stats.candidateCount && !isClosed && (
+        <div className="rounded-card border border-amber-200 bg-amber-50 p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-card-title text-amber-900">Some candidates are not scored</p>
+              <p className="text-meta text-amber-800/90 mt-0.5">
+                {stats.candidateCount - stats.analyzedCount} of {stats.candidateCount} candidates have no score
+                against the current criteria, so they are missing from rankings and comparisons.
+              </p>
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              icon={RefreshCw}
+              loading={analyzing}
+              onClick={handleReanalyze}
+              className="shrink-0"
+            >
+              {analyzing ? 'Scoring…' : 'Score them now'}
+            </Button>
+          </div>
+        </div>
       )}
 
       {/*
-        Three tabs, and only three.
-        Everything this page can do belongs to one of them: what is happening
-        (Overview), who applied (Candidates), or what the role screens for (Job
-        Criteria). The active tab lives in the URL so a particular view of a job
-        can be refreshed and shared.
+        Two tabs now, not three.
+        The page answers what is happening (Overview) and what the role screens
+        for (Job criteria). "Who applied" was a third tab holding a duplicate
+        candidate browser; it is now a preview on Overview plus a link to the
+        route that owns candidate browsing. The active tab stays in the URL so a
+        view of a job can still be refreshed and shared.
       */}
       <Tabs tabs={JOB_TABS} activeId={activeTab} onChange={setTab} />
 
@@ -833,55 +881,110 @@ const JobDetails = () => {
         </div>
       </TabPanel>
 
-      {/* --------------------------------------------------------- Candidates --- */}
-      <TabPanel id="candidates" activeId={activeTab}>
-        {/* The same browser the dedicated candidates route uses, scoped to this
-            job. One implementation of searching, filtering and ranking. */}
-        <CandidateBrowser jobId={id} />
-      </TabPanel>
-
       {/* ----------------------------------------------------------- Overview --- */}
       <TabPanel id="overview" activeId={activeTab}>
+        <div className="space-y-5">
+
+        {/* Who is strongest, and the way to everyone else. This is what the
+            retired Candidates tab was really being used for. */}
+        <TopCandidates
+          candidates={topCandidates.slice(0, 5)}
+          jobTitle={job.title}
+          viewAllTo={`/jobs/${id}/candidates?sort=score_desc`}
+        />
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <div className="lg:col-span-2 space-y-5">
-          {/* Job description. Collapsed by default — a recruiter opening a job
-              wants its state, not a wall of extracted text. */}
+          {/*
+            What the role screens for, at a glance.
+            The editable form lives on the Job criteria tab; this is the summary
+            a recruiter reads to confirm they are looking at the right vacancy.
+          */}
+          <Card>
+            <CardHeader
+              title="Requirements"
+              description="What this role screens for."
+              actions={
+                <Button variant="secondary" size="sm" onClick={() => setTab('criteria')}>
+                  View full requirements
+                </Button>
+              }
+            />
+
+            <div className="mt-4 space-y-4">
+              <div>
+                <p className="text-label uppercase text-slate-500">Required skills</p>
+                {requiredSkills.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {requiredSkills.slice(0, 8).map((skill) => (
+                      <SkillChip key={skill}>{skill}</SkillChip>
+                    ))}
+                    {requiredSkills.length > 8 && (
+                      <span className="text-xs text-slate-500 self-center">
+                        +{requiredSkills.length - 8} more
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <p className="mt-1.5 text-meta text-slate-400 italic">Not set</p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 divider">
+                <div>
+                  <p className="text-label uppercase text-slate-500">Experience</p>
+                  <p className="mt-1 text-meta text-slate-700">
+                    {job.requirements?.minimumExperience
+                      ? `${job.requirements.minimumExperience}+ years`
+                      : 'Any experience'}
+                  </p>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-label uppercase text-slate-500">Locations</p>
+                  <p className="mt-1 text-meta text-slate-700 truncate">
+                    {job.requirements?.preferredLocations?.length
+                      ? job.requirements.preferredLocations.join(', ')
+                      : 'Any location'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          {/* More details. The extracted JD is reference material, not something
+              a recruiter opens a job to read, so it sits behind one click. */}
           <Card padding="p-0">
             <div className="px-5 py-4">
               <CardHeader
-                title="Job description"
-                description={job.jdFileName}
+                title="More details"
+                description={job.jdFileName || 'Job description and reference material'}
                 actions={
-                  job.jdText ? (
-                    <Button variant="secondary" size="sm" onClick={() => setJdOpen((open) => !open)} aria-expanded={jdOpen}>
-                      {jdOpen ? 'Hide JD' : 'View JD'}
-                    </Button>
-                  ) : null
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setDetailsOpen((open) => !open)}
+                    aria-expanded={detailsOpen}
+                    aria-controls="job-more-details"
+                  >
+                    {detailsOpen ? 'Hide' : 'Show'}
+                  </Button>
                 }
               />
             </div>
-            {jdOpen && (
-              <div className="px-5 pb-5">
-                {job.jdText ? (
-                  <div className="rounded-control border border-slate-200 bg-slate-50 p-4 max-h-80 overflow-y-auto scroll-slim">
-                    <pre className="text-xs text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">
-                      {job.jdText}
-                    </pre>
-                  </div>
-                ) : (
-                  <p className="text-meta text-slate-400 italic">
-                    Text couldn't be read from this job description file.
-                  </p>
-                )}
-              </div>
-            )}
+            <div id="job-more-details" hidden={!detailsOpen} className="px-5 pb-5">
+              {job.jdText ? (
+                <div className="rounded-control border border-slate-200 bg-slate-50 p-4 max-h-80 overflow-y-auto scroll-slim">
+                  <pre className="text-xs text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">
+                    {job.jdText}
+                  </pre>
+                </div>
+              ) : (
+                <p className="text-meta text-slate-400 italic">
+                  Text couldn't be read from this job description file.
+                </p>
+              )}
+            </div>
           </Card>
-
-          <TopCandidates
-            candidates={topCandidates.slice(0, 5)}
-            jobTitle={job.title}
-            viewAllTo={`/jobs/${id}/candidates?sort=score_desc`}
-          />
         </div>
 
         {/* Contextual side panel */}
@@ -910,6 +1013,7 @@ const JobDetails = () => {
               </div>
             </Card>
           )}
+        </div>
         </div>
         </div>
       </TabPanel>

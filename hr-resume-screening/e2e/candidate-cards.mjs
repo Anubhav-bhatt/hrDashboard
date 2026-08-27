@@ -54,7 +54,10 @@ let shortlistRestore = null;
 try {
   await login();
 
-  const jobsPayload = await getJson(`${API}/api/jobs/summary?sort=newest&limit=100`);
+  // Keep API reads on the page origin so the browser's authenticated session
+  // cookie is included. Calling the backend origin directly creates a separate
+  // Playwright request context and incorrectly reports a 401.
+  const jobsPayload = await getJson(`${BASE}/api/jobs/summary?sort=newest&limit=100`);
   const job = (jobsPayload.data || []).find((item) => item.candidateCount >= 2);
   if (!job) throw new Error('The test needs a job with at least two candidates.');
 
@@ -152,7 +155,7 @@ try {
   await selectionBar.getByRole('button', { name: 'Clear' }).click();
   check((await selectionBar.count()) === 0, 'Clear removes the comparison selection');
 
-  const candidatePayload = await getJson(`${API}/api/jobs/${job.id}/candidates?sort=score_desc&limit=100`);
+  const candidatePayload = await getJson(`${BASE}/api/jobs/${job.id}/candidates?sort=score_desc&limit=100`);
   const shortlistCandidate = (candidatePayload.data || []).find(
     (candidate) => candidate.hrStatus !== 'SHORTLISTED' && candidate.hrStatus !== 'SELECTED'
   );
@@ -173,7 +176,7 @@ try {
       check(true, 'successful shortlist updates the card after the response');
 
       const restore = await page.request.patch(
-        `${API}/api/jobs/${job.id}/candidates/${shortlistCandidate._id}/status`,
+        `${BASE}/api/jobs/${job.id}/candidates/${shortlistCandidate._id}/status`,
         { data: { status: shortlistCandidate.hrStatus } }
       );
       check(restore.ok(), 'shortlist test restores the original candidate status');
@@ -233,7 +236,7 @@ try {
 } finally {
   if (shortlistRestore) {
     await page.request.patch(
-      `${API}/api/jobs/${shortlistRestore.candidate.jobId}/candidates/${shortlistRestore.candidate._id}/status`,
+      `${BASE}/api/jobs/${shortlistRestore.candidate.jobId}/candidates/${shortlistRestore.candidate._id}/status`,
       { data: { status: shortlistRestore.status } }
     ).catch(() => {});
   }

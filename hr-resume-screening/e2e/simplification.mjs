@@ -102,8 +102,8 @@ try {
   );
   const labels = (await navLinks.allInnerTexts()).map((t) => t.trim().toLowerCase());
   check(
-    JSON.stringify(labels) === JSON.stringify(['dashboard', 'jobs', 'candidates']),
-    'they are Dashboard, Jobs, Candidates',
+    JSON.stringify(labels) === JSON.stringify(['focus', 'jobs', 'candidates']),
+    'they are Focus, Jobs, Candidates',
     labels.join(', ')
   );
 
@@ -126,7 +126,6 @@ try {
   section('Tests 11-15 — dashboard focus');
   const dash = await text();
   check(/needs your attention/i.test(dash), 'Needs your attention is present');
-  check(/recent hires/i.test(dash), 'Recent hires is present');
   check(/analytics/i.test(dash), 'Analytics is offered as a disclosure');
 
   const analyticsPanel = page.locator('#dashboard-analytics');
@@ -141,6 +140,7 @@ try {
   check(/hiring pipeline/i.test(analyticsText), 'the pipeline is preserved inside Analytics');
   check(/score distribution|match score/i.test(analyticsText), 'score distribution is preserved');
   check(/top candidates/i.test(analyticsText), 'top candidates is preserved');
+  check(/recent hires/i.test(analyticsText), 'Recent hires is preserved inside Analytics');
 
   // The attention cards must be built from real job state, not invented.
   const attentionActions = page.locator('a', { hasText: /review shortlist|review candidates|add candidates|score candidates/i });
@@ -161,37 +161,71 @@ try {
   await page.locator('[role=tablist]').first().waitFor({ state: 'visible', timeout: 20000 });
 
   const jobTabs = page.locator('[role=tablist]').first().locator('[role=tab]');
-  check((await jobTabs.count()) === 3, 'exactly three tabs', `got ${await jobTabs.count()}`);
   const tabLabels = (await jobTabs.allInnerTexts()).map((t) => t.trim().toLowerCase());
   check(
-    tabLabels.join('|') === 'overview|candidates|job criteria',
-    'they are Overview, Candidates, Job criteria',
+    tabLabels.join('|') === 'overview|job criteria',
+    'the workspace offers Overview and Job criteria',
     tabLabels.join(', ')
   );
 
-  // The JD is not dumped onto the page; it opens on request.
+  // A requirements summary answers "is this the right vacancy" without opening
+  // the criteria form.
   const jobBody = await text();
-  check(/job description/i.test(jobBody), 'the job description is referenced');
-  const jdToggle = page.locator('button', { hasText: /^view jd$/i });
-  if ((await jdToggle.count()) > 0) {
-    check(true, 'the JD is behind a View JD action');
-    await jdToggle.first().click();
-    await page.waitForTimeout(500);
-    check(/hide jd/i.test(await text()), 'opening the JD reveals it and offers to hide it again');
-    await page.locator('button', { hasText: /^hide jd$/i }).first().click();
+  check(/requirements/i.test(jobBody), 'a requirements summary is on the overview');
+  check(/view full requirements/i.test(jobBody), 'the full requirements are one click away');
+
+  /*
+   * The extracted JD moved from a card of its own into "More details".
+   * A recruiter opening a job wants its state, not reference material, so the
+   * disclosure now holds the JD rather than sitting beside it.
+   */
+  const detailsToggle = page.locator('button[aria-controls="job-more-details"]');
+  if ((await detailsToggle.count()) > 0) {
+    check(true, 'reference material is behind a More details disclosure');
+    const panel = page.locator('#job-more-details');
+    check(await panel.isHidden(), 'More details starts collapsed');
+    await detailsToggle.first().click();
+    await page.waitForTimeout(400);
+    check(await panel.isVisible(), 'More details opens on request');
+    await detailsToggle.first().click();
     await page.waitForTimeout(300);
   } else {
-    check(false, 'the JD is behind a View JD action', 'no View JD control found');
+    check(false, 'reference material is behind a More details disclosure', 'no disclosure found');
   }
 
-  // Candidates tab embeds the same browser used by the dedicated route.
-  await jobTabs.nth(1).click();
-  await page.waitForTimeout(2000);
-  check(page.url().includes('tab=candidates'), 'the active tab is reflected in the URL', page.url());
-  check((await page.locator('#candidate-search, input[type=search]').count()) > 0, 'the Candidates tab lists candidates');
+  /*
+   * The Candidates tab was retired on purpose.
+   *
+   * It mounted a second full CandidateBrowser one click from
+   * /jobs/:jobId/candidates. The workspace now previews the strongest
+   * candidates and links to the route that owns browsing, so the assertions
+   * here changed from "the tab embeds a browser" to "the tab is gone, its
+   * preview is present, and old links still land somewhere useful".
+   */
+  check((await jobTabs.count()) === 2, 'the workspace offers two tabs, not three', `${await jobTabs.count()}`);
+  check(
+    (await page.locator('#candidate-search, input[type=search]').count()) === 0,
+    'the workspace no longer embeds a full candidate browser'
+  );
+  check(
+    /view all|view candidates/i.test(await text()),
+    'the workspace links out to the candidate browser instead'
+  );
+
+  // A link to the retired tab must still land on the browser it used to show.
+  const jobUrl = page.url().split('?')[0];
+  await page.goto(`${jobUrl}?tab=candidates`, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1500);
+  check(
+    /\/candidates(\?|$)/.test(page.url()) && !page.url().includes('tab=candidates'),
+    'an old ?tab=candidates link redirects to the candidate browser',
+    page.url()
+  );
+  await page.goto(jobUrl, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1500);
 
   // Job criteria: summary first, full editing behind Edit.
-  await jobTabs.nth(2).click();
+  await jobTabs.nth(1).click();
   await page.waitForTimeout(1200);
   check(page.url().includes('tab=criteria'), 'the criteria tab is reflected in the URL');
   const criteriaBody = await text();
@@ -213,8 +247,11 @@ try {
   const importBody = await text();
   check(/add candidates/i.test(importBody), 'the screen is titled Add candidates');
   check(/upload resumes/i.test(importBody), 'Upload resumes is one choice');
-  check(/outlook/i.test(importBody), 'Import from Outlook is the other choice');
-  check(/drag resumes here/i.test(importBody), 'a single drop zone is offered');
+  check(/import from outlook/i.test(importBody), 'Import from Outlook is the other choice');
+  check(!/drag resumes here/i.test(importBody), 'source configuration is hidden until a method is chosen');
+  await page.getByRole('button', { name: /^upload resumes/i }).click();
+  await page.waitForTimeout(400);
+  check(/drag resumes here/i.test(await text()), 'a single drop zone is offered');
   check((await page.locator('button', { hasText: /choose files/i }).count()) === 1, 'one Choose files control');
   check((await page.locator('button', { hasText: /select folder/i }).count()) === 1, 'one Select folder control');
   check(!/single candidate upload/i.test(importBody), 'the separate single-upload card is gone');
@@ -228,7 +265,8 @@ try {
   );
 
   // Outlook import remains reachable from the same screen.
-  await page.locator('button', { hasText: /outlook mailbox/i }).first().click();
+  await page.locator('button', { hasText: /change method/i }).click();
+  await page.locator('button', { hasText: /import from outlook/i }).click();
   await page.waitForTimeout(1200);
   check(/outlook/i.test(await text()), 'the Outlook import flow is still available');
 
@@ -319,7 +357,7 @@ try {
   /* ------------------------------------------------- Test 56: deep links */
   section('Test 56 — preserved deep links');
   const deepLinks = [
-    ['/dashboard', /needs your attention|recruitment dashboard/i],
+    ['/dashboard', /needs your attention|focus/i],
     ['/jobs', /jobs/i],
     ['/jobs/new', /create|job title|job description/i],
     ['/jobs/closed', /closed/i],

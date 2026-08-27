@@ -78,7 +78,7 @@
 @layer components {
   /* ---------------------------------------------------------------- buttons */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-control text-meta font-bold
+    @apply inline-flex items-center justify-center gap-2 rounded-control text-meta font-semibold
            transition-colors duration-fast select-none whitespace-nowrap
            disabled:opacity-50 disabled:pointer-events-none;
   }
@@ -90,11 +90,11 @@
   .btn-icon-sm { @apply h-8 w-8 px-0 shrink-0; }
 
   .btn-primary {
-    @apply bg-brand-600 text-white shadow-sm hover:bg-brand-700 active:bg-brand-800;
+    @apply bg-brand-600 text-white hover:bg-brand-700 active:bg-brand-800;
   }
 
   .btn-secondary {
-    @apply bg-white text-slate-700 border border-slate-300 shadow-sm
+    @apply bg-white text-slate-700 border border-slate-300
            hover:bg-slate-50 hover:text-slate-900 active:bg-slate-100;
   }
 
@@ -103,7 +103,7 @@
   }
 
   .btn-destructive {
-    @apply bg-rose-600 text-white shadow-sm hover:bg-rose-700 active:bg-rose-800;
+    @apply bg-rose-600 text-white hover:bg-rose-700 active:bg-rose-800;
   }
 
   .btn-destructive-soft {
@@ -151,23 +151,17 @@
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
-    min-height: 17.5rem;
+    min-height: 14.5rem;
     box-shadow: var(--shadow-card);
-    transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1),
-      border-color 200ms ease,
-      box-shadow 200ms ease;
+    transition: border-color 150ms ease, background-color 150ms ease;
   }
 
   .candidate-card::before {
-    content: '';
-    @apply pointer-events-none absolute inset-0 -z-10 rounded-card;
-    background: radial-gradient(circle at 0 0, rgb(var(--candidate-tint) / 0.72), transparent 46%);
+    content: none;
   }
 
   .candidate-match-score {
-    @apply min-w-[4.75rem] shrink-0 rounded-control border px-2.5 py-2 text-right;
-    border-color: rgb(var(--candidate-accent) / 0.2);
-    background-color: rgb(var(--candidate-tint) / 0.5);
+    @apply min-w-[4rem] shrink-0 text-right;
   }
 
   .candidate-card-review { --candidate-accent: var(--c-sky-500); --candidate-tint: var(--c-sky-100); }
@@ -184,11 +178,11 @@
   .candidate-card-error { @apply border-rose-300; }
 
   .candidate-card-body {
-    @apply relative z-10 block w-full flex-1 rounded-t-card p-5 pb-3 text-left;
+    @apply relative z-10 block w-full flex-1 rounded-t-card p-5 pb-2 text-left;
   }
 
   .candidate-card-footer {
-    @apply relative z-10 flex min-h-[3.75rem] items-center gap-3 px-5 pb-4 pt-1;
+    @apply relative z-10 flex min-h-[3.25rem] items-center gap-2 border-t border-slate-100 px-5 py-3;
     transition: opacity 140ms ease;
   }
 
@@ -201,27 +195,29 @@
   }
 
   .candidate-mobile-actions-trigger { display: inline-flex; }
-  .candidate-action-dock { display: none; }
+  .candidate-action-dock {
+    @apply relative z-30 ml-auto flex items-center gap-1;
+  }
 
   .candidate-action-button {
-    @apply relative flex h-10 w-10 shrink-0 items-center justify-center rounded-pill border shadow-sm;
+    @apply relative flex h-8 w-8 shrink-0 items-center justify-center rounded-control border;
     transition: color 170ms ease, background-color 170ms ease, border-color 170ms ease,
       box-shadow 170ms ease, transform 190ms cubic-bezier(0.16, 1, 0.3, 1), opacity 150ms ease;
   }
 
-  .candidate-action-view { @apply border-sky-200 bg-sky-50 text-sky-700; }
-  .candidate-action-screen { @apply border-violet-200 bg-violet-50 text-violet-700; }
-  .candidate-action-compare { @apply border-brand-200 bg-brand-50 text-brand-700; }
-  .candidate-action-shortlist { @apply border-emerald-200 bg-emerald-50 text-emerald-700; }
+  .candidate-action-view,
+  .candidate-action-screen,
+  .candidate-action-compare,
+  .candidate-action-shortlist { @apply border-slate-200 bg-white text-slate-600; }
 
   .candidate-action-view:hover,
-  .candidate-action-view:focus-visible { @apply border-sky-300 bg-sky-100 text-sky-800; }
+  .candidate-action-view:focus-visible,
   .candidate-action-screen:hover,
-  .candidate-action-screen:focus-visible { @apply border-violet-300 bg-violet-100 text-violet-800; }
+  .candidate-action-screen:focus-visible,
   .candidate-action-compare:hover,
-  .candidate-action-compare:focus-visible { @apply border-brand-300 bg-brand-100 text-brand-800; }
+  .candidate-action-compare:focus-visible,
   .candidate-action-shortlist:hover,
-  .candidate-action-shortlist:focus-visible { @apply border-emerald-300 bg-emerald-100 text-emerald-800; }
+  .candidate-action-shortlist:focus-visible { @apply border-slate-300 bg-slate-50 text-slate-900; }
 
   .candidate-action-button.is-active {
     @apply border-brand-500 bg-brand-600 text-white;
@@ -244,22 +240,21 @@
 
   @media (hover: hover) and (pointer: fine) {
     .candidate-card-wrapper {
-      padding-bottom: 4rem;
+      padding-bottom: 0;
     }
 
     .candidate-card-wrapper:hover .candidate-card,
     .candidate-card-wrapper:focus-within .candidate-card {
-      transform: translateY(-3px) scale(1.01);
-      border-color: rgb(var(--candidate-accent) / 0.62);
-      box-shadow: var(--shadow-card-hover);
+      border-color: rgb(var(--c-slate-300));
+      background-color: rgb(var(--c-slate-50) / 0.35);
     }
 
     .candidate-mobile-actions-trigger { display: none; }
 
     .candidate-action-dock {
-      @apply absolute bottom-3 left-1/2 z-30 -translate-x-1/2 items-center gap-4;
+      @apply relative z-30 ml-auto items-center gap-1.5;
       display: flex;
-      pointer-events: none;
+      pointer-events: auto;
       background: transparent;
       border: 0;
       border-radius: 0;
@@ -268,27 +263,21 @@
       backdrop-filter: none;
     }
 
-    .candidate-card-wrapper:hover .candidate-action-dock,
-    .candidate-card-wrapper:focus-within .candidate-action-dock {
-      pointer-events: auto;
-    }
-
     .candidate-action-dock .candidate-action-button {
-      opacity: 0;
-      transform: translateY(-4px) scale(0.75);
-      transition-delay: calc(var(--action-index) * 25ms);
+      opacity: 1;
+      transform: none;
     }
 
     .candidate-card-wrapper:hover .candidate-action-button,
     .candidate-card-wrapper:focus-within .candidate-action-button {
       opacity: 1;
-      transform: translateY(0) scale(1);
+      transform: none;
     }
 
     .candidate-card-wrapper:hover .candidate-action-button:hover,
     .candidate-card-wrapper:focus-within .candidate-action-button:focus-visible {
-      transform: translateY(0) scale(1.08);
-      box-shadow: var(--shadow-card-hover);
+      transform: none;
+      box-shadow: none;
     }
   }
 
@@ -332,7 +321,7 @@
 
   /* ----------------------------------------------------------------- badges */
   .badge {
-    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-xs font-bold whitespace-nowrap;
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-xs font-semibold whitespace-nowrap;
   }
 
   .badge-neutral { @apply bg-slate-100 text-slate-700 border-slate-200; }
@@ -349,8 +338,8 @@
 
   /* ------------------------------------------------------------------ chips */
   .chip {
-    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-pill border border-slate-200
-           bg-slate-50 text-slate-700 text-xs font-normal;
+    @apply inline-flex items-center gap-1.5 px-2 py-0.5 rounded-control border border-slate-200
+           bg-transparent text-slate-600 text-xs font-normal;
   }
 
   /* ---------------------------------------------------------------- skeleton */
@@ -378,12 +367,12 @@
   }
 
   .data-table thead th {
-    @apply sticky top-0 z-10 bg-slate-50/95 backdrop-blur px-4 py-2.5
+    @apply sticky top-0 z-10 bg-slate-50 px-4 py-3
            text-label uppercase text-slate-500 border-b border-slate-200 whitespace-nowrap;
   }
 
   .data-table tbody td {
-    @apply px-4 py-3 border-b border-slate-100 align-middle;
+    @apply px-4 py-4 border-b border-slate-100 align-middle;
   }
 
   .data-table tbody tr:last-child td {
@@ -402,6 +391,84 @@
 
   .divider {
     @apply border-t border-slate-200;
+  }
+
+  /* ------------------------------------------------ minimalist workspace -- */
+
+  /*
+   * The navigation rail retracts rather than vanishing. Following the width
+   * closing is what makes minimal mode read as this workspace reorganising
+   * instead of a different page having loaded.
+   *
+   * `visibility` is transitioned with a delay equal to the collapse, so the fade
+   * is actually seen on the way out — and once it flips, nothing inside the rail
+   * can be reached by keyboard, which a width of zero alone does not achieve.
+   */
+  .app-rail {
+    transition: width 420ms cubic-bezier(0.16, 1, 0.3, 1),
+      opacity 220ms ease,
+      visibility 0s;
+  }
+
+  .app-rail-retracted {
+    width: 0;
+    opacity: 0;
+    overflow: hidden;
+    border-right-width: 0;
+    visibility: hidden;
+    transition: width 420ms cubic-bezier(0.16, 1, 0.3, 1),
+      opacity 220ms ease,
+      visibility 0s linear 420ms;
+  }
+
+  /* The workspace settles in as the chrome leaves, so the two read as one move. */
+  .focus-workspace-enter {
+    animation: focus-workspace-enter 420ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /*
+   * Best-fit nodes reveal in sequence. The delay is driven by --reveal-index so
+   * the stagger is a property of position, not four hand-written classes.
+   */
+  .focus-reveal {
+    opacity: 0;
+    animation: focus-reveal 320ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation-delay: calc(var(--reveal-index, 0) * 50ms);
+  }
+
+  /* The connector draws itself once, after the role is named. */
+  .focus-connector-path {
+    stroke-dasharray: 600;
+    stroke-dashoffset: 600;
+    animation: focus-connector 420ms ease-out forwards;
+  }
+}
+
+@keyframes focus-workspace-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes focus-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes focus-connector {
+  to {
+    stroke-dashoffset: 0;
   }
 }
 
@@ -424,5 +491,25 @@
     }
 
     .candidate-action-dock { transition-delay: 0ms !important; }
+
+    /*
+     * The blanket rule above zeroes durations but not delays, which is exactly
+     * where a staggered reveal fails: the animation would finish instantly and
+     * then wait out its delay, leaving the node invisible. These land on their
+     * final state immediately instead.
+     *
+     * The components also skip these classes entirely when the preference is
+     * set — this is the backstop for a preference changed mid-session.
+     */
+    .focus-reveal {
+      animation-delay: 0ms !important;
+      opacity: 1;
+    }
+
+    .focus-connector-path {
+      stroke-dasharray: none;
+      stroke-dashoffset: 0;
+      animation: none !important;
+    }
   }
 }

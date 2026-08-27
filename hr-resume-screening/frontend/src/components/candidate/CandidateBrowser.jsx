@@ -4,11 +4,11 @@ import { ArrowRight, Filter, GitCompare, Search, SlidersHorizontal, Users, X } f
 import {
   getAllCandidates,
   getCandidateFilterOptions,
-  getCandidates,
-  toApiError,
-  updateCandidateStatus
+  getCandidates
 } from '../../services/api';
 import { useApiResource } from '../../hooks/useApiResource';
+import { buildAgentPath, SOURCE_WORKFLOWS } from '../../context/RecruitmentContext';
+import { useCandidateStatus } from '../../hooks/useCandidateStatus';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { useToast } from '../ToastProvider';
 import CandidateCard from '../CandidateCard';
@@ -17,6 +17,12 @@ import Pagination from '../Pagination';
 import { Avatar, Button, Card, EmptyState, ErrorState, FilterChip, Skeleton, cx } from '../ui';
 import Drawer from '../ui/Drawer';
 import { CandidateActionButtons, getCandidateActions } from './CandidateActions';
+import CandidateTable, { CandidateTableSkeleton } from './CandidateTable';
+import CandidateViewToggle, {
+  CANDIDATE_VIEWS,
+  readStoredCandidateView,
+  storeCandidateView
+} from './CandidateViewToggle';
 import { HR_STATUS_META } from '../../utils/format';
 
 export const SORT_OPTIONS = [
@@ -144,11 +150,26 @@ const CandidateBrowser = ({ jobId = null, defaultSort = 'score_desc', extraFilte
   // Secondary filters live in a drawer so the toolbar stays scannable instead of
   // presenting every control at once.
   const [showFilters, setShowFilters] = useState(false);
-  const [statusUpdating, setStatusUpdating] = useState(null);
-  const [statusErrors, setStatusErrors] = useState({});
   const [quickViewCandidate, setQuickViewCandidate] = useState(null);
   const [mobileActionsCandidate, setMobileActionsCandidate] = useState(null);
   const [comparisonCandidates, setComparisonCandidates] = useState([]);
+
+  /*
+   * Which layout draws the result set.
+   *
+   * Presentation state, and only presentation state: it is held here beside the
+   * search, filters, selection and pagination rather than in the query string,
+   * so switching layout re-renders the rows already in hand and cannot trigger a
+   * refetch — `view` is deliberately absent from FILTER_KEYS and from the
+   * request key below. The stored preference is the layout name, never a
+   * candidate or a response.
+   */
+  const [view, setView] = useState(readStoredCandidateView);
+
+  const changeView = useCallback((next) => {
+    setView(next);
+    storeCandidateView(next);
+  }, []);
 
   useEffect(() => {
     setSearchInput(params.search || '');
@@ -200,6 +221,7 @@ const CandidateBrowser = ({ jobId = null, defaultSort = 'score_desc', extraFilte
   }, [data]);
 
   const candidates = data?.data || [];
+  const isTableView = view === CANDIDATE_VIEWS.table;
   const pagination = data?.pagination;
   const statusCounts = data?.facets?.statusCounts || {};
   const strongMatchCount = data?.facets?.strongMatchCount;
@@ -284,31 +306,26 @@ const CandidateBrowser = ({ jobId = null, defaultSort = 'score_desc', extraFilte
     setComparisonCandidates((current) => current.map(update));
   }, [setData]);
 
-  const handleStatusChange = useCallback(async (candidate, status) => {
-    if (!candidate || status === candidate.hrStatus || statusUpdating) return;
-
-    setStatusUpdating(candidate._id);
-    setStatusErrors((current) => ({ ...current, [candidate._id]: null }));
-
-    try {
-      await updateCandidateStatus(candidate.jobId, candidate._id, status);
-      replaceCandidateStatus(candidate._id, status);
-      toast.success(
-        status === 'SHORTLISTED'
-          ? 'Candidate shortlisted'
-          : `${candidate.name} marked as ${HR_STATUS_META[status]?.label || status}.`
-      );
+  const handleStatusUpdated = useCallback(
+    (candidateId, status) => {
+      replaceCandidateStatus(candidateId, status);
+      // A candidate that no longer satisfies the active status filter has to
+      // leave the list, and only the server can say what takes its place.
       if (params.hrStatus && params.hrStatus !== status) refetch();
-    } catch (err) {
-      const apiError = toApiError(err);
-      if (status === 'SHORTLISTED') {
-        setStatusErrors((current) => ({ ...current, [candidate._id]: apiError.message }));
-      }
-      toast.error(apiError.message);
-    } finally {
-      setStatusUpdating(null);
-    }
-  }, [params.hrStatus, refetch, replaceCandidateStatus, statusUpdating, toast]);
+    },
+    [params.hrStatus, refetch, replaceCandidateStatus]
+  );
+
+  /*
+   * The one status write behind every surface here — cards, table rows, the
+   * quick-look panel and the action sheet all call `handleStatusChange`, so a
+   * shortlist behaves identically whichever layout the recruiter is in.
+   */
+  const {
+    updatingId: statusUpdating,
+    errors: statusErrors,
+    changeStatus: handleStatusChange
+  } = useCandidateStatus({ onUpdated: handleStatusUpdated });
 
   const handleView = useCallback((candidate) => {
     setMobileActionsCandidate(null);
@@ -333,8 +350,16 @@ const CandidateBrowser = ({ jobId = null, defaultSort = 'score_desc', extraFilte
   }, [navigate]);
 
   const handleScreen = useCallback((candidate) => {
-    const query = new URLSearchParams({ jobId: candidate.jobId, candidateId: candidate._id });
-    navigate(`/ai/screening?${query.toString()}`);
+    // buildAgentPath rather than a hand-assembled string: it sanitises the ids
+    // and, crucially, carries `source` — which is what lets Screening offer an
+    // accurate way back instead of stranding the recruiter on the result.
+    navigate(
+      buildAgentPath('screening', {
+        jobId: candidate.jobId,
+        candidateId: candidate._id,
+        source: SOURCE_WORKFLOWS.candidates
+      })
+    );
   }, [navigate]);
 
   const handleToggleCompare = useCallback((candidate) => {
@@ -366,29 +391,46 @@ const CandidateBrowser = ({ jobId = null, defaultSort = 'score_desc', extraFilte
 
   const handleCompareSelected = useCallback(() => {
     if (!comparisonJobId || comparisonCandidates.length < 2 || comparisonCandidates.length > 5) return;
-    const query = new URLSearchParams({
-      jobId: comparisonJobId,
-      candidateIds: comparisonCandidates.map((candidate) => candidate._id).join(','),
-      source: 'candidates'
-    });
-    navigate(`/ai/comparison?${query.toString()}`);
+    navigate(
+      buildAgentPath('comparison', {
+        jobId: comparisonJobId,
+        candidateIds: comparisonCandidates.map((candidate) => candidate._id),
+        source: SOURCE_WORKFLOWS.candidates
+      })
+    );
   }, [comparisonCandidates, comparisonJobId, navigate]);
+
+  /*
+   * Whether a candidate is in the comparison, and whether it may be added.
+   *
+   * Hoisted out of the card grid so the cards, the table rows and the action
+   * sheet all read one definition of "you cannot add this one" — comparison is
+   * capped at five and confined to a single job, and three copies of that rule
+   * is three chances for one of them to let a sixth candidate through.
+   */
+  const getComparisonState = useCallback(
+    (candidate) => {
+      const isCompared = comparisonIds.has(candidate._id);
+      return {
+        isCompared,
+        comparisonDisabled:
+          (Boolean(comparisonJobId) && comparisonJobId !== candidate.jobId) ||
+          (comparisonCandidates.length >= 5 && !isCompared)
+      };
+    },
+    [comparisonCandidates.length, comparisonIds, comparisonJobId]
+  );
 
   const getActionsFor = useCallback((candidate) => getCandidateActions({
     candidate,
-    isCompared: comparisonIds.has(candidate._id),
-    comparisonDisabled:
-      (Boolean(comparisonJobId) && comparisonJobId !== candidate.jobId) ||
-      (comparisonCandidates.length >= 5 && !comparisonIds.has(candidate._id)),
+    ...getComparisonState(candidate),
     isShortlisting: statusUpdating === candidate._id,
     onView: handleView,
     onScreen: handleScreen,
     onCompare: handleToggleCompare,
     onShortlist: handleShortlist
   }), [
-    comparisonCandidates.length,
-    comparisonIds,
-    comparisonJobId,
+    getComparisonState,
     handleScreen,
     handleShortlist,
     handleToggleCompare,
@@ -457,6 +499,11 @@ const CandidateBrowser = ({ jobId = null, defaultSort = 'score_desc', extraFilte
               <span className="sm:hidden">Filters</span>
               {hasActiveFilters ? ` (${activeFilters.length})` : ''}
             </Button>
+
+            {/* Last on the row on purpose: it changes how the result set is
+                drawn, not what is in it, and should not compete with the
+                controls that do. */}
+            <CandidateViewToggle value={view} onChange={changeView} />
           </div>
         </div>
 
@@ -503,11 +550,22 @@ const CandidateBrowser = ({ jobId = null, defaultSort = 'score_desc', extraFilte
               tabButton(BEST_MATCH_TAB.id, BEST_MATCH_TAB.label, strongMatchCount, bestActive, () =>
                 updateParams({ hrStatus: '', minScore: String(threshold), sort: 'score_desc' })
               ),
-              ...STATUS_TABS.filter((tab) => tab.value).map((tab) =>
-                tabButton(tab.value, tab.label, statusCounts[tab.value] ?? 0, params.hrStatus === tab.value, () =>
-                  updateParams({ hrStatus: tab.value, minScore: '' })
-                )
-              )
+              <label key="status" className="ml-1 inline-flex shrink-0 items-center gap-2">
+                <span className="sr-only">Candidate status</span>
+                <select
+                  id="candidate-status-filter"
+                  className="select !h-8 min-w-[9.5rem] py-0 text-xs"
+                  value={params.hrStatus || ''}
+                  onChange={(event) => updateParams({ hrStatus: event.target.value, minScore: '' })}
+                  aria-label="Filter candidates by status"
+                >
+                  {STATUS_TABS.map((tab) => (
+                    <option key={tab.value || 'all-statuses'} value={tab.value}>
+                      {tab.value ? `${tab.label} (${statusCounts[tab.value] ?? 0})` : 'Any status'}
+                    </option>
+                  ))}
+                </select>
+              </label>
             ];
           })()}
         </div>
@@ -744,7 +802,7 @@ const CandidateBrowser = ({ jobId = null, defaultSort = 'score_desc', extraFilte
           <p className="mt-1 text-meta text-slate-500">
             {pagination?.total === undefined
               ? 'Loading the current candidate result set.'
-              : `${pagination.total} candidate${pagination.total === 1 ? '' : 's'} in this result set.`}
+              : `${pagination.total.toLocaleString('en-IN')} candidate${pagination.total === 1 ? '' : 's'} in this result set.`}
           </p>
         </div>
         {refetching && <span className="text-xs font-medium text-slate-500" role="status">Updating results...</span>}
@@ -753,7 +811,9 @@ const CandidateBrowser = ({ jobId = null, defaultSort = 'score_desc', extraFilte
       {error && !data ? (
         <ErrorState title="Unable to load candidates" error={error} onRetry={refetch} />
       ) : loading && !data ? (
-        <CandidateGridSkeleton />
+        // The placeholder matches the layout being loaded into, so the page does
+        // not reflow from one shape to another the moment the rows arrive.
+        isTableView ? <CandidateTableSkeleton /> : <CandidateGridSkeleton />
       ) : candidates.length === 0 ? (
         <EmptyState
           icon={Users}
@@ -783,37 +843,51 @@ const CandidateBrowser = ({ jobId = null, defaultSort = 'score_desc', extraFilte
         />
       ) : (
         <>
-          <div
-            className={cx(
-              'grid grid-cols-1 gap-4 transition-opacity duration-fast md:grid-cols-2 md:gap-x-5 md:gap-y-6 xl:grid-cols-3 xl:gap-x-6 xl:gap-y-8',
-              refetching && 'opacity-60'
-            )}
-            aria-busy={refetching}
-          >
-            {candidates.map((candidate) => {
-              const isCompared = comparisonIds.has(candidate._id);
-              const comparisonDisabled =
-                (Boolean(comparisonJobId) && comparisonJobId !== candidate.jobId) ||
-                (comparisonCandidates.length >= 5 && !isCompared);
+          {/* One layout is mounted at a time. Rendering both and hiding one
+              would double the DOM for every result set and leave the hidden
+              copy's controls in the tab order. */}
+          {isTableView ? (
+            <CandidateTable
+              candidates={candidates}
+              getComparisonState={getComparisonState}
+              statusUpdatingId={statusUpdating}
+              statusErrors={statusErrors}
+              onView={handleView}
+              onCompare={handleToggleCompare}
+              onShortlist={handleShortlist}
+              onOpenActions={setMobileActionsCandidate}
+              busy={refetching}
+            />
+          ) : (
+            <div
+              className={cx(
+                'grid grid-cols-1 gap-4 transition-opacity duration-fast md:grid-cols-2 md:gap-x-5 md:gap-y-6 xl:grid-cols-3 xl:gap-x-6 xl:gap-y-8',
+                refetching && 'opacity-60'
+              )}
+              aria-busy={refetching}
+            >
+              {candidates.map((candidate) => {
+                const { isCompared, comparisonDisabled } = getComparisonState(candidate);
 
-              return (
-                <CandidateCard
-                  key={candidate._id}
-                  candidate={candidate}
-                  isCompared={isCompared}
-                  comparisonDisabled={comparisonDisabled}
-                  isShortlisting={statusUpdating === candidate._id}
-                  error={statusErrors[candidate._id]}
-                  onView={handleView}
-                  onScreen={handleScreen}
-                  onCompare={handleToggleCompare}
-                  onShortlist={handleShortlist}
-                  onOpenMobileActions={setMobileActionsCandidate}
-                  onRetry={handleShortlist}
-                />
-              );
-            })}
-          </div>
+                return (
+                  <CandidateCard
+                    key={candidate._id}
+                    candidate={candidate}
+                    isCompared={isCompared}
+                    comparisonDisabled={comparisonDisabled}
+                    isShortlisting={statusUpdating === candidate._id}
+                    error={statusErrors[candidate._id]}
+                    onView={handleView}
+                    onScreen={handleScreen}
+                    onCompare={handleToggleCompare}
+                    onShortlist={handleShortlist}
+                    onOpenMobileActions={setMobileActionsCandidate}
+                    onRetry={handleShortlist}
+                  />
+                );
+              })}
+            </div>
+          )}
 
           <Pagination
             pagination={pagination}

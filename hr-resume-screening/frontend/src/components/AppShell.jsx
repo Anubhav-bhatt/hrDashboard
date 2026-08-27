@@ -6,7 +6,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  LayoutDashboard,
+  Crosshair,
   LogOut,
   Menu,
   Settings,
@@ -22,9 +22,11 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useAiConfig } from '../context/AiConfigContext';
+import { useWorkspaceMode } from '../context/WorkspaceModeContext';
 import { AGENT_MODES } from '../constants/agentModes';
 import { useToast } from './ToastProvider';
 import { ThemeToggleButton } from './ThemeSelector';
+import WorkspaceModeToggle from './workspace/WorkspaceModeToggle';
 import CommandPalette from './CommandPalette';
 import { Avatar, Button, cx } from './ui';
 
@@ -32,7 +34,7 @@ export const SIDEBAR_STORAGE_KEY = 'hr-dashboard-sidebar-collapsed';
 export const AI_GROUPS_STORAGE_KEY = 'hr-dashboard-ai-group-collapsed';
 
 const MAIN_NAV_ITEMS = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, matchPaths: ['/', '/dashboard'] },
+  { to: '/', label: 'Focus', icon: Crosshair, matchPaths: ['/', '/dashboard'] },
   { to: '/jobs', label: 'Jobs', icon: Briefcase, matchPrefix: '/jobs', excludePaths: ['/jobs/closed'] },
   { to: '/candidates', label: 'Candidates', icon: Users, matchPrefix: '/candidates' }
 ];
@@ -71,6 +73,7 @@ const AppShell = ({ children }) => {
   const location = useLocation();
   const { user, signOut } = useAuth();
   const { enabled: aiEnabled, isModeEnabled } = useAiConfig();
+  const { isMinimal } = useWorkspaceMode();
   const toast = useToast();
 
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -169,14 +172,16 @@ const AppShell = ({ children }) => {
   // Build breadcrumb segments
   const getBreadcrumbs = () => {
     const path = location.pathname;
-    if (path === '/' || path === '/dashboard') return [{ label: 'Dashboard', to: '/' }];
+    if (path === '/' || path === '/dashboard') return [{ label: 'Focus', to: '/' }];
     if (path.startsWith('/jobs/create') || path.startsWith('/jobs/new')) return [{ label: 'Jobs', to: '/jobs' }, { label: 'Create Job' }];
     if (path.startsWith('/jobs/closed')) return [{ label: 'Jobs', to: '/jobs' }, { label: 'Closed Jobs' }];
     if (path.startsWith('/jobs/')) return [{ label: 'Jobs', to: '/jobs' }, { label: 'Job Workspace' }];
     if (path === '/jobs') return [{ label: 'Jobs', to: '/jobs' }];
     if (path.startsWith('/candidates/')) return [{ label: 'Candidates', to: '/candidates' }, { label: 'Profile' }];
     if (path === '/candidates') return [{ label: 'Candidates', to: '/candidates' }];
-    if (path.startsWith('/import')) return [{ label: 'Import', to: '/import' }];
+    if (/^\/jobs\/[^/]+\/import$/.test(path)) {
+      return [{ label: 'Jobs', to: '/jobs' }, { label: 'Add candidates' }];
+    }
     if (path === '/ai') return [{ label: 'AI Tools', to: '/ai' }, { label: 'Workspace' }];
     if (path === '/ai/screening') return [{ label: 'AI Tools', to: '/ai' }, { label: 'Screening Agent' }];
     if (path === '/ai/ranking') return [{ label: 'AI Tools', to: '/ai' }, { label: 'Ranking Agent' }];
@@ -197,7 +202,7 @@ const AppShell = ({ children }) => {
           className="flex items-center gap-2.5 rounded-md min-w-0"
           aria-label="HR Screening OS"
         >
-          <span className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center text-white shrink-0 shadow-sm">
+          <span className="w-8 h-8 rounded-control bg-brand-600 flex items-center justify-center text-white shrink-0">
             <Sparkles className="w-4 h-4" aria-hidden="true" />
           </span>
           {!isCollapsed && (
@@ -228,11 +233,11 @@ const AppShell = ({ children }) => {
                   key={item.to}
                   to={item.to}
                   className={cx(
-                    'group relative flex items-center rounded-lg text-xs font-normal transition-colors',
+                    'group relative flex items-center rounded-control border-l-2 text-xs font-medium transition-colors',
                     isCollapsed ? 'justify-center w-9 h-9 mx-auto' : 'gap-2.5 px-3 py-2',
                     active
-                      ? 'bg-brand-50 text-brand-700 font-bold'
-                      : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900'
+                      ? 'border-brand-600 bg-slate-100 text-slate-900 font-semibold'
+                      : 'border-transparent text-slate-600 hover:bg-slate-100/80 hover:text-slate-900'
                   )}
                   aria-current={active ? 'page' : undefined}
                   // Only when the rail is collapsed to icons. Expanded, the
@@ -305,10 +310,10 @@ const AppShell = ({ children }) => {
                           to={mode.route}
                           end
                           className={cx(
-                            'group relative flex items-center rounded-lg text-xs font-normal transition-colors gap-2.5 px-3 py-2',
+                            'group relative flex items-center rounded-control border-l-2 text-xs font-medium transition-colors gap-2.5 px-3 py-2',
                             active
-                              ? 'bg-brand-50 text-brand-700 font-bold'
-                              : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900'
+                              ? 'border-brand-600 bg-slate-100 text-slate-900 font-semibold'
+                              : 'border-transparent text-slate-600 hover:bg-slate-100/80 hover:text-slate-900'
                           )}
                           aria-current={active ? 'page' : undefined}
                           // The agent name is rendered as visible text below, so
@@ -358,7 +363,7 @@ const AppShell = ({ children }) => {
                       className={cx(
                         'group relative flex items-center justify-center w-9 h-9 mx-auto rounded-lg text-xs font-normal transition-colors',
                         active
-                          ? 'bg-brand-50 text-brand-700 font-bold'
+                          ? 'bg-slate-100 text-slate-900 font-semibold'
                           : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900'
                       )}
                       aria-current={active ? 'page' : undefined}
@@ -397,11 +402,11 @@ const AppShell = ({ children }) => {
                   to={item.to}
                   end={item.end}
                   className={cx(
-                    'group relative flex items-center rounded-lg text-xs font-normal transition-colors',
+                    'group relative flex items-center rounded-control border-l-2 text-xs font-medium transition-colors',
                     isCollapsed ? 'justify-center w-9 h-9 mx-auto' : 'gap-2.5 px-3 py-2',
                     active
-                      ? 'bg-brand-50 text-brand-700 font-bold'
-                      : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900'
+                      ? 'border-brand-600 bg-slate-100 text-slate-900 font-semibold'
+                      : 'border-transparent text-slate-600 hover:bg-slate-100/80 hover:text-slate-900'
                   )}
                   aria-current={active ? 'page' : undefined}
                   aria-label={isCollapsed ? item.label : undefined}
@@ -453,10 +458,18 @@ const AppShell = ({ children }) => {
       </a>
 
       {/* Desktop Sidebar */}
+      {/* Kept mounted in minimal mode so the rail can be seen to retract, and so
+          leaving minimal mode reopens it rather than popping it into place. The
+          retracted class takes it out of the tab order once it has closed. */}
       <aside
+        aria-hidden={isMinimal || undefined}
         className={cx(
-          'hidden lg:flex flex-col shrink-0 bg-white border-r border-slate-200/80 transition-all duration-200 select-none z-30 sticky top-0 h-screen',
-          collapsed ? 'w-16' : 'w-56'
+          'hidden lg:flex flex-col shrink-0 bg-white select-none z-30 sticky top-0 h-screen app-rail',
+          // The border is applied only when the rail is open. Declaring it here
+          // and zeroing it in CSS did not work: `border-r` is a utility and wins
+          // the cascade against the components layer, leaving a 1px hairline
+          // where the retracted rail used to be.
+          isMinimal ? 'app-rail-retracted' : cx('border-r border-slate-200/80', collapsed ? 'w-16' : 'w-56')
         )}
       >
         <SidebarNav isCollapsed={collapsed} />
@@ -487,50 +500,81 @@ const AppShell = ({ children }) => {
         <header className="h-14 bg-white/90 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-20 flex items-center justify-between px-4 sm:px-6 gap-3">
           {/* Left: Mobile trigger & Breadcrumbs */}
           <div className="flex items-center gap-3 min-w-0">
-            <button
-              type="button"
-              className="lg:hidden p-1.5 rounded-lg text-slate-500 hover:bg-slate-100"
-              onClick={() => setMobileNavOpen(true)}
-              aria-label="Open navigation menu"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
+            {/* The drawer opens the navigation minimal mode exists to remove, so
+                its trigger goes with it. Leaving is handled on the right. */}
+            {!isMinimal && (
+              <button
+                type="button"
+                className="lg:hidden p-1.5 rounded-lg text-slate-500 hover:bg-slate-100"
+                onClick={() => setMobileNavOpen(true)}
+                aria-label="Open navigation menu"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+            )}
 
-            {/* Breadcrumb path */}
-            <nav className="flex items-center gap-1.5 text-xs text-slate-500 font-medium truncate" aria-label="Breadcrumb">
-              {breadcrumbs.map((crumb, idx) => {
-                const isLast = idx === breadcrumbs.length - 1;
-                return (
-                  <React.Fragment key={crumb.label}>
-                    {idx > 0 && <span className="text-slate-300">/</span>}
-                    {isLast ? (
-                      <span className="font-bold text-slate-900 truncate">{crumb.label}</span>
-                    ) : (
-                      <Link to={crumb.to} className="hover:text-slate-900 transition-colors">
-                        {crumb.label}
-                      </Link>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-            </nav>
+            {isMinimal ? (
+              // Breadcrumbs describe a position within a navigation that is not
+              // on screen. In its place, a plain statement of the mode.
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span
+                  className="w-7 h-7 rounded-lg bg-brand-600 flex items-center justify-center text-white shrink-0"
+                  aria-hidden="true"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                </span>
+                <span className="text-xs font-bold text-slate-900 truncate">Minimal mode</span>
+              </div>
+            ) : (
+              /* Breadcrumb path */
+              <nav className="flex items-center gap-1.5 text-xs text-slate-500 font-medium truncate" aria-label="Breadcrumb">
+                {breadcrumbs.map((crumb, idx) => {
+                  const isLast = idx === breadcrumbs.length - 1;
+                  return (
+                    <React.Fragment key={crumb.label}>
+                      {idx > 0 && <span className="text-slate-300">/</span>}
+                      {isLast ? (
+                        <span className="font-bold text-slate-900 truncate">{crumb.label}</span>
+                      ) : (
+                        <Link to={crumb.to} className="hover:text-slate-900 transition-colors">
+                          {crumb.label}
+                        </Link>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </nav>
+            )}
           </div>
 
           {/* Right: Quick Search + Theme + Account */}
           <div className="flex items-center gap-2 shrink-0">
-            {/* Cmd+K Search Trigger */}
-            <button
-              type="button"
-              onClick={() => setCommandPaletteOpen(true)}
-              className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200/70 text-slate-500 text-xs transition-colors"
-              aria-label="Search and quick commands (Cmd+K)"
-            >
-              <Search className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Search...</span>
-              <kbd className="hidden sm:inline-flex items-center gap-0.5 text-[10px] font-mono text-slate-400 bg-white px-1.5 py-0.2 rounded border border-slate-200">
-                ⌘K
-              </kbd>
-            </button>
+            {/* Cmd+K Search Trigger. Hidden in minimal mode — the shortcut still
+                works, but the affordance is chrome. */}
+            {!isMinimal && (
+              <button
+                type="button"
+                onClick={() => setCommandPaletteOpen(true)}
+                className="flex items-center gap-2 px-2.5 py-1.5 rounded-control bg-slate-100 hover:bg-slate-200/70 text-slate-500 text-xs transition-colors"
+                aria-label="Search and quick commands (Cmd+K)"
+              >
+                <Search className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Search...</span>
+                <kbd className="hidden sm:inline-flex items-center gap-0.5 text-[10px] font-mono text-slate-400 bg-white px-1.5 py-0.2 rounded border border-slate-200">
+                  ⌘K
+                </kbd>
+              </button>
+            )}
+
+            {/*
+              Workspace mode sits next to appearance because that is where a user
+              looks for how the app presents itself — but the two are separate
+              controls over separate state, so dark and minimal compose freely.
+
+              In minimal mode it carries its label rather than an icon alone: the
+              way out must be readable, not discoverable.
+            */}
+            <WorkspaceModeToggle withLabel={isMinimal} />
 
             {/* Theme Toggle */}
             <ThemeToggleButton />

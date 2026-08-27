@@ -375,8 +375,8 @@ try {
   );
   const navLabels = (await navLinks.allInnerTexts()).map((t) => t.trim().toLowerCase());
   check(
-    ['dashboard', 'jobs', 'candidates'].every((label) => navLabels.includes(label)),
-    'they are Dashboard, Jobs and Candidates',
+    ['focus', 'jobs', 'candidates'].every((label) => navLabels.includes(label)),
+    'they are Focus, Jobs and Candidates',
     navLabels.join(', ')
   );
   const managementLabels = (await page.locator('nav[aria-label="Management"] a').allInnerTexts()).map((t) =>
@@ -456,6 +456,9 @@ try {
   // The headline row reports hires as "Hires / Candidates selected"; the count of
   // selected candidates is the same backend aggregate, just labelled for HR.
   check(/\bhires\b/i.test(body) && /candidates selected/i.test(body), 'and the hire count');
+  await page.locator('button[aria-controls="dashboard-analytics"]').click();
+  await page.waitForTimeout(400);
+  body = await text();
   check(/recent hires/i.test(body), 'the Recent hires section renders');
   check(body.includes('Bravo Chosen'), 'the new hire appears in Recent hires');
   check(!/jobs overview/i.test(body), 'the jobs overview section is no longer on the dashboard');

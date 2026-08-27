@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, CheckCircle2, ClipboardList, GitCompare, Sparkles, UserPlus } from 'lucide-react';
-import { EmptyState, Skeleton, cx } from '../ui';
+import { EmptyState, Skeleton } from '../ui';
 
 /**
  * Works out the single most useful next step for a job from its real counts.
@@ -125,29 +125,13 @@ const deriveNextAction = (job, threshold) => {
  * These resolve through the theme's colour variables, so each tint becomes a
  * dark wash rather than a bright block when the dark theme is active.
  */
-const TONES = {
-  sky: { surface: 'bg-sky-50 border-sky-200', icon: 'bg-white/70 text-sky-700 border-sky-200' },
-  lavender: { surface: 'bg-violet-50 border-violet-200', icon: 'bg-white/70 text-violet-700 border-violet-200' },
-  mint: { surface: 'bg-teal-50 border-teal-200', icon: 'bg-white/70 text-teal-700 border-teal-200' },
-  amber: { surface: 'bg-amber-50 border-amber-200', icon: 'bg-white/70 text-amber-800 border-amber-200' },
-  neutral: { surface: 'bg-slate-100 border-slate-200', icon: 'bg-white/70 text-slate-600 border-slate-200' }
-};
-
 /** One attention card: a role, one supporting fact, one action. */
 const AttentionCard = ({ item }) => {
-  const tone = TONES[item.tone] || TONES.neutral;
-
   return (
-    <li
-      className={cx(
-        'flex flex-col rounded-card border p-5 transition-shadow duration-fast',
-        'hover:shadow-card-hover focus-within:shadow-card-hover',
-        tone.surface
-      )}
-    >
-      <div className="flex items-start gap-3">
+    <li className="flex flex-col gap-4 py-5 sm:flex-row sm:items-center">
+      <div className="flex min-w-0 flex-1 items-start gap-3">
         <span
-          className={cx('w-9 h-9 rounded-control border flex items-center justify-center shrink-0', tone.icon)}
+          className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-slate-100 text-slate-500"
           aria-hidden="true"
         >
           <item.icon className="w-4 h-4" />
@@ -169,7 +153,7 @@ const AttentionCard = ({ item }) => {
 
       {/* The action sits on its own line at the card's foot so every card in the
           row lines its button up, however long the role title wrapped. */}
-      <div className="mt-4 pt-3 flex items-center justify-between gap-3 border-t border-slate-900/5">
+      <div className="flex shrink-0 items-center justify-between gap-4 pl-11 sm:pl-0">
         {item.metric ? (
           <span className="text-meta text-slate-600 tabular-nums">
             {item.metric.label} <strong className="text-slate-900">{item.metric.value}</strong>
@@ -180,7 +164,7 @@ const AttentionCard = ({ item }) => {
 
         <Link
           to={item.to}
-          className="btn btn-sm btn-secondary shrink-0"
+          className="btn btn-sm btn-ghost text-brand-700 shrink-0"
           aria-label={`${item.actionLabel} for ${item.job.title}`}
         >
           {item.actionLabel}
@@ -244,9 +228,9 @@ const NeedsAttention = ({ jobs = [], threshold = 80, loading = false, limit = 3,
       </div>
 
       {loading ? (
-        <ul className="mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+        <ul className="mt-4 divide-y divide-slate-200 border-y border-slate-200">
           {Array.from({ length: 3 }, (_, i) => (
-            <li key={i} className="rounded-card border border-slate-200 bg-white p-5">
+            <li key={i} className="py-5">
               <div className="flex items-start gap-3">
                 <Skeleton className="w-9 h-9 rounded-control shrink-0" />
                 <div className="flex-1 space-y-2">
@@ -255,7 +239,7 @@ const NeedsAttention = ({ jobs = [], threshold = 80, loading = false, limit = 3,
                   <Skeleton className="h-3 w-36" />
                 </div>
               </div>
-              <div className="mt-4 pt-3 flex items-center justify-between border-t border-slate-100">
+              <div className="mt-4 flex items-center justify-between pl-12">
                 <Skeleton className="h-3 w-24" />
                 <Skeleton className="h-8 w-28 rounded-control" />
               </div>
@@ -285,7 +269,7 @@ const NeedsAttention = ({ jobs = [], threshold = 80, loading = false, limit = 3,
           />
         </div>
       ) : (
-        <ul className="mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+        <ul className="mt-4 divide-y divide-slate-200 border-y border-slate-200">
           {visible.map((item) => (
             <AttentionCard key={item.job.id} item={item} />
           ))}

@@ -10,6 +10,7 @@ import ComparisonResultGrid from '../../components/ai/ComparisonResultGrid';
 import { CandidateMultiPicker, JobPicker } from '../../components/ai/AgentPickers';
 import { AGENT_MODES } from '../../constants/agentModes';
 import { runAgent } from '../../services/aiService';
+import { getJobShortlist } from '../../services/api';
 import {
   buildAgentPath,
   useRecruitmentContext,
@@ -105,6 +106,50 @@ const ComparisonAgent = () => {
       setSource(SOURCE_WORKFLOWS.comparison);
     }
   }, [jobId, lastComparisonCandidateIds, searchParams]);
+
+  /*
+   * Entered from a job that named a shortlist count but not the candidates.
+   *
+   * "Compare 4 shortlisted" on the job workspace knew exactly who it meant and
+   * passed only the job, so this screen opened a hundred-name picker and asked
+   * the recruiter to reconstruct the four. The shortlist is a cheap, bounded
+   * query, so it is fetched here instead:
+   *
+   *   2-5 shortlisted  select them and compare — no question asked
+   *   over 5           open the picker restricted to the shortlist only
+   *   under 2          leave the normal picker alone; there is nothing to compare
+   */
+  const [shortlistIds, setShortlistIds] = useState(null);
+  const seededFromShortlist = useRef(false);
+  useEffect(() => {
+    if (seededFromShortlist.current) return;
+    if (searchParams.get('candidateIds')) return;
+    if (!jobId || source !== SOURCE_WORKFLOWS.job) return;
+
+    seededFromShortlist.current = true;
+    let cancelled = false;
+
+    getJobShortlist(jobId)
+      .then((response) => {
+        if (cancelled) return;
+        const ids = (response?.data || []).map((c) => c._id || c.id).filter(Boolean);
+        if (ids.length >= MIN_COMPARISON_CANDIDATES && ids.length <= MAX_COMPARISON_CANDIDATES) {
+          setCandidateIds(ids);
+          writeCandidateParams(ids);
+          setEditingSelection(false);
+        } else if (ids.length > MAX_COMPARISON_CANDIDATES) {
+          setShortlistIds(ids);
+          setEditingSelection(true);
+        }
+      })
+      // A failure here is not an error state: the normal picker still works.
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId, source]);
 
   const count = candidateIds.length;
   const canCompare = Boolean(jobId) && count >= MIN_COMPARISON_CANDIDATES && count <= MAX_COMPARISON_CANDIDATES;
@@ -265,6 +310,12 @@ const ComparisonAgent = () => {
                   onChange={onCandidateSelectionChange}
                   min={MIN_COMPARISON_CANDIDATES}
                   max={MAX_COMPARISON_CANDIDATES}
+                  restrictToIds={shortlistIds}
+                  restrictionLabel={
+                    shortlistIds
+                      ? `Showing the ${shortlistIds.length} shortlisted candidates for this role.`
+                      : null
+                  }
                 />
               </div>
 

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { JobStatusBadge, cx } from '../ui';
 import { formatDate } from '../../utils/format';
+import { deriveNextAction } from '../dashboard/NeedsAttention';
 
 /**
  * One role, scannable in a couple of seconds.
@@ -60,6 +61,7 @@ export const JobSummaryCard = ({ job, strongMatchThreshold = 80, compact = false
     ? reqs.minimumExperience
     : null;
   const bestMatch = typeof job.bestMatchScore === 'number' ? job.bestMatchScore : null;
+  const nextAction = !isClosed ? deriveNextAction(job, strongMatchThreshold) : null;
 
   useEffect(() => {
     if (!menuOpen) return undefined;
@@ -78,6 +80,54 @@ export const JobSummaryCard = ({ job, strongMatchThreshold = 80, compact = false
       document.removeEventListener('keydown', onKeyDown);
     };
   }, [menuOpen]);
+
+  if (compact) {
+    const facts = [
+      `${(job.candidateCount || 0).toLocaleString('en-IN')} candidate${job.candidateCount === 1 ? '' : 's'}`,
+      job.strongMatchCount > 0 ? `${job.strongMatchCount} strong match${job.strongMatchCount === 1 ? '' : 'es'}` : null,
+      job.shortlistedCount > 0 ? `${job.shortlistedCount} shortlisted` : null,
+      isClosed && hire?.name ? `Selected: ${hire.name}` : null
+    ].filter(Boolean);
+
+    return (
+      <article className="group grid grid-cols-1 gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_7rem_6rem_7rem_10rem] sm:items-center sm:px-5">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-card-title text-slate-900 truncate">
+              <Link
+                to={`/jobs/${job.id}`}
+                className="rounded hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+              >
+                {job.title}
+              </Link>
+            </h3>
+            <JobStatusBadge status={job.status} />
+          </div>
+          <p className="text-meta text-slate-600 mt-1 truncate">{facts.join(' · ')}</p>
+        </div>
+
+        <p className="hidden text-right text-body font-semibold tabular-nums text-slate-900 sm:block">
+          {(job.candidateCount || 0).toLocaleString('en-IN')}
+        </p>
+        <p className={cx('hidden text-right text-body font-semibold tabular-nums sm:block', job.strongMatchCount > 0 ? 'text-emerald-700' : 'text-slate-500')}>
+          {job.strongMatchCount || '—'}
+        </p>
+        <p className="hidden text-right text-body font-semibold tabular-nums text-slate-900 sm:block">
+          {job.shortlistedCount || '—'}
+        </p>
+
+        <Link
+          to={nextAction?.to || `/jobs/${job.id}`}
+          className="btn btn-sm btn-ghost text-brand-700 shrink-0 justify-self-start sm:justify-self-end"
+          aria-label={`${nextAction?.actionLabel || 'Open job'} for ${job.title}`}
+        >
+          <span className="text-slate-500 font-normal hidden lg:inline">Next:</span>
+          {nextAction?.actionLabel || 'View hiring summary'}
+          <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform duration-fast" aria-hidden="true" />
+        </Link>
+      </article>
+    );
+  }
 
   return (
     <div

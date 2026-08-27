@@ -25,7 +25,7 @@ const ramp = (name, steps) =>
 const NEUTRAL_STEPS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
 const ACCENT_STEPS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
 const PRODUCT_FONT_STACK = [
-  'Quicksand',
+  'Inter',
   'ui-sans-serif',
   'system-ui',
   '-apple-system',
@@ -101,11 +101,8 @@ export default {
       },
       fontWeight: {
         normal: '400',
-        // Legacy component intent is retained without expanding the product
-        // beyond the Quicksand Regular + Bold pairing. Quiet emphasis stays
-        // regular; strong emphasis resolves to the single bold face.
-        medium: '400',
-        semibold: '700',
+        medium: '500',
+        semibold: '600',
         bold: '700',
         extrabold: '700',
         black: '700'
@@ -135,14 +132,14 @@ export default {
          *   label       12px bold      uppercase eyebrows and field labels
          *   metric      30px bold      KPI figures
          */
-        display: ['1.75rem', { lineHeight: '2.125rem', letterSpacing: '0', fontWeight: '700' }],
-        'page-title': ['1.375rem', { lineHeight: '1.75rem', letterSpacing: '0', fontWeight: '700' }],
-        section: ['1.125rem', { lineHeight: '1.625rem', letterSpacing: '0', fontWeight: '700' }],
-        'card-title': ['0.9375rem', { lineHeight: '1.375rem', letterSpacing: '0', fontWeight: '700' }],
+        display: ['1.875rem', { lineHeight: '2.25rem', letterSpacing: '-0.025em', fontWeight: '600' }],
+        'page-title': ['1.5rem', { lineHeight: '1.875rem', letterSpacing: '-0.02em', fontWeight: '600' }],
+        section: ['1.125rem', { lineHeight: '1.625rem', letterSpacing: '-0.01em', fontWeight: '600' }],
+        'card-title': ['0.9375rem', { lineHeight: '1.375rem', letterSpacing: '-0.005em', fontWeight: '600' }],
         body: ['0.875rem', { lineHeight: '1.375rem', letterSpacing: '0', fontWeight: '400' }],
         meta: ['0.8125rem', { lineHeight: '1.25rem', letterSpacing: '0', fontWeight: '400' }],
-        label: ['0.75rem', { lineHeight: '1rem', letterSpacing: '0', fontWeight: '700' }],
-        metric: ['1.875rem', { lineHeight: '2.25rem', letterSpacing: '0', fontWeight: '700' }]
+        label: ['0.75rem', { lineHeight: '1rem', letterSpacing: '0.025em', fontWeight: '600' }],
+        metric: ['1.875rem', { lineHeight: '2.25rem', letterSpacing: '-0.025em', fontWeight: '600' }]
       },
       spacing: {
         // 4px-based scale used throughout the app.
@@ -164,9 +161,9 @@ export default {
         'sidebar-collapsed': '4.25rem'
       },
       borderRadius: {
-        // Controls 8px, cards 12px, large panels 14px, pills fully round.
-        control: '0.5rem',
-        card: '0.75rem',
+        // Restrained enterprise radii: controls 7px, panels 10px, overlays 14px.
+        control: '0.4375rem',
+        card: '0.625rem',
         panel: '0.875rem',
         pill: '9999px'
       },

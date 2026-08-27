@@ -212,6 +212,12 @@ try {
 
   section('Ranking -> Comparison handoff');
   await page.goto(`${BASE}/ai/ranking`, { waitUntil: 'domcontentloaded' });
+  // Shared context may already provide a job, in which case ranking answers
+  // immediately and keeps its setup collapsed. Open it explicitly to exercise
+  // selecting this fixture role.
+  const changeSetup = page.getByRole('button', { name: /change setup/i });
+  await changeSetup.waitFor({ state: 'visible', timeout: 15000 });
+  await changeSetup.click();
   await page.waitForSelector('#agent-job-picker', { timeout: 15000 });
   await page.selectOption('#agent-job-picker', fixtureJobId);
 

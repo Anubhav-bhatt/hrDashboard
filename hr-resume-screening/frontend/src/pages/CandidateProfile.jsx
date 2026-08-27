@@ -32,6 +32,7 @@ import {
 } from '../services/api';
 import { useApiResource } from '../hooks/useApiResource';
 import { useAuth } from '../context/AuthContext';
+import { buildAgentPath, SOURCE_WORKFLOWS } from '../context/RecruitmentContext';
 import { useToast } from '../components/ToastProvider';
 import {
   Avatar,
@@ -441,7 +442,17 @@ const CandidateProfile = () => {
                 size="md"
                 className="text-brand-700 border-brand-200"
                 icon={Sparkles}
-                onClick={() => navigate(`/ai/screening?jobId=${candidate.jobId}&candidateId=${candidate._id}`)}
+                onClick={() =>
+                  navigate(
+                    // Carries `source` so Screening can offer a way back to this
+                    // profile instead of ending the trail at the result.
+                    buildAgentPath('screening', {
+                      jobId: candidate.jobId,
+                      candidateId: candidate._id,
+                      source: SOURCE_WORKFLOWS.profile
+                    })
+                  )
+                }
               >
                 Screen with AI
               </Button>

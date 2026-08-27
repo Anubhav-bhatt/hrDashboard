@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
-import { Search, CheckCircle2, AlertTriangle, AlertCircle, Info, RefreshCw, ArrowLeft, Layers } from 'lucide-react';
+import { Search, CheckCircle2, AlertTriangle, AlertCircle, Info, RefreshCw, ArrowLeft, Layers, Pencil } from 'lucide-react';
 import { Button, Card, InlineAlert } from '../../components/ui';
 import AgentShell from '../../components/ai/AgentShell';
 import AgentInput from '../../components/ai/AgentInput';
@@ -70,13 +70,31 @@ const ScreeningAgent = () => {
         }
       : urlSource === SOURCE_WORKFLOWS.ranking
         ? { label: 'Back to ranking', to: buildAgentPath('ranking', { jobId }) }
-        : null;
+        // The candidate list this candidate belongs to. Job-scoped rather than
+        // the global pool, because that is the list that certainly contains them.
+        : urlSource === SOURCE_WORKFLOWS.candidates && jobId
+          ? { label: 'Back to candidates', to: `/jobs/${jobId}/candidates?sort=score_desc` }
+          : urlSource === SOURCE_WORKFLOWS.profile && urlCandidateId
+            ? { label: 'Back to candidate profile', to: `/candidates/${urlCandidateId}` }
+            : null;
 
   const [loading, setLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
   const [showCriteriaDetails, setShowCriteriaDetails] = useState(false);
+
+  /*
+   * Whether the picker panel is open.
+   *
+   * The panel used to be the first thing on the page, always. Arriving from a
+   * candidate card — which had already told us the job and the candidate —
+   * still presented both dropdowns and a Run button, so the recruiter's answer
+   * to "who, for which role" was collected twice. The panel is now for changing
+   * a selection, not for confirming one: it opens when there is nothing usable
+   * yet, or when asked for.
+   */
+  const [editingSelection, setEditingSelection] = useState(false);
 
   // The job is resolved above; only the candidate needs mirroring from the URL.
   useEffect(() => {
@@ -97,6 +115,9 @@ const ScreeningAgent = () => {
     setCandidateId(nextCandidateId);
     setResult(null);
     setError(null);
+    // A complete selection closes the panel; the auto-run below then produces
+    // the answer, so choosing a candidate is the last thing the recruiter does.
+    if (jobId && nextCandidateId) setEditingSelection(false);
     if (jobId && nextCandidateId) {
       // `source` is carried through: screening a second candidate from the same
       // comparison should not strip the way back to it.
@@ -147,6 +168,24 @@ const ScreeningAgent = () => {
     }
   };
 
+  /*
+   * Complete context runs itself.
+   *
+   * Every entry point into screening already names the job and the candidate —
+   * a candidate card, a profile, a ranking row, a comparison column, the
+   * minimal-mode tools. Asking the recruiter to press Run to confirm what they
+   * just clicked collects no new information. Keyed on the pair so changing the
+   * candidate re-runs, and a failed run is not retried in a loop.
+   */
+  const autoRunKey = useRef(null);
+  useEffect(() => {
+    const key = jobId && candidateId ? `${jobId}:${candidateId}` : null;
+    if (!key || autoRunKey.current === key) return;
+    autoRunKey.current = key;
+    if (!loading) handleAnalyse();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidateId, jobId]);
+
   const handleScreenAnother = () => {
     setCandidateId('');
     setResult(null);
@@ -161,10 +200,47 @@ const ScreeningAgent = () => {
   const fitBadge = result ? FIT_BADGES[result.fitLevel] || FIT_BADGES.MODERATE : null;
   const recBadge = result ? RECOMMENDATION_BADGES[result.recommendation] || RECOMMENDATION_BADGES.PROCEED_TO_REVIEW : null;
 
+  const hasSelection = Boolean(jobId && candidateId);
+  // Open when there is nothing usable yet, or on request. Deliberately not keyed
+  // on `canAnalyse`, which also tracks loading and would reopen mid-run.
+  const showSetup = editingSelection || !hasSelection;
+
   return (
     <AgentShell
       mode={AGENT_MODES.screening}
       setup={
+        !showSetup ? (
+          /* Collapsed: state who is being screened, for which role, and offer the
+             way to change it. The names come from the agent result rather than a
+             second lookup, so nothing here can disagree with the analysis below. */
+          <Card padding="card-pad-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0 flex items-center gap-3">
+                {returnTo && (
+                  <Link to={returnTo.to} className="btn btn-sm btn-ghost shrink-0">
+                    <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span className="hidden sm:inline">{returnTo.label}</span>
+                  </Link>
+                )}
+                <div className="min-w-0">
+                  <p className="text-meta font-bold text-slate-900 truncate">
+                    {result?.candidateName || (loading ? 'Screening candidate…' : 'Selected candidate')}
+                  </p>
+                  <p className="text-xs text-slate-500 truncate">
+                    {result?.jobTitle || 'Selected role'}
+                    {fromContext && ' · using the role you were working on'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <Button variant="secondary" size="sm" icon={Pencil} onClick={() => setEditingSelection(true)}>
+                  Change selection
+                </Button>
+              </div>
+            </div>
+          </Card>
+        ) : (
         <Card>
           {/* Only rendered when the origin is known, so it can never send a
               recruiter somewhere they did not come from. */}
@@ -222,6 +298,7 @@ const ScreeningAgent = () => {
             )}
           </div>
         </Card>
+        )
       }
       input={
         <AgentInput

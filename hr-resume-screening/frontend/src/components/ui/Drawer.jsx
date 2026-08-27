@@ -78,7 +78,7 @@ const Drawer = ({ open, onClose, title, description, footer, children, className
         aria-labelledby="drawer-title"
         className={cx(
           'relative w-full sm:w-[26rem] max-h-[88vh] sm:max-h-none sm:h-full bg-white',
-          'rounded-t-card sm:rounded-none shadow-overlay flex flex-col',
+          'rounded-t-panel sm:rounded-none shadow-overlay flex flex-col',
           'animate-slide-up sm:animate-slide-in-right',
           className
         )}
@@ -96,7 +96,7 @@ const Drawer = ({ open, onClose, title, description, footer, children, className
         <div className="flex-1 overflow-y-auto scroll-slim px-5 py-4">{children}</div>
 
         {footer && (
-          <div className="px-5 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-2 shrink-0">
+          <div className="px-5 py-4 border-t border-slate-200 bg-white flex items-center justify-end gap-2 shrink-0">
             {footer}
           </div>
         )}

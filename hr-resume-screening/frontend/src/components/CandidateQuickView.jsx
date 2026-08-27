@@ -17,7 +17,7 @@ import Drawer from './ui/Drawer';
 import { CandidateActionButtons } from './candidate/CandidateActions';
 
 const Section = ({ title, children }) => (
-  <section>
+  <section className="border-t border-slate-200 pt-6">
     <h4 className="text-label uppercase text-slate-500">{title}</h4>
     <div className="mt-3">{children}</div>
   </section>
@@ -89,34 +89,52 @@ export const CandidateQuickView = ({
       description="Focused evaluation from the current candidate results."
       className="sm:w-[30rem]"
       footer={
-        <div className="flex w-full items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              icon={ChevronLeft}
-              onClick={onPrevious}
-              disabled={!hasPrevious}
-              aria-label="Previous candidate"
-              title="Previous candidate (Arrow Up)"
-            />
-            <Button
-              variant="ghost"
-              size="icon"
-              icon={ChevronRight}
-              onClick={onNext}
-              disabled={!hasNext}
-              aria-label="Next candidate"
-              title="Next candidate (Arrow Down)"
-            />
+        /*
+         * Moving between candidates is the fastest way to review a pool, and it
+         * used to be two unlabelled chevrons with the keyboard shortcut hidden
+         * in a title attribute — invisible to anyone not hovering. The controls
+         * now name themselves and the shortcut is stated once beneath them.
+         */
+        <div className="flex w-full flex-col gap-2">
+          <div className="flex w-full items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={ChevronLeft}
+                onClick={onPrevious}
+                disabled={!hasPrevious}
+                aria-label="Previous candidate"
+              >
+                Previous
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onNext}
+                disabled={!hasNext}
+                aria-label="Next candidate"
+              >
+                Next
+                <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
+              </Button>
+            </div>
+            <Button variant="secondary" icon={ExternalLink} onClick={openFullProfile}>
+              Open full profile
+            </Button>
           </div>
-          <Button variant="secondary" icon={ExternalLink} onClick={openFullProfile}>
-            Open full profile
-          </Button>
+
+          {(hasPrevious || hasNext) && (
+            <p className="text-[11px] text-slate-400">
+              Press <kbd className="font-mono text-[10px] bg-slate-100 border border-slate-200 rounded px-1">↑</kbd>{' '}
+              <kbd className="font-mono text-[10px] bg-slate-100 border border-slate-200 rounded px-1">↓</kbd> to move
+              through candidates.
+            </p>
+          )}
         </div>
       }
     >
-      <div className="space-y-8">
+      <div className="space-y-6">
         <header className="flex items-start gap-4">
           <Avatar name={candidate.name} size="lg" className="ring-4 ring-slate-50" />
           <div className="min-w-0 flex-1">
@@ -136,16 +154,16 @@ export const CandidateQuickView = ({
           </div>
         </header>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div className="rounded-control border border-emerald-200 bg-emerald-50 p-4">
-            <p className="text-[10px] font-normal uppercase tracking-wide text-emerald-700">Match score</p>
-            <p className={cx('mt-1.5 text-2xl font-bold tabular-nums', scoreMeta.text)}>
+        <div className="grid grid-cols-2 divide-x divide-slate-200 border-y border-slate-200">
+          <div className="py-4 pr-4">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Match score</p>
+            <p className={cx('mt-1.5 text-2xl font-semibold tabular-nums', scoreMeta.text)}>
               {score === null || score === undefined ? '--' : `${Math.round(score)}%`}
             </p>
           </div>
-          <div className="rounded-control border border-sky-200 bg-sky-50 p-4">
-            <p className="text-[10px] font-normal uppercase tracking-wide text-sky-700">Experience</p>
-            <p className="mt-1.5 text-body font-normal leading-5 text-slate-900">
+          <div className="py-4 pl-4">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Experience</p>
+            <p className="mt-1.5 text-body font-medium leading-5 text-slate-900">
               {formatExperience(candidate.totalExperience, 'Not stated')}
             </p>
           </div>
@@ -156,7 +174,7 @@ export const CandidateQuickView = ({
             <dl className="grid gap-4 text-meta sm:grid-cols-2">
               {candidate.currentLocation && (
                 <div className="flex items-start gap-2.5">
-                  <MapPin className="mt-0.5 w-4 h-4 text-rose-600 shrink-0" aria-hidden="true" />
+                  <MapPin className="mt-0.5 w-4 h-4 text-slate-400 shrink-0" aria-hidden="true" />
                   <div className="min-w-0">
                     <dt className="font-bold text-slate-900">Location</dt>
                     <dd className="mt-0.5 break-words text-slate-600">{candidate.currentLocation}</dd>
@@ -165,7 +183,7 @@ export const CandidateQuickView = ({
               )}
               {candidate.qualification && (
                 <div className="flex items-start gap-2.5">
-                  <GraduationCap className="mt-0.5 w-4 h-4 text-violet-600 shrink-0" aria-hidden="true" />
+                  <GraduationCap className="mt-0.5 w-4 h-4 text-slate-400 shrink-0" aria-hidden="true" />
                   <div className="min-w-0">
                     <dt className="font-bold text-slate-900">Qualification</dt>
                     <dd className="mt-0.5 break-words text-slate-600">{candidate.qualification}</dd>
@@ -174,7 +192,7 @@ export const CandidateQuickView = ({
               )}
               {candidate.jobTitle && (
                 <div className="flex items-start gap-2.5 sm:col-span-2">
-                  <Briefcase className="mt-0.5 w-4 h-4 text-brand-600 shrink-0" aria-hidden="true" />
+                  <Briefcase className="mt-0.5 w-4 h-4 text-slate-400 shrink-0" aria-hidden="true" />
                   <div className="min-w-0">
                     <dt className="font-bold text-slate-900">Applied role</dt>
                     <dd className="mt-0.5 break-words text-slate-600">{candidate.jobTitle}</dd>

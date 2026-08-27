@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { AlertCircle, ArrowRight, CheckCircle2, MoreHorizontal, RotateCcw } from 'lucide-react';
 import { formatExperience, formatRelativeTime, getScoreMeta, getStatusMeta } from '../utils/format';
 import { Avatar, Badge, StatusBadge, cx } from './ui';
-import { CandidateActionButtons, getCandidateActions } from './candidate/CandidateActions';
 
 const STATUS_SURFACES = {
   REVIEW: 'candidate-card-review',
@@ -50,17 +49,6 @@ const CandidateCard = ({
             ? 'SHORTLISTED'
             : 'DEFAULT';
 
-  const actions = getCandidateActions({
-    candidate,
-    isCompared,
-    comparisonDisabled,
-    isShortlisting,
-    onView,
-    onScreen,
-    onCompare,
-    onShortlist
-  });
-
   return (
     <div className={cx('candidate-card-wrapper group', className)}>
       <article
@@ -87,12 +75,12 @@ const CandidateCard = ({
           aria-label={`Quick look at ${candidate.name}`}
         >
           <div className="flex items-start justify-between gap-3">
-            <Avatar name={candidate.name} size="md" className="!h-12 !w-12 !text-sm ring-4 ring-white/80" />
+            <Avatar name={candidate.name} size="md" className="!h-11 !w-11 !text-sm" />
             <div className="candidate-match-score">
               {score !== undefined && score !== null ? (
                 <>
-                  <p className={cx('text-2xl font-bold leading-none tabular-nums', scoreMeta.text)}>{Math.round(score)}%</p>
-                  <p className="mt-1 text-[10px] font-normal uppercase tracking-wide text-slate-500">Match</p>
+                  <p className={cx('text-xl font-semibold leading-none tabular-nums', scoreMeta.text)}>{Math.round(score)}%</p>
+                  <p className="mt-1 text-[10px] font-medium uppercase tracking-wide text-slate-500">Match</p>
                 </>
               ) : (
                 <>
@@ -103,8 +91,8 @@ const CandidateCard = ({
             </div>
           </div>
 
-          <div className="mt-5 min-w-0 text-left">
-            <h3 className="text-base font-bold leading-6 text-slate-900 break-words line-clamp-2 group-hover:text-brand-700 transition-colors">
+          <div className="mt-4 min-w-0 text-left">
+            <h3 className="text-base font-semibold leading-6 text-slate-900 break-words line-clamp-2 group-hover:text-brand-700 transition-colors">
               {candidate.name || 'Unknown candidate'}
             </h3>
             <p className="mt-1.5 text-meta leading-5 text-slate-600 line-clamp-2 min-h-[2.5rem]" title={candidate.headline || candidate.currentRole || undefined}>
@@ -112,7 +100,7 @@ const CandidateCard = ({
             </p>
           </div>
 
-          <div className="mt-5 min-h-[4rem] text-left">
+          <div className="mt-4 min-h-[2.75rem] text-left">
             {skills.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 {skills.slice(0, 3).map((skill, index) => (
@@ -132,17 +120,22 @@ const CandidateCard = ({
           <span className="min-w-0 truncate text-xs text-slate-600">
             {formatExperience(candidate.totalExperience, 'Experience not stated')}
           </span>
-          <div className="min-w-0 flex items-center gap-2 ml-auto">
+          <div className="min-w-0 flex items-center gap-2">
             <StatusBadge status={candidate.hrStatus} />
           </div>
-          <button
-            type="button"
-            className="candidate-mobile-actions-trigger btn btn-icon btn-ghost"
-            onClick={() => onOpenMobileActions(candidate)}
-            aria-label={`Actions for ${candidate.name}`}
-          >
-            <MoreHorizontal className="w-5 h-5" aria-hidden="true" />
-          </button>
+          <div className="candidate-action-dock" role="group" aria-label="Candidate quick actions">
+            <button type="button" className="btn btn-sm btn-ghost" onClick={() => onView(candidate)}>
+              Quick look
+            </button>
+            <button
+              type="button"
+              className="btn btn-icon-sm btn-ghost"
+              onClick={() => onOpenMobileActions(candidate)}
+              aria-label={`More actions for ${candidate.name}`}
+            >
+              <MoreHorizontal className="w-4 h-4" aria-hidden="true" />
+            </button>
+          </div>
         </div>
 
         {error && (
@@ -157,7 +150,6 @@ const CandidateCard = ({
         )}
       </article>
 
-      <CandidateActionButtons actions={actions} />
     </div>
   );
 };

@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Mail,
+  ArrowLeft,
   Folder,
   FolderPlus,
   FileText,
@@ -34,7 +35,10 @@ const ImportCandidates = () => {
 
   const [job, setJob] = useState(null);
   const [loadingJob, setLoadingJob] = useState(true);
-  const [activeTab, setActiveTab] = useState('manual'); // 'manual' | 'outlook'
+  // Start with the recruiter's intent, not either workflow's configuration.
+  // Once a source is chosen only that source is rendered; "Change method"
+  // returns here without throwing away any files or Outlook search state.
+  const [activeTab, setActiveTab] = useState(null); // null | 'manual' | 'outlook'
   const [dragActive, setDragActive] = useState(false);
 
   // SINGLE UPLOAD STATE
@@ -424,32 +428,59 @@ const ImportCandidates = () => {
         </Card>
       ) : (
       <div className="card card-pad-lg">
-        {/* Source tabs */}
-        <div className="flex border-b border-slate-200 gap-1 -mx-1 px-1 overflow-x-auto scroll-slim">
-          {[
-            { id: 'manual', label: 'Upload resumes', icon: Upload },
-            { id: 'outlook', label: 'Outlook mailbox', icon: Mail }
-          ].map((tab) => {
-            const active = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                aria-pressed={active}
-                className={`relative px-3.5 py-2.5 text-meta font-semibold whitespace-nowrap transition-colors duration-fast rounded-t-control inline-flex items-center gap-2 ${
-                  active ? 'text-brand-700' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
-                }`}
-              >
-                <tab.icon className="w-4 h-4" aria-hidden="true" />
-                {tab.label}
-                {active && (
-                  <span className="absolute left-0 right-0 -bottom-px h-0.5 bg-brand-600 rounded-t" aria-hidden="true" />
-                )}
-              </button>
-            );
-          })}
-        </div>
+        {!activeTab ? (
+          <section aria-labelledby="candidate-source-heading">
+            <h2 id="candidate-source-heading" className="text-section text-slate-900">
+              How would you like to add candidates?
+            </h2>
+            <p className="text-meta text-slate-500 mt-1">Choose a source to see only the controls you need.</p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5">
+              {[
+                {
+                  id: 'manual',
+                  label: 'Upload resumes',
+                  description: 'Add individual files, a batch, or an entire folder.',
+                  icon: Upload
+                },
+                {
+                  id: 'outlook',
+                  label: 'Import from Outlook',
+                  description: 'Find resume attachments in a connected mailbox.',
+                  icon: Mail
+                }
+              ].map((source) => (
+                <button
+                  key={source.id}
+                  type="button"
+                  onClick={() => setActiveTab(source.id)}
+                  className="rounded-card border border-slate-200 bg-white p-5 text-left transition duration-fast
+                             hover:border-brand-300 hover:bg-brand-50/40 focus-visible:outline-none
+                             focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+                >
+                  <span className="w-10 h-10 rounded-control bg-brand-50 text-brand-600 flex items-center justify-center">
+                    <source.icon className="w-5 h-5" aria-hidden="true" />
+                  </span>
+                  <span className="block text-card-title text-slate-900 mt-4">{source.label}</span>
+                  <span className="block text-meta text-slate-500 mt-1">{source.description}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : (
+          <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-4">
+            <div className="min-w-0">
+              <p className="text-label uppercase text-slate-500">Adding candidates with</p>
+              <h2 className="text-section text-slate-900 mt-0.5">
+                {activeTab === 'manual' ? 'Resume upload' : 'Outlook'}
+              </h2>
+            </div>
+            <button type="button" onClick={() => setActiveTab(null)} className="btn btn-sm btn-ghost shrink-0">
+              <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" />
+              Change method
+            </button>
+          </div>
+        )}
 
         {/* TAB 1: MANUAL RESUME UPLOAD (SINGLE, BULK & FOLDER) */}
         {activeTab === 'manual' && (

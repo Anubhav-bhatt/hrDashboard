@@ -4,6 +4,7 @@ import { AlertTriangle, ArrowLeft, Award, GitCompare, Info, RotateCcw, Sparkles 
 import { Button, InlineAlert, cx } from '../ui';
 import { useToast } from '../ToastProvider';
 import { toApiError, updateCandidateStatus } from '../../services/api';
+import { buildAgentPath, SOURCE_WORKFLOWS } from '../../context/RecruitmentContext';
 import ComparisonMatrix from './comparison/ComparisonMatrix';
 import { CandidateHeaderStrip, StrengthsAndGaps } from './comparison/CandidateColumns';
 
@@ -93,7 +94,17 @@ const ComparisonResultGrid = ({
 
   const handleScreen = (jId, candidateId) => {
     if (onScreenCandidate) onScreenCandidate(jId || jobId, candidateId);
-    else navigate(`/ai/screening?jobId=${jId || jobId}&candidateId=${candidateId}`);
+    // `source` is what produces the "Back to comparison" link on the screening
+    // result — without it a recruiter screening one candidate mid-comparison
+    // loses the comparison they were reading.
+    else
+      navigate(
+        buildAgentPath('screening', {
+          jobId: jId || jobId,
+          candidateId,
+          source: SOURCE_WORKFLOWS.comparison
+        })
+      );
   };
 
   // The strongest match, taken from the agent's own dimension findings rather

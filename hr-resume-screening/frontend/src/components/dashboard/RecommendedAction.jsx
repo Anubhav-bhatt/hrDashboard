@@ -19,7 +19,7 @@ import { Skeleton } from '../ui';
 const RecommendedAction = ({ item, loading = false }) => {
   if (loading) {
     return (
-      <div className="rounded-panel border border-brand-200 bg-brand-50 px-5 py-4 sm:px-6 sm:py-5">
+      <div className="rounded-card border border-slate-200 border-l-2 border-l-brand-600 bg-white px-5 py-4 sm:px-6 sm:py-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0 flex-1 space-y-2">
             <Skeleton className="h-3 w-36" />
@@ -36,7 +36,7 @@ const RecommendedAction = ({ item, loading = false }) => {
   return (
     <section
       aria-labelledby="dashboard-recommended-heading"
-      className="rounded-panel border border-brand-200 bg-brand-50 px-5 py-4 sm:px-6 sm:py-5"
+      className="rounded-card border border-slate-200 border-l-2 border-l-brand-600 bg-white px-5 py-4 sm:px-6 sm:py-5"
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1">

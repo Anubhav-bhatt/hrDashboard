@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ListOrdered, Filter, Sparkles, AlertCircle, ArrowLeft, RefreshCw, Users, Scale, GitCompare } from 'lucide-react';
+import { ListOrdered, Filter, Sparkles, AlertCircle, ArrowLeft, RefreshCw, Users, Scale, GitCompare, Pencil } from 'lucide-react';
 import { Button, Card, InlineAlert } from '../../components/ui';
 import AgentShell from '../../components/ai/AgentShell';
 import AgentInput from '../../components/ai/AgentInput';
@@ -63,6 +63,19 @@ const RankingAgent = () => {
   const [result, setResult] = useState(null);
 
   /*
+   * Whether the setup panel is open.
+   *
+   * A recruiter arriving from a job card, a next-step banner or the minimal-mode
+   * tools has already chosen the role. The panel used to present the job picker,
+   * scope radios, a filter disclosure, an instruction field and four suggestion
+   * chips above an empty result — five decisions before the screen would answer
+   * anything, four of them already answered. It now opens only when the role is
+   * genuinely unknown, or when the recruiter asks to change the setup. Nothing
+   * has been removed; it has moved behind one click.
+   */
+  const [editingSetup, setEditingSetup] = useState(false);
+
+  /*
    * Selecting a role writes it to the URL and to the working context.
    *
    * `replace` rather than push: choosing a role from a dropdown is not a
@@ -80,6 +93,9 @@ const RankingAgent = () => {
   const handleRank = async () => {
     if (!jobId || loading) return;
 
+    // Running is the point of the panel, so it closes behind the result rather
+    // than staying open above it.
+    setEditingSetup(false);
     setLoading(true);
     setError(null);
     setCurrentStep(0);
@@ -128,6 +144,22 @@ const RankingAgent = () => {
     }
   };
 
+  /*
+   * A known role ranks itself.
+   *
+   * Ranking has no other required input — scope defaults to the whole pool and
+   * the preference is optional — so once the job is known the screen can answer
+   * instead of waiting to be told to. Keyed on the job so switching roles
+   * re-ranks, and a failure is not retried in a loop.
+   */
+  const autoRunJob = useRef(null);
+  useEffect(() => {
+    if (!jobId || autoRunJob.current === jobId) return;
+    autoRunJob.current = jobId;
+    if (!loading) handleRank();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId]);
+
   const handleScreenCandidate = (candidate) => {
     const candidateId = candidate.candidateId || candidate.id;
     if (jobId && candidateId) {
@@ -140,10 +172,41 @@ const RankingAgent = () => {
     navigate(buildAgentPath('comparison', { jobId, candidateIds, source: SOURCE_WORKFLOWS.ranking }));
   };
 
+  // Open only when the role is unknown, or on request.
+  const showSetup = editingSetup || !jobId;
+
   return (
     <AgentShell
       mode={AGENT_MODES.ranking}
       setup={
+        !showSetup ? (
+          /* Collapsed: the role, how many candidates it ranked, and the way to
+             change any of it. Figures come from the ranking result, so they are
+             the agent's own numbers rather than a second count. */
+          <Card padding="card-pad-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-meta font-bold text-slate-900 truncate">
+                  {result?.jobTitle || (loading ? 'Ranking candidates…' : 'Selected role')}
+                </p>
+                <p className="text-xs text-slate-500 truncate">
+                  {result
+                    ? `${result.totalCandidatesConsidered} candidate${
+                        result.totalCandidatesConsidered === 1 ? '' : 's'
+                      } considered · ${String(result.candidateScope || '').toLowerCase() || 'all'}`
+                    : fromContext
+                      ? 'Using the role you were working on'
+                      : 'Ordered by match score'}
+                  {result?.instructionApplied ? ' · preference applied' : ''}
+                </p>
+              </div>
+
+              <Button variant="secondary" size="sm" icon={Pencil} onClick={() => setEditingSetup(true)}>
+                Change setup
+              </Button>
+            </div>
+          </Card>
+        ) : (
         <Card>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="min-w-0">
@@ -267,6 +330,7 @@ const RankingAgent = () => {
             )}
           </div>
         </Card>
+        )
       }
       input={
         <AgentInput

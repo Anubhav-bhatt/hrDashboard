@@ -193,16 +193,10 @@ try {
   );
   check(await candidateSelect.isEnabled(), 'Candidate picker becomes enabled after job selection');
 
-  // Select candidate Rahul
-  await candidateSelect.selectOption(cand1Id);
-  await page.waitForTimeout(300);
-
-  const analyzeBtn = page.locator('#analyze-candidate-btn');
-  check(await analyzeBtn.isEnabled(), 'Analyse candidate button is enabled');
-
-  // Fill instruction and click Analyze
+  // Set the optional preference before completing the selection. A complete
+  // job + candidate context now runs automatically and collapses setup.
   await page.locator('#screening-instruction').fill('Focus on TypeScript and frontend architecture');
-  await analyzeBtn.click();
+  await candidateSelect.selectOption(cand1Id);
 
   // Wait for result card
   const resultCard = page.locator('#screening-result-card');
@@ -231,6 +225,10 @@ try {
   await page.locator('h1').first().waitFor({ state: 'visible' });
   check((await bodyText()).includes('Ranking Agent'), 'Ranking Agent page loaded');
 
+  // Shared job context starts ranking automatically with setup collapsed.
+  // Reopen it here because this scenario intentionally selects a fixture job.
+  const changeRankingSetup = page.getByRole('button', { name: /change setup/i });
+  if (await changeRankingSetup.isVisible().catch(() => false)) await changeRankingSetup.click();
   const rankJobSelect = page.locator('#agent-job-picker');
   await rankJobSelect.waitFor({ state: 'visible' });
   await rankJobSelect.selectOption(jobId);
