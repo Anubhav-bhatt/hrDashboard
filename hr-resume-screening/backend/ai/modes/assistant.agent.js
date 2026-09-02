@@ -17,6 +17,8 @@ const { runRankingAgent } = require('./ranking.agent');
 const { runComparisonAgent } = require('./comparison.agent');
 const { runScreeningAgent } = require('./screening.agent');
 const { runInsightsAgent } = require('./insights.agent');
+const { logShadowRun } = require('../logging/shadowLogger');
+const { validateAssistantIntent } = require('../providers/schemas/assistantIntent.schema');
 
 /**
  * Parses deterministic user intent from the message.
@@ -60,11 +62,11 @@ const parseIntent = (message = '') => {
 
   // 4. INSIGHTS
   if (
-    /\b(insights|needs?\s+attention|what\s+should\s+i\s+focus\s+on|how\s+is\s+(?:this|the)\s+job\s+doing|pipeline\s+health|hiring\s+performance)\b/i.test(
+    /\b(insights|needs?\s+(?:my\s+)?attention|what\s+should\s+i\s+focus\s+on|how\s+is\s+(?:this|the)\s+job\s+doing|how's\s+this\s+(?:position|role|job)\s+looking|pipeline\s+health|hiring\s+performance)\b/i.test(
       msg
     )
   ) {
-    const requiresJobContext = /\b(this\s+job|for\s+this\s+role|how\s+is\s+this\s+job\s+doing)\b/i.test(msg);
+    const requiresJobContext = /\b(this\s+job|for\s+this\s+role|how\s+is\s+this\s+job\s+doing|how's\s+this\s+(?:position|role|job)\s+looking)\b/i.test(msg);
     return { intent: 'GET_INSIGHTS', requiresJobContext };
   }
 
@@ -76,21 +78,25 @@ const parseIntent = (message = '') => {
   }
 
   // 6. RANK CANDIDATES
-  if (/\brank\b/i.test(msg)) {
+  if (
+    /\b(rank|who\s+looks?\s+strongest|who\s+stands?\s+out|who\s+should\s+i\s+look\s+at\s+first|best\s+matches|top\s+matches)\b/i.test(
+      msg
+    )
+  ) {
     return { intent: 'RANK_CANDIDATES' };
   }
 
   // 7. COMPARE CANDIDATES
-  if (/\bcompare\b/i.test(msg)) {
-    const numMatch = msg.match(/(?:top|first)?\s*(\d+)/i);
+  if (/\b(compare|put\s+side\s+by\s+side)\b/i.test(msg)) {
+    const numMatch = msg.match(/(?:top|first|strongest)?\s*(\d+)/i);
     let targetCount = numMatch ? parseInt(numMatch[1], 10) : 2;
-    if (msg.includes('top 3') || msg.includes('three')) targetCount = 3;
-    if (msg.includes('top 2') || msg.includes('two')) targetCount = 2;
+    if (msg.includes('top 3') || msg.includes('three') || msg.includes('strongest three')) targetCount = 3;
+    if (msg.includes('top 2') || msg.includes('two') || msg.includes('strongest two')) targetCount = 2;
     return { intent: 'COMPARE_CANDIDATES', targetCount };
   }
 
   // 8. SCREEN CANDIDATE
-  if (/\bscreen\b/i.test(msg)) {
+  if (/\b(screen|evaluate|check)\b/i.test(msg)) {
     let targetCandidate = null;
 
     if (/\b(first|1st|#1)\b/i.test(msg)) {
@@ -100,8 +106,11 @@ const parseIntent = (message = '') => {
     } else if (/\b(third|3rd|#3)\b/i.test(msg)) {
       targetCandidate = { position: 3 };
     } else {
-      // Extract candidate name after "screen"
-      const nameMatch = message.match(/\bscreen\s+(?:candidate\s+)?([a-z0-9\s._-]+)/i);
+      // Extract candidate name after "screen", "evaluate", or "check <name> against"
+      let nameMatch = message.match(/\b(?:screen|evaluate)\s+(?:candidate\s+)?([a-z0-9\s._-]+)/i);
+      if (!nameMatch) {
+        nameMatch = message.match(/\bcheck\s+([a-z0-9\s._-]+?)\s+(?:against|for)\b/i);
+      }
       if (nameMatch && nameMatch[1]) {
         const cleaned = nameMatch[1].replace(/\b(for|the|this|candidate)\b/gi, '').trim();
         if (cleaned) {
@@ -110,7 +119,9 @@ const parseIntent = (message = '') => {
       }
     }
 
-    return { intent: 'SCREEN_CANDIDATE', targetCandidate };
+    if (targetCandidate || /\bscreen\b/i.test(msg)) {
+      return { intent: 'SCREEN_CANDIDATE', targetCandidate };
+    }
   }
 
   return { intent: 'UNKNOWN' };
@@ -275,7 +286,7 @@ const runAssistantAgent = async ({
   config,
   toolRunner = executeTool
 }) => {
-  const parsed = parseIntent(message);
+  const detParsed = parseIntent(message);
   const activeModes = config?.modes || {
     assistant: true,
     screening: true,
@@ -284,8 +295,8 @@ const runAssistantAgent = async ({
     insights: true
   };
 
-  // 1. SAFETY: Prohibited write actions
-  if (parsed.intent === 'SAFETY_WRITE_ATTEMPT') {
+  // 1. SAFETY PRE-CHECK: Prohibited write actions (0 provider calls)
+  if (detParsed.intent === 'SAFETY_WRITE_ATTEMPT') {
     return buildAssistantResponse({
       intent: 'SAFETY_WRITE_ATTEMPT',
       status: 'SAFETY_REFUSAL',
@@ -299,8 +310,8 @@ const runAssistantAgent = async ({
     });
   }
 
-  // 2. SAFETY: Prohibited protected attribute ranking
-  if (parsed.intent === 'SAFETY_PROTECTED_TRAIT') {
+  // 2. SAFETY PRE-CHECK: Prohibited protected attribute ranking (0 provider calls)
+  if (detParsed.intent === 'SAFETY_PROTECTED_TRAIT') {
     return buildAssistantResponse({
       intent: 'SAFETY_PROTECTED_TRAIT',
       status: 'SAFETY_REFUSAL',
@@ -314,7 +325,77 @@ const runAssistantAgent = async ({
     });
   }
 
-  // 3. HELP
+  let parsed = detParsed;
+
+  // 3. SHADOW MODE: Evaluate provider in shadow, log telemetry, keep deterministic authoritative
+  if (config?.providerMode === 'shadow' && provider && typeof provider.run === 'function') {
+    try {
+      const startMs = Date.now();
+      const providerRes = await provider.run({ mode: 'assistant', message, context });
+      const latencyMs = Date.now() - startMs;
+      const provIntent = providerRes?.structuredData?.intent || 'UNKNOWN';
+      logShadowRun({
+        provider: provider.name,
+        mode: 'shadow',
+        deterministicIntent: detParsed.intent,
+        providerIntent: provIntent,
+        agreed: detParsed.intent === provIntent,
+        latencyMs,
+        success: true
+      });
+    } catch (err) {
+      logShadowRun({
+        provider: provider.name,
+        mode: 'shadow',
+        deterministicIntent: detParsed.intent,
+        providerIntent: 'ERROR',
+        agreed: false,
+        latencyMs: 0,
+        success: false,
+        errorCode: err.code || err.name || 'PROVIDER_ERROR'
+      });
+    }
+    parsed = detParsed;
+  } else if (
+    config?.providerMode === 'live' &&
+    config?.realProviderEnabled &&
+    provider &&
+    typeof provider.run === 'function'
+  ) {
+    // 4. LIVE MODE: Provider interpretation drives intent with deterministic fallback
+    try {
+      const providerRes = await provider.run({ mode: 'assistant', message, context });
+      const validated = validateAssistantIntent(providerRes?.structuredData);
+      if (validated.valid && validated.data.intent && validated.data.intent !== 'UNKNOWN') {
+        parsed = {
+          intent: validated.data.intent,
+          targetCount: validated.data.candidateCount || detParsed.targetCount,
+          candidateCount: validated.data.candidateCount || detParsed.candidateCount,
+          candidateName: validated.data.candidateName || detParsed.candidateName,
+          targetCandidate: validated.data.candidateName
+            ? { name: validated.data.candidateName }
+            : validated.data.candidateReference
+              ? {
+                  position:
+                    validated.data.candidateReference === 'FIRST'
+                      ? 1
+                      : validated.data.candidateReference === 'SECOND'
+                        ? 2
+                        : 3
+                }
+              : detParsed.targetCandidate,
+          candidateReference: validated.data.candidateReference || detParsed.candidateReference,
+          requiresJobContext: validated.data.requiresJobContext || detParsed.requiresJobContext,
+          rawScope: validated.data.scope || detParsed.rawScope
+        };
+      }
+    } catch {
+      // Safe fallback to deterministic router on provider failure (timeout, rate limit, invalid response)
+      parsed = detParsed;
+    }
+  }
+
+  // 5. HELP
   if (parsed.intent === 'GENERAL_HELP') {
     return buildAssistantResponse({
       intent: 'GENERAL_HELP',

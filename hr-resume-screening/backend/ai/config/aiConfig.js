@@ -18,7 +18,7 @@
 const { AGENT_MODES, AGENT_MODE_IDS } = require('../modes/agentModes');
 
 /** Providers this build can actually construct. */
-const SUPPORTED_PROVIDERS = Object.freeze(['mock']);
+const SUPPORTED_PROVIDERS = Object.freeze(['mock', 'openai']);
 
 /**
  * Providers we intend to support but have not implemented. Naming them lets the
@@ -26,7 +26,7 @@ const SUPPORTED_PROVIDERS = Object.freeze(['mock']);
  * refusing to run — configuring one must never silently fall through to a
  * different provider, least of all a paid one.
  */
-const KNOWN_UNIMPLEMENTED_PROVIDERS = Object.freeze(['openai', 'anthropic', 'claude', 'gemini', 'google']);
+const KNOWN_UNIMPLEMENTED_PROVIDERS = Object.freeze(['anthropic', 'claude', 'gemini', 'google']);
 
 const DEFAULT_PROVIDER = 'mock';
 
@@ -44,7 +44,9 @@ const LIMIT_DEFAULTS = Object.freeze({
   AI_TOOL_DEFAULT_CANDIDATE_LIMIT: 50,
   AI_TOOL_MAX_CANDIDATE_LIMIT: 200,
   AI_TOOL_DEFAULT_JOB_LIMIT: 25,
-  AI_TOOL_MAX_JOB_LIMIT: 100
+  AI_TOOL_MAX_JOB_LIMIT: 100,
+  AI_REQUEST_TIMEOUT_MS: 15000,
+  AI_MAX_OUTPUT_TOKENS: 500
 });
 
 /**
@@ -93,9 +95,21 @@ const parseFlag = (raw, fallback, key, warnings) => {
 };
 
 /**
+ * Parses the provider execution mode ('mock' | 'shadow' | 'live').
+ */
+const parseProviderMode = (raw, fallback = 'mock') => {
+  if (!raw || typeof raw !== 'string') return fallback;
+  const normalized = raw.trim().toLowerCase();
+  if (['mock', 'shadow', 'live'].includes(normalized)) return normalized;
+  return fallback;
+};
+
+/**
  * @typedef {Object} AiConfig
  * @property {boolean} enabled Master switch. When false every mode is off.
  * @property {string} provider Raw configured provider name, lower-cased.
+ * @property {string} providerMode Execution mode: 'mock' | 'shadow' | 'live'.
+ * @property {boolean} realProviderEnabled Rollout guard for live provider interpretation.
  * @property {boolean} writeActionsEnabled Whether agents may ever mutate data.
  * @property {Object<string, boolean>} modes Per-mode flag state, before the
  *   master switch is applied.
@@ -127,6 +141,9 @@ const resolveAiConfig = (env = process.env) => {
       ? DEFAULT_PROVIDER
       : String(rawProvider).trim().toLowerCase();
 
+  const providerMode = parseProviderMode(env.AI_PROVIDER_MODE, 'mock');
+  const realProviderEnabled = parseFlag(env.AI_REAL_PROVIDER_ENABLED, false, 'AI_REAL_PROVIDER_ENABLED', warnings);
+
   // A default above its own maximum is contradictory; the smaller of the two is
   // the only safe reading, and the operator is told which one was applied.
   const clampDefault = (defaultValue, maxValue, defaultKey, maxKey) => {
@@ -155,12 +172,22 @@ const resolveAiConfig = (env = process.env) => {
     maxJobLimit
   });
 
+  const requestTimeoutMs = parseLimit(env.AI_REQUEST_TIMEOUT_MS, 'AI_REQUEST_TIMEOUT_MS', warnings);
+  const maxOutputTokens = parseLimit(env.AI_MAX_OUTPUT_TOKENS, 'AI_MAX_OUTPUT_TOKENS', warnings);
+  const model = env.AI_MODEL || (provider === 'openai' ? 'gpt-4o-mini' : 'mock-v1');
+
   return Object.freeze({
     enabled,
     provider,
+    providerMode,
+    realProviderEnabled,
     writeActionsEnabled: parseFlag(env.AI_WRITE_ACTIONS_ENABLED, false, 'AI_WRITE_ACTIONS_ENABLED', warnings),
     modes: Object.freeze(modes),
     limits,
+    requestTimeoutMs,
+    maxOutputTokens,
+    model,
+    apiKey: env.OPENAI_API_KEY || null,
     warnings: Object.freeze(warnings)
   });
 };
@@ -187,6 +214,8 @@ const isModeEnabled = (config, modeId) =>
 const describeAiConfig = (config) => ({
   enabled: config.enabled,
   provider: config.provider,
+  providerMode: config.providerMode || 'mock',
+  realProviderEnabled: Boolean(config.realProviderEnabled),
   providerSupported: SUPPORTED_PROVIDERS.includes(config.provider),
   writeActionsEnabled: config.writeActionsEnabled,
   modes: { ...config.modes },

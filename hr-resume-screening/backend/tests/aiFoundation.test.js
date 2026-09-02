@@ -72,7 +72,7 @@ const run = async () => {
   test('the provider defaults to mock, so no API key is ever required', () => {
     assert.strictEqual(resolveAiConfig({}).provider, DEFAULT_PROVIDER);
     assert.strictEqual(DEFAULT_PROVIDER, 'mock');
-    assert.deepStrictEqual(SUPPORTED_PROVIDERS, ['mock']);
+    assert.deepStrictEqual(SUPPORTED_PROVIDERS, ['mock', 'openai']);
   });
 
   test('an empty or whitespace provider falls back to mock rather than failing', () => {
@@ -125,7 +125,9 @@ const run = async () => {
       'limits',
       'modes',
       'provider',
+      'providerMode',
       'providerSupported',
+      'realProviderEnabled',
       'writeActionsEnabled'
     ]);
   });
@@ -276,8 +278,17 @@ const run = async () => {
     assert.ok(/mock/.test(thrown.message), 'message should name the supported providers');
   });
 
-  test('a paid provider is refused rather than silently used', () => {
-    for (const name of ['openai', 'anthropic', 'claude', 'gemini', 'google']) {
+  test('AI_PROVIDER=openai resolves to OpenAIProvider', () => {
+    resetProviderCache();
+    const { OpenAIProvider } = require('../ai/providers/OpenAIProvider');
+    const provider = getAIProvider(resolveAiConfig(allOn({ AI_PROVIDER: 'openai' })));
+    assert.ok(provider instanceof OpenAIProvider, 'expected an OpenAIProvider');
+    assert.ok(provider instanceof AIProvider, 'must satisfy the provider contract');
+    assert.strictEqual(provider.name, 'openai');
+  });
+
+  test('an unimplemented provider is refused rather than silently used', () => {
+    for (const name of ['anthropic', 'claude', 'gemini', 'google']) {
       resetProviderCache();
       let thrown = null;
       try {
@@ -715,7 +726,7 @@ const run = async () => {
     const error = await captureError(() =>
       orchestrator.run(
         { mode: 'screening', message: 'test' },
-        { user: USER, config: resolveAiConfig(allOn({ AI_PROVIDER: 'openai' })) }
+        { user: USER, config: resolveAiConfig(allOn({ AI_PROVIDER: 'anthropic' })) }
       )
     );
     assert.ok(error instanceof AiError);

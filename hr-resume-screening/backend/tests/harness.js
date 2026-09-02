@@ -55,6 +55,13 @@ const createSuite = (title) => {
     console.log('');
     line();
     console.log(`  ${title}: ${passed} passed, ${failed} failed`);
+    if (failures.length > 0) {
+      console.log('\nFailures:');
+      failures.forEach((f) => {
+        console.log(`- ${f.description}:`);
+        console.log(`  ${f.error?.stack || f.error?.message}`);
+      });
+    }
     line();
     return { passed, failed, failures };
   };

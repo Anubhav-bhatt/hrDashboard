@@ -19,12 +19,25 @@ const {
 } = require('../config/aiConfig');
 const { aiProviderInvalid, AiError } = require('../errors/ai.errors');
 const { MockAIProvider } = require('./MockAIProvider');
+const { OpenAIProvider } = require('./OpenAIProvider');
 
 /**
  * Provider name -> factory. Adding a real vendor later means adding one entry
  * and one file under this directory; nothing outside `ai/providers/` changes.
  */
-const PROVIDER_FACTORIES = new Map([['mock', () => new MockAIProvider()]]);
+const PROVIDER_FACTORIES = new Map([
+  ['mock', () => new MockAIProvider()],
+  [
+    'openai',
+    (config) =>
+      new OpenAIProvider({
+        apiKey: config?.apiKey || process.env.OPENAI_API_KEY,
+        model: config?.model || process.env.AI_MODEL,
+        timeoutMs: config?.requestTimeoutMs,
+        maxOutputTokens: config?.maxOutputTokens
+      })
+  ]
+]);
 
 /**
  * Instances are created once and reused. Every provider here is stateless, and a
@@ -57,7 +70,7 @@ const getAIProvider = (config = resolveAiConfig()) => {
     throw aiProviderInvalid(SUPPORTED_PROVIDERS);
   }
 
-  if (!instances.has(name)) instances.set(name, factory());
+  if (!instances.has(name)) instances.set(name, factory(config));
   return instances.get(name);
 };
 

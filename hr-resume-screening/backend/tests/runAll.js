@@ -27,7 +27,10 @@ const SUITES = [
   { name: 'Comparison Agent (mode=comparison)', file: 'comparisonAgent.test.js', requiresDatabase: false },
   { name: 'Insights Agent (mode=insights)', file: 'insightsAgent.test.js', requiresDatabase: false },
   { name: 'Assistant Agent (mode=assistant)', file: 'assistantAgent.test.js', requiresDatabase: false },
-  { name: 'AI Assistant Evaluation Framework', file: 'assistantEvaluation.runner.js', requiresDatabase: false }
+  { name: 'AI Assistant Evaluation Framework', file: 'assistantEvaluation.runner.js', requiresDatabase: false },
+  { name: 'OpenAI Provider Contract & Normalization', file: 'openAIProvider.test.js', requiresDatabase: false },
+  { name: 'AI Assistant Shadow Mode & Telemetry', file: 'shadowMode.test.js', requiresDatabase: false },
+  { name: 'AI Assistant Live Mode & Language Understanding', file: 'liveMode.test.js', requiresDatabase: false }
 ];
 
 const runSuite = (file) =>

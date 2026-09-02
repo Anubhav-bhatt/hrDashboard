@@ -373,6 +373,106 @@ const EVALUATION_CASES = [
       status: 'SAFETY_REFUSAL',
       specialistMode: null
     }
+  },
+
+  // V. Real-Language Recruiter Phrasing (Natural Language Understanding)
+  {
+    id: 'EVAL-V01',
+    category: 'V. Real-Language (Ranking Synonym)',
+    description: 'Interprets "show me who stands out" as candidate ranking',
+    input: 'show me who stands out',
+    context: { jobId: 'job-101' },
+    expected: {
+      intent: 'RANK_CANDIDATES',
+      status: 'SUCCESS',
+      specialistMode: 'ranking'
+    }
+  },
+  {
+    id: 'EVAL-V02',
+    category: 'V. Real-Language (Prioritization)',
+    description: 'Interprets "who should I look at first?" as candidate ranking',
+    input: 'who should I look at first?',
+    context: { jobId: 'job-101' },
+    expected: {
+      intent: 'RANK_CANDIDATES',
+      status: 'SUCCESS',
+      specialistMode: 'ranking'
+    }
+  },
+  {
+    id: 'EVAL-V03',
+    category: 'V. Real-Language (Follow-up Comparison)',
+    description: 'Interprets "compare the strongest three" using lastRankingCandidateIds',
+    input: 'compare the strongest three',
+    context: { jobId: 'job-101', lastRankingCandidateIds: ['cand-1', 'cand-3', 'cand-2'] },
+    expected: {
+      intent: 'COMPARE_CANDIDATES',
+      status: 'SUCCESS',
+      specialistMode: 'comparison',
+      candidateIds: ['cand-1', 'cand-3', 'cand-2']
+    }
+  },
+  {
+    id: 'EVAL-V04',
+    category: 'V. Real-Language (Screen Named Candidate)',
+    description: 'Interprets "check Rahul Sharma against this role" as screening Rahul Sharma',
+    input: 'check Rahul Sharma against this role',
+    context: { jobId: 'job-101' },
+    expected: {
+      intent: 'SCREEN_CANDIDATE',
+      status: 'SUCCESS',
+      specialistMode: 'screening'
+    }
+  },
+  {
+    id: 'EVAL-V05',
+    category: 'V. Real-Language (Global Insights)',
+    description: 'Interprets "what needs my attention?" as workspace insights',
+    input: 'what needs my attention?',
+    context: {},
+    expected: {
+      intent: 'GET_INSIGHTS',
+      status: 'SUCCESS',
+      specialistMode: 'insights'
+    }
+  },
+  {
+    id: 'EVAL-V06',
+    category: 'V. Real-Language (Role Insights)',
+    description: 'Interprets "how\'s this position looking?" as job-specific insights',
+    input: "how's this position looking?",
+    context: { jobId: 'job-101' },
+    expected: {
+      intent: 'GET_INSIGHTS',
+      status: 'SUCCESS',
+      specialistMode: 'insights'
+    }
+  },
+  {
+    id: 'EVAL-V07',
+    category: 'V. Real-Language (Best Matches)',
+    description: 'Interprets "give me the best matches" as ranking',
+    input: 'give me the best matches',
+    context: { jobId: 'job-101' },
+    expected: {
+      intent: 'RANK_CANDIDATES',
+      status: 'SUCCESS',
+      specialistMode: 'ranking'
+    }
+  },
+  {
+    id: 'EVAL-V08',
+    category: 'V. Real-Language (Comparison from Ranking Context)',
+    description: 'Interprets "compare the people I just ranked"',
+    input: 'compare the people I just ranked',
+    context: { jobId: 'job-101', lastRankingCandidateIds: ['cand-1', 'cand-3'] },
+    expected: {
+      intent: 'COMPARE_CANDIDATES',
+      status: 'SUCCESS',
+      specialistMode: 'comparison',
+      candidateIds: ['cand-1', 'cand-3']
+    }
   }
 ];
 

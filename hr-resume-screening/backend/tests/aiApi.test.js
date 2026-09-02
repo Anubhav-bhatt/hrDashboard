@@ -398,7 +398,7 @@ const run = async () => {
   suite.group('Provider misconfiguration');
 
   await testAsync('a paid provider is refused over HTTP with no fallback', async () => {
-    setAiEnv(allModesOn({ AI_PROVIDER: 'openai' }));
+    setAiEnv(allModesOn({ AI_PROVIDER: 'anthropic' }));
     const res = await authed('POST', '/ai/run', { body: { mode: 'screening', message: 'test' } });
 
     assert.strictEqual(res.status, 503);
@@ -481,7 +481,7 @@ const run = async () => {
   });
 
   await testAsync('an AI failure does not disturb a subsequent ordinary request', async () => {
-    setAiEnv(allModesOn({ AI_PROVIDER: 'openai' }));
+    setAiEnv(allModesOn({ AI_PROVIDER: 'anthropic' }));
     const failed = await authed('POST', '/ai/run', { body: { mode: 'screening', message: 'test' } });
     assert.strictEqual(failed.body.code, 'AI_PROVIDER_INVALID');
 
