@@ -125,7 +125,7 @@ class OpenRouterProvider extends MockAIProvider {
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.apiKey}`,
-            'HTTP-Referer': 'http://localhost:5173',
+            'HTTP-Referer': process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',')[0].trim() : 'http://localhost:5173',
             'X-Title': 'HR Recruitment Screening AI Assistant'
           },
           body: JSON.stringify(payload),

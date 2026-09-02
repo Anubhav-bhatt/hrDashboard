@@ -26,6 +26,7 @@
     "test:legacy": "node tests/phase5.test.js",
     "seed:user": "node prisma/seedUser.js",
     "prisma:generate": "prisma generate",
+    "prisma:deploy": "prisma migrate deploy",
     "prisma:push": "prisma db push"
   },
   "keywords": [

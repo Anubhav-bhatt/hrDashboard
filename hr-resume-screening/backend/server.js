@@ -61,7 +61,11 @@ app.use(
     max: parseInt(process.env.API_RATE_LIMIT || '600', 10),
     standardHeaders: true,
     legacyHeaders: false,
-    skip: (req) => req.path.startsWith('/health'),
+    skip: (req) =>
+      req.path === '/health' ||
+      req.path === '/ready' ||
+      req.path.startsWith('/health') ||
+      req.path.startsWith('/ready'),
     message: {
       success: false,
       code: 'RATE_LIMITED',
@@ -71,14 +75,38 @@ app.use(
 );
 
 // Health Check Endpoint (Lightweight, unauthenticated for uptime probes)
-app.get('/api/health', (req, res) => {
+const healthHandler = (req, res) => {
   res.status(200).json({
     success: true,
     status: 'healthy',
     database: 'PostgreSQL (Prisma ORM)',
     timestamp: new Date().toISOString()
   });
-});
+};
+app.get('/health', healthHandler);
+app.get('/api/health', healthHandler);
+
+// Readiness Check Endpoint (Verifies PostgreSQL connectivity without external AI dependencies)
+const readyHandler = async (req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.status(200).json({
+      success: true,
+      status: 'ready',
+      database: 'UP',
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    res.status(503).json({
+      success: false,
+      status: 'not_ready',
+      database: 'DOWN',
+      timestamp: new Date().toISOString()
+    });
+  }
+};
+app.get('/ready', readyHandler);
+app.get('/api/ready', readyHandler);
 
 /**
  * Continuously sampled event-loop delay. A healthy process stays near zero; a
@@ -177,7 +205,10 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 5000;
 
 // Graceful Shutdown Signal Handlers
+let isShuttingDown = false;
 const handleShutdown = async (signal) => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
   console.log(`[Server] Received ${signal}. Shutting down gracefully...`);
   try {
     await prisma.$disconnect();
@@ -191,16 +222,25 @@ const handleShutdown = async (signal) => {
 process.on('SIGINT', () => handleShutdown('SIGINT'));
 process.on('SIGTERM', () => handleShutdown('SIGTERM'));
 
-// A rejected promise that nobody handled is a bug — surface it instead of
-// letting the process continue in an unknown state.
 process.on('unhandledRejection', (reason) => {
   console.error('[Server] Unhandled promise rejection:', reason instanceof Error ? reason.message : reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[Server] Uncaught exception:', err.message);
+  if (process.env.NODE_ENV !== 'production' && err.stack) console.error(err.stack);
+  handleShutdown('uncaughtException');
 });
 
 // Initialize Database Connection & Start Express Server
 const startServer = async () => {
   // Fail fast on missing production secrets rather than booting insecurely.
   if (process.env.NODE_ENV === 'production') {
+    const dbUrl = process.env.DATABASE_URL || '';
+    if (!dbUrl || !dbUrl.startsWith('postgres')) {
+      console.error('[Server] DATABASE_URL must be set in production. Refusing to start.');
+      process.exit(1);
+    }
     const secret = process.env.JWT_SECRET || '';
     if (secret.length < 32) {
       console.error('[Server] JWT_SECRET must be at least 32 characters in production. Refusing to start.');

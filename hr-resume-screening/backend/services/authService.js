@@ -58,15 +58,19 @@ const verifyToken = (token) => jwt.verify(token, getJwtSecret());
 /**
  * Cookie options for the session cookie. httpOnly keeps the token out of reach
  * of any script on the page; sameSite=lax stops cross-site form posts from
- * riding along on state-changing requests.
+ * riding along on state-changing requests. Cross-site production deployments can
+ * configure COOKIE_SAME_SITE=none (which enforces secure=true).
  */
-const cookieOptions = () => ({
-  httpOnly: true,
-  sameSite: 'lax',
-  secure: process.env.NODE_ENV === 'production',
-  maxAge: getSessionTtlHours() * 60 * 60 * 1000,
-  path: '/'
-});
+const cookieOptions = () => {
+  const sameSite = (process.env.COOKIE_SAME_SITE || 'lax').toLowerCase();
+  return {
+    httpOnly: true,
+    sameSite,
+    secure: sameSite === 'none' ? true : process.env.NODE_ENV === 'production',
+    maxAge: getSessionTtlHours() * 60 * 60 * 1000,
+    path: '/'
+  };
+};
 
 const setSessionCookie = (res, token) => res.cookie(SESSION_COOKIE, token, cookieOptions());
 
