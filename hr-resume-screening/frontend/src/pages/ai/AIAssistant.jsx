@@ -1,7 +1,19 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, BarChart3, Briefcase, GitCompare, ListOrdered, Search, Users } from 'lucide-react';
-import { Card, ErrorState, Skeleton, cx } from '../../components/ui';
+import {
+  ArrowRight,
+  BarChart3,
+  Bot,
+  Briefcase,
+  GitCompare,
+  ListOrdered,
+  RefreshCw,
+  Search,
+  Sparkles,
+  User,
+  Users
+} from 'lucide-react';
+import { Button, Card, ErrorState, InlineAlert, Skeleton, cx } from '../../components/ui';
 import AgentShell from '../../components/ai/AgentShell';
 import AgentInput from '../../components/ai/AgentInput';
 import { AGENT_MODES } from '../../constants/agentModes';
@@ -13,40 +25,22 @@ import {
 } from '../../context/RecruitmentContext';
 import { useApiResource } from '../../hooks/useApiResource';
 import { getJobSummary } from '../../services/api';
+import { runAgent } from '../../services/aiService';
 import { deriveNextAction } from '../../components/dashboard/NeedsAttention';
 
 /**
- * The entry point to the AI section.
+ * AI Assistant Unified Orchestration Page.
  *
- * Deliberately a menu rather than a chat box. A recruiter arriving here has a job
- * to do — screen someone, rank a pool, compare a shortlist — and naming those
- * jobs as cards gets them there in one click. An empty prompt would ask them to
- * guess what the system can do, and guessing is how a feature ends up unused.
- *
- * What changed
- * ------------
- * The menu used to be all there was, which made this the one surface that had
- * forgotten the role the recruiter was already working on. Every other agent
- * picks the current job up from `RecruitmentContext`; arriving here reset them to
- * "choose a task, then choose a job again" — the exact re-asking the shared
- * context exists to stop. When a role is known, this page now states where that
- * role has got to and names the single next step, with the task menu demoted
- * beneath it.
- *
- * Natural-language routing (typing "rank the Pune backend candidates" and landing
- * in the ranking agent with that job selected) belongs to a later phase. Until
- * the orchestrator can do that honestly, the instruction field below states that
- * it is not yet connected rather than accepting text and discarding it.
+ * Serves as the unified recruitment Assistant entry point.
+ * Preserves the Phase 7 context-first job landing while activating natural-language
+ * intent routing (Rank, Compare, Screen, Rank & Compare) over controlled tools.
  */
 
-/** Each card names a task, then points at the agent that performs it. */
 const ACTIONS = [
   {
     label: 'Find strong candidates',
     description: 'Search the pool for the best matches across your open roles.',
     icon: Users,
-    // No dedicated agent owns open-ended search yet; ranking is the closest
-    // honest destination, so the card says what it will actually do.
     mode: AGENT_MODES.ranking,
     note: 'Opens the Ranking Agent'
   },
@@ -76,26 +70,14 @@ const ACTIONS = [
   }
 ];
 
-/**
- * The specialist agents worth offering for the state this role is actually in.
- *
- * Mirrors the reasoning in `JobNextStep.contextualTools`: ranking needs
- * something to rank, comparison needs at least two shortlisted people. An action
- * that can only disappoint is not rendered, and neither is one whose agent is
- * switched off — the flag is checked here so a disabled mode never appears as a
- * live control that leads to a "not enabled" screen.
- *
- * `source` is `dashboard` rather than an assistant-specific origin. There is no
- * `assistant` member of SOURCE_WORKFLOWS, and adding one would widen an enum that
- * is persisted in session storage for no behavioural gain — `dashboard` is what
- * the other hub surfaces (AIPowerTools, the command palette) already send when
- * they launch an agent from an overview.
- *
- * A closed role offers none of them. Ranking a filled vacancy, or comparing the
- * people who lost it, is working a hiring cycle that is over — the same thing the
- * candidate lifecycle scoping stopped the tool layer doing server-side. The only
- * honest action on a closed role is to go and read it.
- */
+const QUICK_SUGGESTIONS = [
+  'Rank candidates',
+  'Compare top 2',
+  'Compare top 3',
+  'Screen the first candidate',
+  'What can you help me with?'
+];
+
 const contextualAgentActions = ({ jobId, stats, isClosed, isModeEnabled }) => {
   if (isClosed) return [];
 
@@ -136,7 +118,6 @@ const contextualAgentActions = ({ jobId, stats, isClosed, isModeEnabled }) => {
   ].filter((action) => action.available);
 };
 
-/** One figure from the role, shown only when the backend actually supplied it. */
 const ContextMetric = ({ value, label }) =>
   value === null || value === undefined ? null : (
     <div className="min-w-0">
@@ -164,15 +145,6 @@ const ContextSkeleton = () => (
   </Card>
 );
 
-/**
- * Where the recruiter's current role has got to, and the one thing to do next.
- *
- * The recommendation comes from `deriveNextAction` — the same function behind the
- * dashboard's attention queue and the Job Workspace's next step. Reusing it is
- * the point rather than a convenience: three surfaces telling a recruiter three
- * different things about one role would make all three untrustworthy, and a
- * second copy of the funnel ordering would drift the moment either was edited.
- */
 const CurrentJobPanel = ({ job, stats, threshold, agentActions }) => {
   const recommendation = deriveNextAction(
     {
@@ -189,13 +161,6 @@ const CurrentJobPanel = ({ job, stats, threshold, agentActions }) => {
     threshold
   );
 
-  /*
-   * A closed role is finished, and `deriveNextAction` returns null to say so.
-   *
-   * Rather than leaving the panel without a next step, the one honest action on
-   * a filled vacancy is to go and read it. Nothing here offers to rank, shortlist,
-   * select or close — that work is over, and the API refuses it anyway.
-   */
   const isClosed = job.status === 'CLOSED';
   const primary = recommendation
     ? { label: recommendation.actionLabel, to: recommendation.to, fact: recommendation.fact, detail: recommendation.detail }
@@ -226,8 +191,6 @@ const CurrentJobPanel = ({ job, stats, threshold, agentActions }) => {
           </h2>
         </div>
 
-        {/* Wraps rather than sitting in fixed columns, so three figures stack
-            cleanly at 375px without a horizontal scrollbar. */}
         <div id="assistant-context-metrics" className="flex flex-wrap gap-x-8 gap-y-3">
           <ContextMetric value={stats?.candidateCount} label="Candidates" />
           <ContextMetric value={stats?.strongMatchCount} label={`Strong matches (${threshold}%+)`} />
@@ -252,8 +215,6 @@ const CurrentJobPanel = ({ job, stats, threshold, agentActions }) => {
           </div>
         )}
 
-        {/* Secondary, and visibly so: small outline buttons rather than a second
-            row of filled ones competing with the recommendation above. */}
         {agentActions.length > 0 && (
           <div className="pt-3 border-t border-brand-200/70">
             <p className="text-meta text-slate-500 mb-2">Also available for this role</p>
@@ -275,18 +236,27 @@ const CurrentJobPanel = ({ job, stats, threshold, agentActions }) => {
 const AIAssistant = () => {
   const navigate = useNavigate();
   const { isModeEnabled } = useAiConfig();
-  const { currentJobId, setJob } = useRecruitmentContext();
+  const {
+    currentJobId,
+    selectedCandidateIds,
+    lastRankingCandidateIds,
+    lastComparisonCandidateIds,
+    recordRanking,
+    recordComparison,
+    setJob,
+    activeFilters
+  } = useRecruitmentContext();
 
-  /*
-   * One request, and only when a role is actually known.
-   *
-   * `/api/jobs/:id/summary` already returns the title, the lifecycle counts and
-   * the strong-match threshold together — the same payload the Job Workspace
-   * reads — so there is nothing to add server-side and no reason to pull the
-   * candidate list just to count it. `useApiResource` cancels a superseded
-   * request, so switching roles cannot let a slow response for the previous one
-   * land on top of the new one.
-   */
+  const [messages, setMessages] = useState([]);
+  const [inputValue, setInputValue] = useState('');
+  const [assistantLoading, setAssistantLoading] = useState(false);
+  const [assistantError, setAssistantError] = useState(null);
+
+  const activeJobIdRef = useRef(currentJobId);
+  useEffect(() => {
+    activeJobIdRef.current = currentJobId;
+  }, [currentJobId]);
+
   const { data, error, loading, refetch } = useApiResource(
     (config) => getJobSummary(currentJobId, config),
     [currentJobId],
@@ -297,15 +267,6 @@ const AIAssistant = () => {
   const stats = data?.data?.stats || null;
   const threshold = data?.data?.strongMatchThreshold ?? 80;
 
-  /*
-   * A remembered role that no longer exists.
-   *
-   * Permanent deletion means a stored `currentJobId` can outlive its job, and a
-   * context pointing at a 404 would otherwise show this error on every visit.
-   * `setJob(null)` drops that role and everything scoped to it — the selection,
-   * the last ranking, the last comparison — and leaves the rest of the session
-   * alone. The page then falls through to its no-role state.
-   */
   const invalidJob = error?.status === 404 || error?.code === 'JOB_NOT_FOUND';
   useEffect(() => {
     if (invalidJob && currentJobId) setJob(null);
@@ -313,35 +274,125 @@ const AIAssistant = () => {
 
   const hasJobContext = Boolean(currentJobId) && !invalidJob;
   const isClosed = job?.status === 'CLOSED';
+  const isAssistantEnabled = isModeEnabled('assistant');
   const agentActions = job ? contextualAgentActions({ jobId: job.id, stats, isClosed, isModeEnabled }) : [];
 
-  /*
-   * Whether a task should open pre-loaded with this role.
-   *
-   * Only for a role still being hired for. Handing a closed job's id to the
-   * ranking agent would pre-select an archived pool as though it were live work,
-   * so on a finished role the tasks below stay available but open blank — the
-   * recruiter chooses a live role for them, as they would from a cold start.
-   */
+  const handleSendPrompt = async (promptText) => {
+    if (!promptText || !promptText.trim() || assistantLoading) return;
+    const text = promptText.trim();
+    setInputValue('');
+    setAssistantError(null);
+
+    const userMessage = {
+      id: `user-${Date.now()}`,
+      sender: 'user',
+      text,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    setAssistantLoading(true);
+
+    const jobIdAtStart = currentJobId;
+
+    try {
+      const response = await runAgent({
+        mode: 'assistant',
+        message: text,
+        context: {
+          jobId: currentJobId || undefined,
+          candidateIds: selectedCandidateIds.length > 0 ? selectedCandidateIds : undefined,
+          lastRankingCandidateIds: lastRankingCandidateIds.length > 0 ? lastRankingCandidateIds : undefined,
+          lastComparisonCandidateIds: lastComparisonCandidateIds.length > 0 ? lastComparisonCandidateIds : undefined,
+          activeFilters: activeFilters && Object.keys(activeFilters).length > 0 ? activeFilters : undefined,
+          candidateScope: 'ALL'
+        }
+      });
+
+      // Guard against race conditions if user switched jobs during request
+      if (activeJobIdRef.current !== jobIdAtStart) {
+        return;
+      }
+
+      const content = response.content || response.message || 'Task completed.';
+      const structured = response.structuredData || {};
+
+      // Update recruitment context from Assistant orchestration
+      if (structured.candidateIds && Array.isArray(structured.candidateIds) && structured.candidateIds.length > 0 && jobIdAtStart) {
+        if (structured.specialistMode === 'ranking') {
+          recordRanking(jobIdAtStart, structured.candidateIds);
+        } else if (structured.specialistMode === 'comparison') {
+          recordComparison(jobIdAtStart, structured.candidateIds);
+        }
+      }
+
+      const assistantMessage = {
+        id: `assistant-${Date.now()}`,
+        sender: 'assistant',
+        text: content,
+        structuredData: structured,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+
+      setMessages((prev) => [...prev, assistantMessage]);
+    } catch (err) {
+      if (activeJobIdRef.current !== jobIdAtStart) return;
+      setAssistantError(err.message || 'Assistant error. Please try again.');
+    } finally {
+      if (activeJobIdRef.current === jobIdAtStart) {
+        setAssistantLoading(false);
+      }
+    }
+  };
+
+  const handleActionClick = (action) => {
+    if (action.to) {
+      navigate(action.to);
+    } else if (action.candidateIds && action.candidateIds.length >= 2) {
+      handleSendPrompt(`Compare top ${action.candidateIds.length}`);
+    } else if (action.candidateId) {
+      handleSendPrompt(`Screen candidate`);
+    } else if (action.label) {
+      handleSendPrompt(action.label);
+    }
+  };
+
   const carryJobIntoTasks = hasJobContext && !isClosed;
 
   return (
     <AgentShell
       mode={AGENT_MODES.assistant}
       input={
-        <AgentInput
-          disabled
-          placeholder="Ask a question about your jobs and candidates…"
-          disabledHint="Typed questions are not answered yet. Choose one of the actions above to open the agent that handles it."
-        />
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-1.5 px-1">
+            <span className="text-[11px] text-slate-400 font-medium">Suggestions:</span>
+            {QUICK_SUGGESTIONS.map((chip, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => handleSendPrompt(chip)}
+                disabled={!isAssistantEnabled || assistantLoading}
+                className="px-2 py-0.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                {chip}
+              </button>
+            ))}
+          </div>
+          <AgentInput
+            value={inputValue}
+            onChange={setInputValue}
+            onSubmit={handleSendPrompt}
+            busy={assistantLoading}
+            disabled={!isAssistantEnabled}
+            placeholder="Ask about this job or its candidates… (e.g. Rank candidates, Compare top 3, Screen Rahul)"
+            disabledHint={!isAssistantEnabled ? 'AI Assistant is currently disabled in configuration.' : undefined}
+          />
+        </div>
       }
     >
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-5" id="ai-assistant-container">
         {hasJobContext && loading && <ContextSkeleton />}
 
-        {/* A failed summary costs the recruiter the context panel, not the page:
-            every task below stays reachable, and the remembered role is kept so
-            a retry has something to retry with. */}
         {hasJobContext && !loading && error && (
           <ErrorState
             title="We couldn’t load the current job summary"
@@ -352,6 +403,92 @@ const AIAssistant = () => {
 
         {hasJobContext && !loading && !error && job && (
           <CurrentJobPanel job={job} stats={stats} threshold={threshold} agentActions={agentActions} />
+        )}
+
+        {/* Interactive Assistant Conversation Thread */}
+        {messages.length > 0 && (
+          <div className="space-y-4 pt-2 border-t border-slate-200" id="assistant-conversation-thread">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-brand-600" />
+                Assistant Conversation
+              </h2>
+              <button
+                type="button"
+                onClick={() => setMessages([])}
+                className="text-xs text-slate-400 hover:text-slate-600 underline"
+              >
+                Clear thread
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {messages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={cx(
+                    'p-4 rounded-lg flex gap-3 text-sm animate-fade-in',
+                    msg.sender === 'user'
+                      ? 'bg-slate-100 text-slate-900 border border-slate-200 ml-6 sm:ml-12'
+                      : 'bg-white border border-brand-200 shadow-sm mr-2'
+                  )}
+                >
+                  <div
+                    className={cx(
+                      'w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5',
+                      msg.sender === 'user' ? 'bg-slate-700 text-white' : 'bg-brand-600 text-white'
+                    )}
+                  >
+                    {msg.sender === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span className="font-semibold text-xs text-slate-700">
+                        {msg.sender === 'user' ? 'You' : 'AI Recruitment Assistant'}
+                      </span>
+                      <span className="text-[11px] text-slate-400">{msg.timestamp}</span>
+                    </div>
+
+                    <div className="whitespace-pre-wrap text-slate-800 leading-relaxed font-sans">
+                      {msg.text}
+                    </div>
+
+                    {/* Contextual Suggested Actions */}
+                    {msg.structuredData?.suggestedActions && msg.structuredData.suggestedActions.length > 0 && (
+                      <div className="mt-3.5 pt-2.5 border-t border-slate-100 flex flex-wrap items-center gap-2">
+                        {msg.structuredData.suggestedActions.map((act, idx) => (
+                          <Button
+                            key={idx}
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => handleActionClick(act)}
+                          >
+                            {act.label}
+                          </Button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {assistantLoading && (
+                <div className="p-3 bg-brand-50/60 border border-brand-200 rounded-lg flex items-center gap-2.5 text-xs text-brand-800 animate-pulse">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-brand-600" />
+                  <span>Assistant is evaluating requirements and orchestrating specialist tools…</span>
+                </div>
+              )}
+
+              {assistantError && (
+                <InlineAlert
+                  tone="error"
+                  title="Assistant Request Error"
+                  message={assistantError}
+                />
+              )}
+            </div>
+          </div>
         )}
 
         <div>
@@ -367,14 +504,6 @@ const AIAssistant = () => {
           {ACTIONS.map((action) => {
             const available = isModeEnabled(action.mode.id);
             const Icon = action.icon;
-            /*
-             * Carry the role into the task when one is known.
-             *
-             * This is the whole point of the change: choosing "Rank candidates"
-             * from here should not then ask which role to rank. `buildAgentPath`
-             * builds the link so the parameter names cannot drift from the ones
-             * every other handoff uses.
-             */
             const to = carryJobIntoTasks
               ? buildAgentPath(action.mode.id, {
                   jobId: currentJobId,
@@ -424,8 +553,6 @@ const AIAssistant = () => {
           })}
         </div>
 
-        {/* Nothing to work on yet, and no role remembered — the one case where a
-            recruiter genuinely has to start somewhere else. */}
         {!hasJobContext && (
           <p className="text-meta text-slate-500 inline-flex items-center gap-1.5">
             <Briefcase className="w-3.5 h-3.5" aria-hidden="true" />

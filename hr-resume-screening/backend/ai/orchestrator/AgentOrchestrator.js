@@ -35,6 +35,7 @@ const { logAiRun, logAiConfigWarnings } = require('../logging/aiLogger');
 const { runScreeningAgent } = require('../modes/screening.agent');
 const { runRankingAgent } = require('../modes/ranking.agent');
 const { runComparisonAgent } = require('../modes/comparison.agent');
+const { runAssistantAgent } = require('../modes/assistant.agent');
 
 /**
  * Upper bound on a prompt. Generous for a recruiter's question and small enough
@@ -203,6 +204,13 @@ const run = async ({ mode, message, context } = {}, { user = null, config, provi
       });
     } else if (agentMode.id === 'comparison' && agentContext && agentContext.jobId) {
       rawResult = await runComparisonAgent({
+        message: normalizedMessage,
+        context: agentContext,
+        provider: activeProvider,
+        config: activeConfig
+      });
+    } else if (agentMode.id === 'assistant') {
+      rawResult = await runAssistantAgent({
         message: normalizedMessage,
         context: agentContext,
         provider: activeProvider,
