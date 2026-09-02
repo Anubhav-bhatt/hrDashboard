@@ -25,7 +25,9 @@ const SUITES = [
   { name: 'Screening Agent (mode=screening)', file: 'screeningAgent.test.js', requiresDatabase: false },
   { name: 'Ranking Agent (mode=ranking)', file: 'rankingAgent.test.js', requiresDatabase: false },
   { name: 'Comparison Agent (mode=comparison)', file: 'comparisonAgent.test.js', requiresDatabase: false },
-  { name: 'Assistant Agent (mode=assistant)', file: 'assistantAgent.test.js', requiresDatabase: false }
+  { name: 'Insights Agent (mode=insights)', file: 'insightsAgent.test.js', requiresDatabase: false },
+  { name: 'Assistant Agent (mode=assistant)', file: 'assistantAgent.test.js', requiresDatabase: false },
+  { name: 'AI Assistant Evaluation Framework', file: 'assistantEvaluation.runner.js', requiresDatabase: false }
 ];
 
 const runSuite = (file) =>

@@ -53,6 +53,30 @@ class AIProvider {
     throw new Error(`${this.constructor.name} must implement run(request).`);
   }
 
+  /**
+   * Forward-compatible standard generation interface for future model providers.
+   *
+   * @param {Object} params
+   * @param {Array<Object>} params.messages Standard message list [{ role, content }]
+   * @param {Object} [params.responseSchema] Expected JSON schema definition
+   * @param {Object} [params.metadata]
+   * @param {number} [params.timeoutMs] Optional per-request timeout in ms
+   * @returns {Promise<{ content: string, structuredData?: Object, usage: Object }>}
+   */
+  // eslint-disable-next-line no-unused-vars
+  async generate(params) {
+    throw new Error(`${this.constructor.name} must implement generate(params).`);
+  }
+
+  /** Declares capabilities supported by this provider implementation. */
+  get capabilities() {
+    return {
+      structuredOutput: true,
+      streaming: false,
+      toolCalling: true
+    };
+  }
+
   /** Zero-cost usage record, shared by every local provider. */
   static emptyUsage() {
     return { promptTokens: 0, completionTokens: 0, totalTokens: 0, costUsd: 0 };

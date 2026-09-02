@@ -2,7 +2,7 @@
  * Assistant Agent mode logic.
  *
  * Orchestrates recruitment AI interactions by parsing recruiter intent and delegating
- * to existing specialist capabilities (Ranking, Comparison, Screening) or controlled tools.
+ * to existing specialist capabilities (Ranking, Comparison, Screening, Insights) or controlled tools.
  *
  * Uses existing RecruitmentContext identifiers passed in request context:
  *   - jobId
@@ -16,6 +16,7 @@ const { executeTool } = require('../tools/toolRegistry');
 const { runRankingAgent } = require('./ranking.agent');
 const { runComparisonAgent } = require('./comparison.agent');
 const { runScreeningAgent } = require('./screening.agent');
+const { runInsightsAgent } = require('./insights.agent');
 
 /**
  * Parses deterministic user intent from the message.
@@ -25,33 +26,61 @@ const { runScreeningAgent } = require('./screening.agent');
  *   - RANK_CANDIDATES
  *   - COMPARE_CANDIDATES
  *   - RANK_AND_COMPARE
+ *   - GET_INSIGHTS
+ *   - SAFETY_WRITE_ATTEMPT
+ *   - SAFETY_PROTECTED_TRAIT
  *   - GENERAL_HELP
  *   - UNKNOWN
  *
  * @param {string} message
- * @returns {{ intent: string, targetCount?: number, targetCandidate?: Object }}
+ * @returns {{ intent: string, targetCount?: number, targetCandidate?: Object, requiresJobContext?: boolean }}
  */
 const parseIntent = (message = '') => {
   const msg = message.trim().toLowerCase();
 
-  // 1. HELP
+  // 1. SAFETY: Prohibited write actions
+  if (
+    /\b(shortlist\s+[a-z0-9\s._-]+|select\s+[a-z0-9\s._-]+|hire\s+[a-z0-9\s._-]+|close\s+(?:the\s+|this\s+)?job|delete\s+(?:the\s+|this\s+)?job|reject\s+(?:all|low|candidates))\b/i.test(
+      msg
+    ) &&
+    !/\b(how|what|view|review|show|summary|compare|screen|rank)\b/i.test(msg)
+  ) {
+    return { intent: 'SAFETY_WRITE_ATTEMPT' };
+  }
+
+  // 2. SAFETY: Prohibited protected attribute ranking / filtering
+  if (/\b(?:by|based\s+on)\s+(?:age|gender|sex|race|religion|caste|marital\s+status|ethnicity|sexual\s+orientation)\b/i.test(msg)) {
+    return { intent: 'SAFETY_PROTECTED_TRAIT' };
+  }
+
+  // 3. HELP
   if (/\b(help|what can you|how to|capabilities|commands)\b/i.test(msg)) {
     return { intent: 'GENERAL_HELP' };
   }
 
-  // 2. RANK AND COMPARE
+  // 4. INSIGHTS
+  if (
+    /\b(insights|needs?\s+attention|what\s+should\s+i\s+focus\s+on|how\s+is\s+(?:this|the)\s+job\s+doing|pipeline\s+health|hiring\s+performance)\b/i.test(
+      msg
+    )
+  ) {
+    const requiresJobContext = /\b(this\s+job|for\s+this\s+role|how\s+is\s+this\s+job\s+doing)\b/i.test(msg);
+    return { intent: 'GET_INSIGHTS', requiresJobContext };
+  }
+
+  // 5. RANK AND COMPARE
   if (/\brank\b/i.test(msg) && /\bcompare\b/i.test(msg)) {
     const numMatch = msg.match(/(?:top|first)?\s*(\d+)/i);
     const targetCount = numMatch ? parseInt(numMatch[1], 10) : 3;
     return { intent: 'RANK_AND_COMPARE', targetCount };
   }
 
-  // 3. RANK CANDIDATES
+  // 6. RANK CANDIDATES
   if (/\brank\b/i.test(msg)) {
     return { intent: 'RANK_CANDIDATES' };
   }
 
-  // 4. COMPARE CANDIDATES
+  // 7. COMPARE CANDIDATES
   if (/\bcompare\b/i.test(msg)) {
     const numMatch = msg.match(/(?:top|first)?\s*(\d+)/i);
     let targetCount = numMatch ? parseInt(numMatch[1], 10) : 2;
@@ -60,7 +89,7 @@ const parseIntent = (message = '') => {
     return { intent: 'COMPARE_CANDIDATES', targetCount };
   }
 
-  // 5. SCREEN CANDIDATE
+  // 8. SCREEN CANDIDATE
   if (/\bscreen\b/i.test(msg)) {
     let targetCandidate = null;
 
@@ -119,87 +148,73 @@ const buildClarificationResponse = ({ intent, message, suggestedActions = [] }) 
     intent,
     status: 'CLARIFICATION_REQUIRED',
     message,
+    specialistMode: null,
     suggestedActions
   });
 
-const buildUnavailableResponse = (featureName, intent) =>
+const buildRestrictedResponse = (reason, intent) =>
+  buildAssistantResponse({
+    intent,
+    status: 'RESTRICTED',
+    message: reason,
+    specialistMode: null,
+    suggestedActions: [
+      { label: 'View job overview', action: 'view_job', to: '/jobs' }
+    ]
+  });
+
+const buildUnavailableResponse = (capabilityName, intent) =>
   buildAssistantResponse({
     intent,
     status: 'UNAVAILABLE',
-    message: `${featureName} capability is currently disabled in system configuration.`,
-    suggestedActions: []
-  });
-
-const buildHelpResponse = (config) => {
-  const modes = config?.modes || {};
-  const lines = [
-    'I am your AI Recruitment Assistant. I can help you orchestrate candidate evaluation for your roles:\n',
-    modes.ranking ? '• **Rank candidates** — order candidate pool by fit: *"Rank candidates"*' : null,
-    modes.comparison ? '• **Compare candidates** — side-by-side trade-off analysis: *"Compare top 2"*' : null,
-    modes.screening ? '• **Screen a candidate** — detailed requirement evaluation: *"Screen Rahul"*' : null,
-    modes.ranking && modes.comparison ? '• **Rank & Compare** — sequence both tasks: *"Rank candidates and compare top 3"*' : null
-  ].filter(Boolean);
-
-  return buildAssistantResponse({
-    intent: 'GENERAL_HELP',
-    status: 'SUCCESS',
-    message: lines.join('\n'),
+    message: `${capabilityName} capability is currently disabled in your workspace configuration.`,
+    specialistMode: null,
     suggestedActions: [
-      { label: 'Rank candidates', action: 'rank_candidates', mode: 'ranking' },
-      { label: 'Compare top 2', action: 'compare_top_2', mode: 'comparison' }
+      { label: 'View jobs', action: 'navigate_jobs', to: '/jobs' }
     ]
   });
-};
 
-const resolveCandidatesForComparison = (context, targetCount = 2, jobData) => {
-  const count = targetCount > 0 ? targetCount : 2;
-
+/**
+ * Resolves candidates for comparison based on priority hierarchy.
+ */
+const resolveCandidatesForComparison = (context, targetCount = 2, jobData = null) => {
   if (Array.isArray(context.candidateIds) && context.candidateIds.length >= 2) {
-    return context.candidateIds.slice(0, count);
+    return context.candidateIds.slice(0, targetCount);
   }
   if (Array.isArray(context.lastRankingCandidateIds) && context.lastRankingCandidateIds.length >= 2) {
-    return context.lastRankingCandidateIds.slice(0, count);
+    return context.lastRankingCandidateIds.slice(0, targetCount);
   }
   if (Array.isArray(context.lastComparisonCandidateIds) && context.lastComparisonCandidateIds.length >= 2) {
-    return context.lastComparisonCandidateIds.slice(0, count);
+    return context.lastComparisonCandidateIds.slice(0, targetCount);
   }
-
   return [];
 };
 
-const validateCandidatesInJob = async (candidateIds, jobId, toolRunner, context, config) => {
-  const valid = [];
-  for (const cid of candidateIds) {
-    try {
-      const res = await toolRunner('getCandidate', { candidateId: cid, jobId }, context, { config });
-      if (res.success && res.data?.candidate) {
-        const cand = res.data.candidate;
-        if (!cand.jobId || cand.jobId === jobId) {
-          valid.push(cid);
-        }
-      }
-    } catch {
-      // Ignored: invalid candidate ID is dropped
-    }
-  }
-  return valid;
-};
-
-const resolveCandidateForScreening = async (targetCandidate, context, jobId, toolRunner, config) => {
+/**
+ * Resolves candidate for screening from target candidate description or context fallback.
+ */
+const resolveCandidateForScreening = async (
+  targetCandidate,
+  context,
+  jobId,
+  toolRunner
+) => {
   if (targetCandidate?.position) {
     const pos = targetCandidate.position - 1;
-    const fromComp = context.lastComparisonCandidateIds?.[pos];
-    const fromRank = context.lastRankingCandidateIds?.[pos];
-    const fromSel = context.candidateIds?.[pos];
-    const resolvedId = fromComp || fromRank || fromSel;
-    if (resolvedId) {
-      return { status: 'FOUND', candidateId: resolvedId };
+    if (context.lastComparisonCandidateIds && context.lastComparisonCandidateIds[pos]) {
+      return { status: 'FOUND', candidateId: context.lastComparisonCandidateIds[pos] };
+    }
+    if (context.lastRankingCandidateIds && context.lastRankingCandidateIds[pos]) {
+      return { status: 'FOUND', candidateId: context.lastRankingCandidateIds[pos] };
+    }
+    if (context.candidateIds && context.candidateIds[pos]) {
+      return { status: 'FOUND', candidateId: context.candidateIds[pos] };
     }
   }
 
   if (targetCandidate?.name) {
     const searchName = targetCandidate.name.trim().toLowerCase();
-    const searchRes = await toolRunner('getCandidates', { jobId, limit: 100 }, context, { config });
+    const searchRes = await toolRunner('getCandidates', { jobId, limit: 100 }, context);
     if (searchRes.success && Array.isArray(searchRes.data?.candidates)) {
       const candidates = searchRes.data.candidates;
       const matches = candidates.filter((c) => (c.name || '').toLowerCase().includes(searchName));
@@ -213,7 +228,6 @@ const resolveCandidateForScreening = async (targetCandidate, context, jobId, too
     }
   }
 
-  // Fallback to first available context candidate
   const fallbackId =
     context.lastComparisonCandidateIds?.[0] ||
     context.lastRankingCandidateIds?.[0] ||
@@ -223,11 +237,29 @@ const resolveCandidateForScreening = async (targetCandidate, context, jobId, too
     return { status: 'FOUND', candidateId: fallbackId };
   }
 
-  return { status: 'NO_CANDIDATE' };
+  return { status: 'UNRESOLVED' };
 };
 
 /**
- * Executes the Assistant orchestration turn.
+ * Validates that candidate IDs belong to the current job.
+ */
+const validateCandidatesInJob = async (candidateIds, jobId, toolRunner, context, config) => {
+  const verified = [];
+  for (const cid of candidateIds) {
+    try {
+      const res = await toolRunner('getCandidate', { candidateId: cid }, context, { config });
+      if (res.success && res.data?.candidate?.jobId === jobId) {
+        verified.push(cid);
+      }
+    } catch {
+      // Ignore not found
+    }
+  }
+  return verified;
+};
+
+/**
+ * Executes unified Assistant Agent orchestration.
  *
  * @param {Object} params
  * @param {string} params.message
@@ -244,15 +276,121 @@ const runAssistantAgent = async ({
   toolRunner = executeTool
 }) => {
   const parsed = parseIntent(message);
-  const jobId = context.jobId || null;
-  const activeModes = config?.modes || {};
+  const activeModes = config?.modes || {
+    assistant: true,
+    screening: true,
+    ranking: true,
+    comparison: true,
+    insights: true
+  };
 
-  if (parsed.intent === 'GENERAL_HELP') {
-    return buildHelpResponse(config);
+  // 1. SAFETY: Prohibited write actions
+  if (parsed.intent === 'SAFETY_WRITE_ATTEMPT') {
+    return buildAssistantResponse({
+      intent: 'SAFETY_WRITE_ATTEMPT',
+      status: 'SAFETY_REFUSAL',
+      message:
+        'AI Assistant is strictly read-only and does not perform autonomous recruitment actions (such as shortlisting, selecting candidates, closing jobs, or deleting records). Please perform this confirmed action directly on the job or candidate page.',
+      jobId: context.jobId || null,
+      specialistMode: null,
+      suggestedActions: [
+        { label: 'View job overview', action: 'view_job', to: context.jobId ? `/jobs/${context.jobId}` : '/jobs' }
+      ]
+    });
   }
 
-  // Missing Job Context
-  if (!jobId && ['RANK_CANDIDATES', 'COMPARE_CANDIDATES', 'RANK_AND_COMPARE', 'SCREEN_CANDIDATE'].includes(parsed.intent)) {
+  // 2. SAFETY: Prohibited protected attribute ranking
+  if (parsed.intent === 'SAFETY_PROTECTED_TRAIT') {
+    return buildAssistantResponse({
+      intent: 'SAFETY_PROTECTED_TRAIT',
+      status: 'SAFETY_REFUSAL',
+      message:
+        'Evaluation and ranking must be based exclusively on documented job requirements, skills, and qualifications. Protected personal characteristics (such as age, gender, race, religion) are not used for candidate evaluation.',
+      jobId: context.jobId || null,
+      specialistMode: null,
+      suggestedActions: [
+        { label: 'Rank by job requirements', action: 'rank_candidates', mode: 'ranking' }
+      ]
+    });
+  }
+
+  // 3. HELP
+  if (parsed.intent === 'GENERAL_HELP') {
+    return buildAssistantResponse({
+      intent: 'GENERAL_HELP',
+      status: 'SUCCESS',
+      message:
+        "Here is what I can help you with:\n\n" +
+        "• **Rank candidates**: Order your active applicants by match score and mandatory requirement fit.\n" +
+        "• **Compare candidates**: Put top candidates side-by-side to review trade-offs and dimension breakdowns.\n" +
+        "• **Screen candidate**: Evaluate a specific candidate's evidence, skills, and fit level against job criteria.\n" +
+        "• **Recruitment Insights**: Review pipeline health, bottleneck warnings, and recommended next actions.\n\n" +
+        "Try asking: *\"Rank candidates\"*, *\"Compare top 3\"*, *\"Screen Rahul Sharma\"*, or *\"Show insights\"*.",
+      jobId: context.jobId || null,
+      specialistMode: null,
+      suggestedActions: [
+        { label: 'Rank candidates', action: 'rank_candidates', mode: 'ranking' },
+        { label: 'Show recruitment insights', action: 'show_insights', mode: 'insights' }
+      ]
+    });
+  }
+
+  // 4. INSIGHTS INTENT
+  if (parsed.intent === 'GET_INSIGHTS') {
+    if (!activeModes.insights) {
+      return buildUnavailableResponse('Insights', parsed.intent);
+    }
+
+    if (parsed.requiresJobContext && !context.jobId) {
+      return buildClarificationResponse({
+        intent: 'GET_INSIGHTS',
+        message: 'Choose a job first so I know which role’s insights to analyze.',
+        suggestedActions: [
+          { label: 'Select a job from Jobs page', action: 'navigate_jobs', to: '/jobs' },
+          { label: 'Show workspace overview insights', action: 'global_insights' }
+        ]
+      });
+    }
+
+    const insightsResult = await runInsightsAgent({
+      message,
+      context,
+      provider,
+      config,
+      toolRunner
+    });
+
+    const structured = insightsResult.structuredData || {};
+    const suggestedActions = [
+      { label: 'Open Insights', action: 'open_insights', to: '/ai/insights' }
+    ];
+
+    if (structured.insights && structured.insights.length > 0) {
+      const topAction = structured.insights[0];
+      if (topAction.to && topAction.actionLabel) {
+        suggestedActions.unshift({
+          label: topAction.actionLabel,
+          action: topAction.recommendedAction || 'recommended_action',
+          to: topAction.to
+        });
+      }
+    }
+
+    return buildAssistantResponse({
+      intent: 'GET_INSIGHTS',
+      status: 'SUCCESS',
+      message: insightsResult.content,
+      jobId: context.jobId || null,
+      specialistMode: 'insights',
+      result: structured,
+      suggestedActions,
+      warnings: structured.warnings || []
+    });
+  }
+
+  // 5. REQUIRE JOB FOR SPECIALISTS (Ranking, Comparison, Screening)
+  const jobId = context.jobId;
+  if (!jobId) {
     return buildClarificationResponse({
       intent: parsed.intent,
       message: 'Choose a job or run Ranking first so I know which candidates to work with.',
@@ -262,68 +400,61 @@ const runAssistantAgent = async ({
     });
   }
 
-  // Retrieve Job Details if jobId is present
-  let jobData = null;
-  if (jobId) {
-    const jobResult = await toolRunner('getJob', { jobId }, context, { config });
-    if (!jobResult.success) {
-      return buildClarificationResponse({
-        intent: parsed.intent,
-        message: 'Job not found. Please select a valid active job.',
-        suggestedActions: []
-      });
-    }
-    jobData = jobResult.data.job;
+  // Fetch job details to check status and title
+  const jobResult = await toolRunner('getJob', { jobId }, context, { config });
+  if (!jobResult.success || !jobResult.data?.job) {
+    return buildAssistantResponse({
+      intent: parsed.intent,
+      status: 'NOT_FOUND',
+      message: `Job "${jobId}" was not found or has been deleted.`,
+      jobId,
+      specialistMode: null,
+      suggestedActions: [{ label: 'View all jobs', action: 'navigate_jobs', to: '/jobs' }]
+    });
   }
 
-  // Closed Job Safety
-  if (jobData && jobData.status === 'CLOSED') {
-    if (parsed.intent === 'RANK_CANDIDATES' || parsed.intent === 'RANK_AND_COMPARE') {
-      return buildAssistantResponse({
-        intent: parsed.intent,
-        status: 'RESTRICTED',
-        message: `This job (${jobData.title}) is closed. Active candidate ranking is unavailable for closed jobs.`,
-        jobId,
-        specialistMode: null,
-        suggestedActions: [
-          { label: 'View closed job details', action: 'view_job', to: `/jobs/${jobId}` }
-        ]
-      });
-    }
+  const jobData = jobResult.data.job;
+
+  // Closed job restriction
+  if (jobData.status === 'CLOSED' || jobData.isClosed) {
+    return buildRestrictedResponse(
+      `Job "${jobData.title}" is closed. Active ranking, screening, and comparison modifications are restricted for closed jobs.`,
+      parsed.intent
+    );
   }
 
+  // Execute Specialist by Intent
   switch (parsed.intent) {
     case 'RANK_CANDIDATES': {
       if (!activeModes.ranking) {
         return buildUnavailableResponse('Ranking', parsed.intent);
       }
 
-      const rankingResult = await runRankingAgent({
+      const rankResult = await runRankingAgent({
         message,
         context: {
           jobId,
-          candidateScope: context.candidateScope || 'ALL',
-          filters: context.filters
+          candidateScope: 'ALL'
         },
         provider,
         config,
         toolRunner
       });
 
-      const structured = rankingResult.structuredData || {};
+      const structured = rankResult.structuredData || {};
       const rankedList = structured.rankedCandidates || [];
-      const rankedIds = rankedList.map((c) => c.candidateId).filter(Boolean);
+      const rankedIds = rankedList.map((c) => c.candidateId);
 
-      const topSummary = rankedList
-        .slice(0, 3)
-        .map((c, i) => `${i + 1}. **${c.candidateName}** (${c.matchScore !== null ? c.matchScore + '%' : 'unscored'} match)`)
-        .join('\n');
-
-      const text = `Ranking complete for **${jobData.title}** (${structured.totalCandidatesConsidered || rankedList.length} candidates considered).\n\nTop candidates:\n${topSummary}`;
+      let text = `Ranking complete for **${jobData.title}** (${rankedList.length} candidate${rankedList.length === 1 ? '' : 's'}):\n\n`;
+      const top3 = rankedList.slice(0, 3);
+      top3.forEach((c, idx) => {
+        text += `${idx + 1}. **${c.candidateName}** — ${c.overallScore != null ? `${c.overallScore}% match` : 'Unscored'} (${c.fitLevel})\n`;
+      });
 
       const suggestedActions = [
         { label: 'View full ranking', action: 'view_ranking', to: `/ai/ranking?jobId=${jobId}` }
       ];
+
       if (rankedIds.length >= 2) {
         suggestedActions.push({
           label: 'Compare top 2',
@@ -408,21 +539,27 @@ const runAssistantAgent = async ({
       });
 
       const structured = compResult.structuredData || {};
-      const comparedCands = structured.candidates || [];
-      const candNames = comparedCands.map((c) => c.candidateName).join(' and ');
-      const tradeoffs = structured.tradeoffs || [];
+      const evalList = structured.evaluatedCandidates || [];
+      const names = evalList.map((c) => c.name).join(' and ');
 
-      const text = `Compared **${candNames}** for **${jobData.title}**.\n\nKey Trade-offs:\n${tradeoffs.map((t) => `• ${t}`).join('\n')}`;
+      let text = `Compared ${names} for **${jobData.title}**:\n\n`;
+      if (Array.isArray(structured.tradeOffs) && structured.tradeOffs.length > 0) {
+        text += `**Key Trade-offs:**\n` + structured.tradeOffs.slice(0, 3).map((t) => `• ${t}`).join('\n') + `\n\n`;
+      }
+      if (Array.isArray(structured.bestByDimension) && structured.bestByDimension.length > 0) {
+        text += `**Best by Dimension:**\n` + structured.bestByDimension.slice(0, 3).map((b) => `• ${b.dimension}: **${b.candidateName}** (${b.detail})`).join('\n');
+      }
 
       const suggestedActions = [
         { label: 'View full comparison', action: 'view_comparison', to: `/ai/comparison?jobId=${jobId}&candidateIds=${validIds.join(',')}` }
       ];
-      for (const cand of comparedCands) {
+
+      if (evalList.length > 0) {
         suggestedActions.push({
-          label: `Screen ${cand.candidateName}`,
+          label: `Screen ${evalList[0].name}`,
           action: 'screen_candidate',
           mode: 'screening',
-          candidateId: cand.candidateId
+          candidateId: evalList[0].candidateId
         });
       }
 
@@ -435,81 +572,69 @@ const runAssistantAgent = async ({
         specialistMode: 'comparison',
         result: structured,
         suggestedActions,
-        warnings: structured.warnings || []
+        warnings: structured.dataWarnings || []
       });
     }
 
     case 'RANK_AND_COMPARE': {
-      if (!activeModes.ranking) {
-        return buildUnavailableResponse('Ranking', parsed.intent);
-      }
-      if (!activeModes.comparison) {
-        return buildUnavailableResponse('Comparison', parsed.intent);
+      if (!activeModes.ranking || !activeModes.comparison) {
+        return buildUnavailableResponse('Ranking and Comparison', parsed.intent);
       }
 
-      const rankingResult = await runRankingAgent({
-        message: 'Rank candidate pool',
-        context: {
-          jobId,
-          candidateScope: context.candidateScope || 'ALL'
-        },
+      const rankResult = await runRankingAgent({
+        message: 'Rank candidates',
+        context: { jobId, candidateScope: 'ALL' },
         provider,
         config,
         toolRunner
       });
 
-      const rankStructured = rankingResult.structuredData || {};
+      const rankStructured = rankResult.structuredData || {};
       const rankedList = rankStructured.rankedCandidates || [];
-      const rankedIds = rankedList.map((c) => c.candidateId).filter(Boolean);
+      const rankedIds = rankedList.map((c) => c.candidateId);
 
       if (rankedIds.length < 2) {
         return buildAssistantResponse({
           intent: 'RANK_AND_COMPARE',
-          status: 'INSUFFICIENT_DATA',
-          message: `Ranking completed for **${jobData.title}**, but only ${rankedIds.length} candidate was found. At least 2 candidates are required for Comparison.`,
+          status: 'SUCCESS',
+          message: `Ranked ${rankedList.length} candidate for **${jobData.title}**. At least 2 candidates are needed for side-by-side comparison.`,
           jobId,
           candidateIds: rankedIds,
           specialistMode: 'ranking',
           result: rankStructured,
           suggestedActions: [
-            { label: 'View full ranking', action: 'view_ranking', to: `/ai/ranking?jobId=${jobId}` }
+            { label: 'View ranking', action: 'view_ranking', to: `/ai/ranking?jobId=${jobId}` }
           ]
         });
       }
 
-      const topCount = Math.min(parsed.targetCount || 3, rankedIds.length);
-      const topIds = rankedIds.slice(0, topCount);
+      const count = Math.min(parsed.targetCount || 3, rankedIds.length, 5);
+      const topIds = rankedIds.slice(0, count);
 
       const compResult = await runComparisonAgent({
-        message: `Compare top ${topCount}`,
-        context: {
-          jobId,
-          candidateIds: topIds
-        },
+        message: `Compare top ${count} candidates`,
+        context: { jobId, candidateIds: topIds },
         provider,
         config,
         toolRunner
       });
 
       const compStructured = compResult.structuredData || {};
-      const comparedCands = compStructured.candidates || [];
-      const candNames = comparedCands.map((c) => c.candidateName).join(', ');
-      const tradeoffs = compStructured.tradeoffs || [];
+      const evalList = compStructured.evaluatedCandidates || [];
 
-      const text = `Ranked candidates for **${jobData.title}** and compared the top ${topCount} (**${candNames}**).\n\nKey Trade-offs:\n${tradeoffs.map((t) => `• ${t}`).join('\n')}`;
+      let text = `Ranked ${rankedList.length} candidates and compared top ${topIds.length} for **${jobData.title}**:\n\n`;
+      evalList.forEach((c, idx) => {
+        text += `${idx + 1}. **${c.name}** (${c.overallScore != null ? `${c.overallScore}%` : 'Unscored'}) — ${c.fitLevel}\n`;
+      });
+
+      if (Array.isArray(compStructured.tradeOffs) && compStructured.tradeOffs.length > 0) {
+        text += `\n**Key Comparison Trade-offs:**\n` + compStructured.tradeOffs.slice(0, 2).map((t) => `• ${t}`).join('\n');
+      }
 
       const suggestedActions = [
-        { label: 'View full comparison', action: 'view_comparison', to: `/ai/comparison?jobId=${jobId}&candidateIds=${topIds.join(',')}` },
+        { label: 'View comparison', action: 'view_comparison', to: `/ai/comparison?jobId=${jobId}&candidateIds=${topIds.join(',')}` },
         { label: 'View full ranking', action: 'view_ranking', to: `/ai/ranking?jobId=${jobId}` }
       ];
-      if (comparedCands.length > 0) {
-        suggestedActions.push({
-          label: `Screen ${comparedCands[0].candidateName}`,
-          action: 'screen_candidate',
-          mode: 'screening',
-          candidateId: comparedCands[0].candidateId
-        });
-      }
 
       return buildAssistantResponse({
         intent: 'RANK_AND_COMPARE',
@@ -518,12 +643,9 @@ const runAssistantAgent = async ({
         jobId,
         candidateIds: topIds,
         specialistMode: 'comparison',
-        result: {
-          ranking: rankStructured,
-          comparison: compStructured
-        },
+        result: compStructured,
         suggestedActions,
-        warnings: [...(rankStructured.warnings || []), ...(compStructured.warnings || [])]
+        warnings: compStructured.dataWarnings || []
       });
     }
 
@@ -532,21 +654,24 @@ const runAssistantAgent = async ({
         return buildUnavailableResponse('Screening', parsed.intent);
       }
 
-      const resolution = await resolveCandidateForScreening(parsed.targetCandidate, context, jobId, toolRunner, config);
+      const resolution = await resolveCandidateForScreening(
+        parsed.targetCandidate,
+        context,
+        jobId,
+        toolRunner
+      );
 
       if (resolution.status === 'AMBIGUOUS') {
-        return buildAssistantResponse({
+        const candidateButtons = resolution.candidates.map((c) => ({
+          label: `Screen ${c.name}`,
+          action: 'screen_candidate',
+          candidateId: c.candidateId,
+          mode: 'screening'
+        }));
+        return buildClarificationResponse({
           intent: 'SCREEN_CANDIDATE',
-          status: 'CLARIFICATION_REQUIRED',
           message: `Multiple candidates match "${parsed.targetCandidate?.name}": ${resolution.candidates.map((c) => c.name).join(', ')}. Which candidate would you like to screen?`,
-          jobId,
-          specialistMode: null,
-          suggestedActions: resolution.candidates.map((c) => ({
-            label: `Screen ${c.name}`,
-            action: 'screen_specific',
-            mode: 'screening',
-            candidateId: c.candidateId
-          }))
+          suggestedActions: candidateButtons
         });
       }
 
@@ -563,10 +688,10 @@ const runAssistantAgent = async ({
         });
       }
 
-      if (resolution.status === 'NO_CANDIDATE') {
+      if (resolution.status === 'UNRESOLVED' || !resolution.candidateId) {
         return buildClarificationResponse({
           intent: 'SCREEN_CANDIDATE',
-          message: 'Which candidate would you like to screen? Run Ranking or choose a candidate first.',
+          message: 'Choose a job or run Ranking first so I know which candidates to work with.',
           suggestedActions: [
             { label: 'Rank candidates first', action: 'rank_candidates', mode: 'ranking' }
           ]
@@ -613,11 +738,12 @@ const runAssistantAgent = async ({
       return buildAssistantResponse({
         intent: 'UNKNOWN',
         status: 'UNKNOWN_INTENT',
-        message: "I didn't quite catch that. You can ask me to rank candidates, compare top candidates, or screen a specific candidate for your active role.",
+        message: "I didn't quite catch that. You can ask me to rank candidates, compare top candidates, screen a specific candidate, or show recruitment insights.",
         jobId,
         specialistMode: null,
         suggestedActions: [
           { label: 'Rank candidates', action: 'rank_candidates', mode: 'ranking' },
+          { label: 'Show insights', action: 'show_insights', mode: 'insights' },
           { label: 'What can you help me with?', action: 'general_help' }
         ]
       });

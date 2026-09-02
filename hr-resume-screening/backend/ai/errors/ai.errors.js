@@ -17,10 +17,21 @@ const AI_ERROR_CODES = Object.freeze({
   AI_MODE_DISABLED: 503,
   /** `AI_PROVIDER` names a provider that is not available. */
   AI_PROVIDER_INVALID: 503,
+  /** The provider is temporarily unreachable or offline. */
+  AI_PROVIDER_UNAVAILABLE: 503,
+  /** The provider request timed out. */
+  AI_PROVIDER_TIMEOUT: 504,
+  /** The provider response did not conform to expected schema. */
+  AI_PROVIDER_INVALID_RESPONSE: 502,
+  /** The provider requires credentials or setup that are missing. */
+  AI_PROVIDER_NOT_CONFIGURED: 503,
   /** The caller's mode, message or context failed validation. */
   AI_REQUEST_INVALID: 400,
   /** The resolved provider threw while handling the request. */
   AI_PROVIDER_ERROR: 502,
+  /** Insights-specific errors */
+  INSIGHTS_JOB_REQUIRED: 400,
+  INSIGHTS_JOB_NOT_FOUND: 404,
   /** Screening-specific errors */
   SCREENING_JOB_REQUIRED: 400,
   SCREENING_CANDIDATE_REQUIRED: 400,
@@ -90,6 +101,21 @@ const aiProviderInvalid = (supported) =>
 /** @param {string} message Written for the caller — states what was wrong. */
 const aiRequestInvalid = (message, code = 'AI_REQUEST_INVALID') => new AiError(code, message);
 
+const aiProviderUnavailable = (providerName) =>
+  new AiError('AI_PROVIDER_UNAVAILABLE', `AI Provider "${providerName || 'service'}" is currently unavailable.`, 503);
+
+const aiProviderTimeout = (timeoutMs) =>
+  new AiError('AI_PROVIDER_TIMEOUT', `AI Provider request timed out after ${timeoutMs || 30000}ms.`, 504);
+
+const aiProviderNotConfigured = (providerName) =>
+  new AiError('AI_PROVIDER_NOT_CONFIGURED', `AI Provider "${providerName}" is not configured.`, 503);
+
+const insightsJobRequired = () =>
+  new AiError('INSIGHTS_JOB_REQUIRED', 'Job insights require a selected job.');
+
+const insightsJobNotFound = (id) =>
+  new AiError('INSIGHTS_JOB_NOT_FOUND', `Job ${id || ''} could not be found for recruitment insights.`);
+
 /**
  * Wraps a provider failure. The underlying message is kept on `cause` for
  * server-side logging and deliberately left out of the client-facing text,
@@ -157,8 +183,13 @@ module.exports = {
   aiDisabled,
   aiModeDisabled,
   aiProviderInvalid,
+  aiProviderUnavailable,
+  aiProviderTimeout,
+  aiProviderNotConfigured,
   aiRequestInvalid,
   aiProviderError,
+  insightsJobRequired,
+  insightsJobNotFound,
   screeningJobRequired,
   screeningCandidateRequired,
   screeningInvalidCandidateCount,

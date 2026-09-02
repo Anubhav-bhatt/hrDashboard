@@ -12,6 +12,8 @@
     "test:ai": "node tests/aiFoundation.test.js",
     "test:ai:api": "node tests/aiApi.test.js",
     "test:ai:tools": "node tests/aiTools.test.js",
+    "test:ai:insights": "node tests/insightsAgent.test.js",
+    "test:ai:evaluation": "node tests/assistantEvaluation.runner.js",
     "test:api": "node tests/api.test.js",
     "test:jobs": "node tests/jobPortal.test.js",
     "test:closure": "node tests/jobClosure.test.js",
