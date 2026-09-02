@@ -95,9 +95,9 @@ try {
       skillWeight: skill ? getComputedStyle(skill).fontWeight : null
     };
   });
-  check(typography.bodyFamily.startsWith('Quicksand'), 'Quicksand is the global product font', typography.bodyFamily);
-  check(typography.nameWeight === '700' && typography.scoreWeight === '700', 'candidate name and match score use Quicksand Bold');
-  check(typography.roleWeight === '400' && (!typography.skillWeight || typography.skillWeight === '400'), 'role and skills use Quicksand Regular');
+  check(typography.bodyFamily.startsWith('Inter'), 'Inter is the global product font', typography.bodyFamily);
+  check((typography.nameWeight === '600' || typography.nameWeight === '700') && (typography.scoreWeight === '600' || typography.scoreWeight === '700'), 'candidate name and match score use Inter Semibold/Bold');
+  check(typography.roleWeight === '400' && (!typography.skillWeight || typography.skillWeight === '400'), 'role and skills use Inter Regular');
 
   await wrapper.hover();
   const dock = wrapper.locator('.candidate-action-dock');

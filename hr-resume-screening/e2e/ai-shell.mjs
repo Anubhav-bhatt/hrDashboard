@@ -298,7 +298,7 @@ try {
     check(new URL(page.url()).pathname === '/ai/screening', '"Screen a candidate" opens the screening agent');
 
     await page.goto(`${BASE}/ai`, { waitUntil: 'networkidle' });
-    await page.getByRole('button', { name: /^Rank candidates/i }).click();
+    await page.getByRole('button', { name: /Rank candidates.*Ranking Agent/i }).click();
     await page.waitForURL('**/ai/ranking', { timeout: 15000 });
     check(new URL(page.url()).pathname === '/ai/ranking', '"Rank candidates" opens the ranking agent');
 
@@ -363,9 +363,9 @@ try {
     await page.waitForTimeout(1200);
     const insightsText = await bodyText(page);
 
-    check(/Where things stand/i.test(insightsText), 'the live metrics section renders');
-    check(/Same figures as your dashboard/i.test(insightsText), 'the metrics are attributed to the dashboard');
-    check(/Which jobs need attention/i.test(insightsText), 'suggested questions are listed');
+    check(/Recruitment Performance Metrics|Where things stand/i.test(insightsText), 'the live metrics section renders');
+    check(/Authoritative workspace metrics|Same figures as your dashboard/i.test(insightsText), 'the metrics are attributed to the dashboard');
+    check(/What needs attention|Which jobs need attention/i.test(insightsText), 'suggested questions are listed');
     check(!/\bNaN\b|\bundefined\b/.test(insightsText), 'no NaN or undefined leaks into the metrics');
 
     /* ------------------------------------------- mock provider connectivity */
