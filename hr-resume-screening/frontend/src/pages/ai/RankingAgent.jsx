@@ -366,7 +366,12 @@ const RankingAgent = () => {
                   </h2>
                   <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-500">
                     <span>
-                      <strong>{result.totalCandidatesConsidered}</strong> candidates considered ({result.candidateScope.toLowerCase()})
+                      {/* Same guard as the collapsed header above: the scope is
+                          read straight off an agent response, and a missing one
+                          took the whole route into the ErrorBoundary rather than
+                          dropping a word from a sentence. */}
+                      <strong>{result.totalCandidatesConsidered}</strong> candidates considered (
+                      {String(result.candidateScope || '').toLowerCase() || 'all'})
                     </span>
                     <span>•</span>
                     <span>
