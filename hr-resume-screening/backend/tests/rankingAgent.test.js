@@ -123,6 +123,24 @@ const run = async () => {
     assert.strictEqual(thrown.code, 'RANKING_INVALID_SCOPE');
   });
 
+  await testAsync('Safely defaults candidateScope to ALL when absent or null', async () => {
+    const resultNull = await runRankingAgent({
+      message: '',
+      context: { jobId: 'job-101', candidateScope: null },
+      provider,
+      toolRunner: createMockToolRunner()
+    });
+    assert.strictEqual(resultNull.structuredData.candidateScope, 'ALL');
+
+    const resultAbsent = await runRankingAgent({
+      message: '',
+      context: { jobId: 'job-101' },
+      provider,
+      toolRunner: createMockToolRunner()
+    });
+    assert.strictEqual(resultAbsent.structuredData.candidateScope, 'ALL');
+  });
+
   suite.group('Score integrity and ranking order');
 
   await testAsync('Preserves exact stored match scores without modification', async () => {
