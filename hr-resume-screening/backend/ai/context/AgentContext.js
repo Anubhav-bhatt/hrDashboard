@@ -22,7 +22,17 @@ const crypto = require('crypto');
 const { aiRequestInvalid } = require('../errors/ai.errors');
 
 /** Keys a client may send. Anything else is refused. */
-const CLIENT_CONTEXT_KEYS = Object.freeze(['sessionId', 'jobId', 'candidateIds', 'filters']);
+const CLIENT_CONTEXT_KEYS = Object.freeze([
+  'sessionId',
+  'jobId',
+  'currentJobId',
+  'candidateIds',
+  'lastRankingCandidateIds',
+  'lastComparisonCandidateIds',
+  'filters',
+  'activeFilters',
+  'candidateScope'
+]);
 
 /** Keys the server owns. A client that sends one of these is refused. */
 const SERVER_OWNED_KEYS = Object.freeze(['userId', 'userRole', 'requestId']);
@@ -203,9 +213,12 @@ const normalizeAgentContext = (raw, { user = null, requestId } = {}) => {
     userId: user && user.id ? user.id : null,
     userRole: user && user.role ? user.role : null,
     sessionId: requireId(source.sessionId, 'sessionId'),
-    jobId: requireId(source.jobId, 'jobId'),
+    jobId: requireId(source.jobId || source.currentJobId, 'jobId'),
     candidateIds: Object.freeze(requireIdList(source.candidateIds)),
-    filters: Object.freeze(requireFilters(source.filters))
+    lastRankingCandidateIds: Object.freeze(requireIdList(source.lastRankingCandidateIds)),
+    lastComparisonCandidateIds: Object.freeze(requireIdList(source.lastComparisonCandidateIds)),
+    filters: Object.freeze(requireFilters(source.filters || source.activeFilters)),
+    candidateScope: typeof source.candidateScope === 'string' ? source.candidateScope : null
   });
 };
 
