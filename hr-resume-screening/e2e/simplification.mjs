@@ -13,6 +13,7 @@
  * Environment: same as scenarios.mjs (E2E_BASE_URL, E2E_EMAIL, E2E_PASSWORD…)
  */
 import { chromium } from 'playwright';
+import { execSync } from 'node:child_process';
 
 const BASE = process.env.E2E_BASE_URL || 'http://localhost:5173';
 const API = process.env.E2E_API_URL || 'http://localhost:5000';
@@ -38,7 +39,6 @@ const check = (ok, label, detail = '') => {
 };
 const section = (title) => console.log(`\n=== ${title} ===`);
 
-/* Pick a real job with candidates, so the tabs have something to show. */
 let cookie = '';
 const api = async (path) => {
   const res = await fetch(`${API}/api${path}`, { headers: cookie ? { Cookie: cookie } : {} });
@@ -52,12 +52,134 @@ const login = await fetch(`${API}/api/auth/login`, {
 });
 cookie = login.headers.get('set-cookie').split(';')[0];
 
-const jobsRes = await api('/jobs?status=OPEN&sort=candidates&limit=5');
-const busiest = (jobsRes.body?.data || []).find((j) => j.candidateCount > 0) || jobsRes.body?.data?.[0];
-if (!busiest) {
-  console.error('No jobs available to exercise the job page.');
+/* ── Isolated fixture ──────────────────────────────────────────────────────
+ *
+ * This suite used to open with:
+ *
+ *     const jobsRes = await api('/jobs?status=OPEN&sort=candidates&limit=5');
+ *     const busiest = (jobsRes.body?.data || []).find((j) => j.candidateCount > 0);
+ *
+ * and then drove nine different sections against whatever job that returned.
+ * Two things were wrong with it.
+ *
+ * It was not deterministic. Which job came back depended on whatever happened
+ * to be in the database, so which conditional branches ran — and therefore how
+ * many assertions executed — changed between runs. The suite reported 121, 131,
+ * 136 and 152 checks on four consecutive runs of the same code. A gate whose
+ * size moves cannot tell you whether a change broke something.
+ *
+ * And it operated on records it did not own. On a workspace whose only populated
+ * job was a real one, this suite drove the real job through the real workflows.
+ *
+ * So the suite now creates its own job, tagged `e2esimpl<runid>`, populates it
+ * with exactly the states the assertions below need, and never looks at another
+ * job again. The prefix is one `cleanupE2EFixtures.js` recognises, and the run
+ * id keeps two runs from colliding.
+ */
+const RUN_ID = Math.random().toString(36).slice(2, 8);
+const FIXTURE_TAG = `e2esimpl${RUN_ID}`;
+
+if ((process.env.NODE_ENV || '').toLowerCase() === 'production') {
+  console.error('Refusing to create fixtures against a production environment.');
   process.exit(1);
 }
+
+const uploadCandidate = async (jobId, name, seq, skills) => {
+  const form = new FormData();
+  form.append(
+    'resume',
+    new Blob(
+      [
+        `${name}\nSenior Frontend Developer\n` +
+          `Email: ${name.split(' ')[0].toLowerCase()}.${FIXTURE_TAG}${seq}@example.invalid\n` +
+          `Phone: +91 9${String(600000000 + seq).padStart(9, '0')}\nLocation: Pune\n\n` +
+          `SKILLS\n${skills.join(', ')}\n\nEXPERIENCE\n${4 + (seq % 6)} years building web applications.`
+      ],
+      { type: 'text/plain' }
+    ),
+    `${name.replace(/\s+/g, '_')}.txt`
+  );
+  const res = await fetch(`${API}/api/jobs/${jobId}/candidates/upload`, {
+    method: 'POST',
+    headers: { Cookie: cookie },
+    body: form
+  });
+  const json = await res.json().catch(() => null);
+  return json?.data?.candidateId || null;
+};
+
+const jobForm = new FormData();
+jobForm.append('title', `${FIXTURE_TAG} Senior React Developer`);
+jobForm.append(
+  'jdFile',
+  new Blob(
+    ['We are hiring a Senior React Developer. Required skills: React, TypeScript, Node.js. 4 years experience required.'],
+    { type: 'text/plain' }
+  ),
+  'jd.txt'
+);
+const createdJob = await fetch(`${API}/api/jobs`, { method: 'POST', headers: { Cookie: cookie }, body: jobForm })
+  .then((r) => r.json())
+  .catch(() => null);
+
+const fixtureJob = createdJob?.data;
+if (!fixtureJob?.id) {
+  console.error('Could not create the simplification fixture job.');
+  process.exit(1);
+}
+const fixtureJobId = fixtureJob.id;
+
+/*
+ * Six candidates, chosen so every branch this suite exercises has a guaranteed
+ * precondition: candidates exist, some clear the strong-match threshold, one is
+ * shortlisted, and the pool is large enough for the browser's controls to have
+ * something to act on.
+ */
+const fixtureCandidateIds = [];
+const STRONG_SKILLS = ['React', 'TypeScript', 'Node.js'];
+const WEAK_SKILLS = ['jQuery', 'PHP'];
+for (const [index, spec] of [
+  ['Aarav Fixture', STRONG_SKILLS],
+  ['Priya Fixture', STRONG_SKILLS],
+  ['Rahul Fixture', STRONG_SKILLS],
+  ['Meera Fixture', WEAK_SKILLS],
+  ['Vikram Fixture', WEAK_SKILLS],
+  ['Ananya Fixture', WEAK_SKILLS]
+].entries()) {
+  const id = await uploadCandidate(fixtureJobId, spec[0], index, spec[1]);
+  if (id) fixtureCandidateIds.push(id);
+}
+
+if (fixtureCandidateIds.length < 4) {
+  console.error(`Fixture created only ${fixtureCandidateIds.length} candidates; the suite needs at least 4.`);
+  process.exit(1);
+}
+
+/* One shortlisted candidate, so shortlist-dependent surfaces have a subject. */
+const fixtureShortlistedCandidateId = fixtureCandidateIds[0];
+await fetch(`${API}/api/jobs/${fixtureJobId}/candidates/${fixtureShortlistedCandidateId}/status`, {
+  method: 'PATCH',
+  headers: { 'Content-Type': 'application/json', Cookie: cookie },
+  body: JSON.stringify({ status: 'SHORTLISTED' })
+});
+
+/** The suite's only job. Nothing below may reach for another. */
+const busiest = { id: fixtureJobId, title: fixtureJob.title };
+
+/**
+ * Removes only what THIS run created.
+ *
+ * Scoped with `--tag=${FIXTURE_TAG}`, which includes the run id, so a run can
+ * never delete another suite's fixtures — and in particular never touches the
+ * visual-audit dataset the design work depends on.
+ */
+const removeFixture = () => {
+  try {
+    execSync(`node ../backend/tests/cleanupE2EFixtures.js --tag=${FIXTURE_TAG}`, { stdio: 'ignore' });
+  } catch {
+    /* Best effort: the tag keeps the records identifiable and removable either way. */
+  }
+};
 
 const browser = await chromium.launch({
   ...(CHANNEL === 'chromium' ? {} : { channel: CHANNEL }),
@@ -94,33 +216,109 @@ try {
    * list. Both halves are asserted, so the split is verified rather than merely
    * tolerated: nothing has become unreachable, it has only been grouped.
    */
+  /*
+   * OLD: three destinations — Focus, Jobs, Candidates.
+   * NEW: four — Dashboard, Jobs, Candidates, Closed Jobs.
+   *
+   * WHY: "Focus" was renamed to "Dashboard" because /focus is Minimal Mode and
+   *      one word cannot name two surfaces; Closed Jobs was promoted out of
+   *      Management as a primary recruiter destination. The count is still
+   *      asserted exactly, so the simplification this suite protects — a short,
+   *      fixed primary nav — remains enforced at its new value.
+   */
   const navLinks = page.locator('nav[aria-label="Main navigation"] a');
   check(
-    (await navLinks.count()) === 3,
-    'primary navigation is exactly three workspace destinations',
+    (await navLinks.count()) === 4,
+    'primary navigation is exactly four workspace destinations',
     `got ${await navLinks.count()}`
   );
   const labels = (await navLinks.allInnerTexts()).map((t) => t.trim().toLowerCase());
   check(
-    JSON.stringify(labels) === JSON.stringify(['focus', 'jobs', 'candidates']),
-    'they are Focus, Jobs, Candidates',
+    JSON.stringify(labels) === JSON.stringify(['dashboard', 'jobs', 'candidates', 'closed jobs']),
+    'they are Dashboard, Jobs, Candidates, Closed Jobs',
     labels.join(', ')
   );
 
   const managementLinks = page.locator('nav[aria-label="Management"] a');
   const managementLabels = (await managementLinks.allInnerTexts()).map((t) => t.trim().toLowerCase());
   check(managementLabels.includes('settings'), 'Settings remains reachable in Management', managementLabels.join(', '));
+
+  /*
+   * Closed Jobs placement — approved change.
+   *
+   * OLD: Closed Jobs was intentionally nested under Management, and this suite
+   *      asserted both `Closed Jobs remains reachable in Management` and
+   *      `/jobs/closed is not a permanent sidebar destination`.
+   *
+   * NEW: Closed Jobs is promoted into primary navigation, after Candidates.
+   *
+   * WHY: Hiring history is a high-frequency recruiter destination. Grouping it
+   *      with Settings put a routine workflow behind the same heading as
+   *      configuration a recruiter opens a few times a year. The product
+   *      navigation is being simplified around primary recruiter workflows, so
+   *      the old assertions describe an IA the product no longer has.
+   *
+   * Management keeps Settings, so the "not everything is primary" property the
+   * old assertion protected is still asserted directly above.
+   */
+  const primaryClosed = page.locator('nav[aria-label="Main navigation"] a[href="/jobs/closed"]');
+  check((await primaryClosed.count()) === 1, 'Closed Jobs appears exactly once in primary navigation', String(await primaryClosed.count()));
   check(
-    managementLabels.includes('closed jobs'),
-    'Closed Jobs remains reachable in Management',
+    (await page.locator('aside nav a[href="/jobs/closed"]').count()) === 1,
+    'Closed Jobs is not duplicated across the sidebar'
+  );
+  check(
+    !managementLabels.includes('closed jobs'),
+    'Closed Jobs no longer sits under Management',
     managementLabels.join(', ')
   );
-  for (const gone of ['/jobs/new', '/jobs/closed']) {
-    check(
-      (await page.locator(`nav[aria-label="Main navigation"] a[href="${gone}"]`).count()) === 0,
-      `${gone} is not a permanent sidebar destination`
-    );
-  }
+  check(
+    /closed jobs/i.test((await primaryClosed.innerText()) || (await primaryClosed.getAttribute('aria-label')) || ''),
+    'Closed Jobs has an accessible name'
+  );
+
+  // Create Job stays a page action rather than a permanent sidebar destination.
+  check(
+    (await page.locator('nav[aria-label="Main navigation"] a[href="/jobs/new"]').count()) === 0,
+    '/jobs/new is not a permanent sidebar destination'
+  );
+
+  // Active state must move cleanly between Jobs and Closed Jobs.
+  await page.goto(`${BASE}/jobs/closed`, { waitUntil: 'domcontentloaded' });
+  await page.locator('nav[aria-label="Main navigation"]').first().waitFor({ state: 'visible', timeout: 20000 });
+  check(
+    (await page.locator('nav[aria-label="Main navigation"] a[href="/jobs/closed"]').getAttribute('aria-current')) === 'page',
+    'Closed Jobs is active on /jobs/closed'
+  );
+  check(
+    (await page.locator('nav[aria-label="Main navigation"] a[href="/jobs"]').getAttribute('aria-current')) !== 'page',
+    'Jobs does not remain active on /jobs/closed'
+  );
+  await page.goto(`${BASE}/jobs`, { waitUntil: 'domcontentloaded' });
+  await page.locator('nav[aria-label="Main navigation"]').first().waitFor({ state: 'visible', timeout: 20000 });
+  check(
+    (await page.locator('nav[aria-label="Main navigation"] a[href="/jobs"]').getAttribute('aria-current')) === 'page',
+    'Jobs is active on /jobs'
+  );
+
+  // Keyboard reachability of the promoted destination.
+  const closedLink = page.locator('nav[aria-label="Main navigation"] a[href="/jobs/closed"]');
+  await closedLink.focus();
+  check(
+    await closedLink.evaluate((node) => node === document.activeElement),
+    'Closed Jobs is keyboard focusable'
+  );
+
+  /*
+   * Return to the Dashboard before handing off.
+   *
+   * The navigation assertions above move the page around; the section that
+   * follows asserts against the Dashboard and relied on the page still being
+   * there. Leaving it parked elsewhere made those checks fail for a reason that
+   * had nothing to do with what they test.
+   */
+  await page.goto(BASE, { waitUntil: 'domcontentloaded' });
+  await page.locator('button[aria-controls="dashboard-analytics"]').waitFor({ state: 'visible', timeout: 25000 });
 
   /* ----------------------------------------------- Test 11: dashboard focus */
   section('Tests 11-15 — dashboard focus');
@@ -281,23 +479,123 @@ try {
   }
   check((await page.locator('select[aria-label="Sort candidates"]').count()) === 1, 'sort stays in the toolbar');
 
-  const presets = page.locator('[aria-label="Filter candidates"] button');
-  const presetLabels = (await presets.allInnerTexts()).map((t) => t.trim().toLowerCase());
-  for (const expected of ['all', 'best matches', 'shortlisted', 'needs review', 'selected']) {
-    check(
-      presetLabels.some((label) => label.startsWith(expected)),
-      `the ${expected} preset is offered`,
-      presetLabels.join(' | ')
+  /*
+   * Approved status-filter contract.
+   *
+   * This replaces assertions for a retired design that kept seven permanent
+   * status tabs in the toolbar (All / Best Matches / In Review / Needs Review /
+   * Shortlisted / Selected / Not Suitable). Seven always-on controls worked
+   * against the simplification this suite exists to protect, so status now
+   * collapses into one dropdown.
+   *
+   * Best Matches is NOT an hrStatus — it is a score preset built on the
+   * server's strong-match threshold — so it stays a first-class control beside
+   * the dropdown rather than being folded into it.
+   *
+   * These checks assert URL and request wiring rather than result counts, so
+   * they hold whatever candidate data happens to exist.
+   */
+  const presetLabels = (await page.locator('[aria-label="Filter candidates"] button').allInnerTexts())
+    .map((label) => label.trim().toLowerCase());
+  check(presetLabels.some((label) => label.startsWith('all')), 'the All preset is offered', presetLabels.join(' | '));
+  check(
+    presetLabels.some((label) => label.startsWith('best matches')),
+    'Best Matches remains an independent preset',
+    presetLabels.join(' | ')
+  );
+  check(presetLabels.length === 2, 'the toolbar keeps exactly two presets beside the status control', String(presetLabels.length));
+
+  const statusFilter = page.locator('#candidate-status-filter');
+  check((await statusFilter.count()) === 1, 'a single status control exists');
+  check(
+    Boolean((await statusFilter.getAttribute('aria-label')) || '').valueOf(),
+    'the status control has an accessible name',
+    await statusFilter.getAttribute('aria-label')
+  );
+  check((await statusFilter.inputValue()) === '', 'status defaults to no restriction');
+  const statusOptions = await statusFilter.locator('option').evaluateAll((nodes) =>
+    nodes.map((node) => ({ value: node.value, label: node.textContent.trim() }))
+  );
+  check(
+    statusOptions.some((option) => option.value === '' && /any status/i.test(option.label)),
+    'the default option reads as no status restriction',
+    JSON.stringify(statusOptions.map((o) => o.label))
+  );
+
+  // Every hrStatus the product stores must be selectable, and must reach the server.
+  for (const status of ['REVIEW', 'NEEDS_REVIEW', 'SHORTLISTED', 'SELECTED', 'NOT_SUITABLE']) {
+    const request = page.waitForRequest(
+      (candidate) => candidate.url().includes('/api/candidates') && candidate.url().includes(`hrStatus=${status}`),
+      { timeout: 15000 }
     );
+    await statusFilter.selectOption(status);
+    let served = true;
+    try {
+      await request;
+    } catch {
+      served = false;
+    }
+    check(served, `selecting ${status} reaches the server as hrStatus=${status}`);
+    check(new URL(page.url()).searchParams.get('hrStatus') === status, `selecting ${status} updates the URL`);
   }
+
+  // Refresh must preserve the selection, because the filter lives in the URL.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.locator('#candidate-status-filter').waitFor({ state: 'visible', timeout: 20000 });
+  check(
+    (await page.locator('#candidate-status-filter').inputValue()) === 'NOT_SUITABLE',
+    'refresh preserves the selected status'
+  );
+
+  // Clearing removes the restriction entirely rather than leaving an empty param.
+  await page.locator('#candidate-status-filter').selectOption('');
+  await page.waitForTimeout(900);
+  check(!new URL(page.url()).searchParams.get('hrStatus'), 'clearing status removes the restriction from the URL');
+
+  // Card/Table is presentation only: it must not disturb the status filter and
+  // must not refetch, because `view` is deliberately absent from FILTER_KEYS.
+  await page.locator('#candidate-status-filter').selectOption('SHORTLISTED');
+  await page.waitForTimeout(900);
+  let refetched = false;
+  const watchRefetch = (request) => {
+    if (request.url().includes('/api/candidates') || /\/api\/jobs\/[^/]+\/candidates/.test(request.url())) refetched = true;
+  };
+  page.on('request', watchRefetch);
+  const viewToggle = page.locator('[aria-label="Candidate layout"] button');
+  if ((await viewToggle.count()) >= 2) {
+    await viewToggle.nth(1).click();
+    await page.waitForTimeout(1200);
+    check(
+      (await page.locator('#candidate-status-filter').inputValue()) === 'SHORTLISTED',
+      'switching to Table preserves the status filter'
+    );
+    await viewToggle.nth(0).click();
+    await page.waitForTimeout(1200);
+    check(
+      (await page.locator('#candidate-status-filter').inputValue()) === 'SHORTLISTED',
+      'switching back to Cards preserves the status filter'
+    );
+    check(!refetched, 'Card/Table switching triggers no candidate refetch');
+  } else {
+    check(false, 'the Card/Table toggle is present');
+  }
+  page.off('request', watchRefetch);
+  await page.locator('#candidate-status-filter').selectOption('');
+  await page.waitForTimeout(700);
 
   // Best matches must reuse the shared threshold rather than invent one.
   const summary = await api('/candidates?limit=1');
   const threshold = summary.body?.facets?.strongMatchThreshold;
   check(threshold === 80, 'the API reports the shared strong-match threshold', String(threshold));
-  await presets.nth(1).click();
+  // Best Matches is the second preset beside the status dropdown.
+  await page.locator('[aria-label="Filter candidates"] button').nth(1).click();
   await page.waitForTimeout(1600);
   check(page.url().includes(`minScore=${threshold}`), 'Best matches applies the shared threshold', page.url());
+  check(
+    !new URL(page.url()).searchParams.get('hrStatus'),
+    'Best matches is a score preset, not a status filter',
+    page.url()
+  );
 
   // Advanced filters are preserved behind the drawer.
   await page.locator('button[aria-controls="candidate-filters"]').click();
@@ -419,8 +717,12 @@ try {
   console.log(error.stack);
 } finally {
   await browser.close();
+  // Runs on the failure path too, so an aborted run does not leave fixture jobs
+  // behind to be mistaken for real data by the next person who opens the app.
+  removeFixture();
   console.log('\n----------------------------------------------------------------');
   console.log(`  UX simplification E2E: ${passed} passed, ${failed} failed`);
+  console.log(`  fixture: ${FIXTURE_TAG} (removed)`);
   console.log('----------------------------------------------------------------\n');
   process.exit(failed > 0 ? 1 : 0);
 }

@@ -224,7 +224,11 @@ const Dashboard = () => {
       {/* ------------------------------------------------------------ header */}
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <h1 className="text-page-title sm:text-display text-slate-900">Focus</h1>
+          {/* The page identity matches the navigation label. It still behaves
+              focus-first — one recommendation, a short attention queue — but
+              "Focus" is the name of Minimal Mode at /focus, and one word cannot
+              name two different surfaces. */}
+          <h1 className="text-page-title sm:text-display text-slate-900">Dashboard</h1>
           <p className="text-body text-slate-600 mt-1">
             {isJobScoped
               ? `Viewing ${scope.jobTitle} on its own.`
@@ -302,53 +306,21 @@ const Dashboard = () => {
         <WelcomeState />
       ) : (
         <>
-          {/* --------------------------------------------- recommended step */}
-          {!isJobScoped && (jobsPending || attentionItems.length > 0) && (
-            <RecommendedAction item={attentionItems[0]} loading={jobsPending} />
-          )}
+          {/*
+            Recruitment snapshot, first.
 
-          {showNoCandidates ? (
-            <NoCandidatesState jobs={jobOptions} />
-          ) : (
-            !isJobScoped && (
-              <NeedsAttention
-                jobs={jobOptions}
-                threshold={threshold}
-                loading={jobsPending}
-                limit={3}
-                skip={1}
-              />
-            )
-          )}
-
-          {!isJobScoped && continueJob && (
-            <section aria-labelledby="continue-work-heading" className="border-y border-slate-200 py-5">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <p className="text-label uppercase text-slate-500">Continue where you left off</p>
-                  <h2 id="continue-work-heading" className="text-card-title text-slate-900 mt-1 truncate">
-                    Continue reviewing {continueJob.title}
-                  </h2>
-                  <p className="text-meta text-slate-600 mt-0.5">
-                    {(continueJob.candidateCount || 0).toLocaleString('en-IN')} candidate{continueJob.candidateCount === 1 ? '' : 's'} in this role.
-                  </p>
-                </div>
-                <Link to={`/jobs/${continueJob.id}/candidates`} className="btn btn-sm btn-secondary shrink-0">
-                  Continue review
-                  <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
-                </Link>
-              </div>
-            </section>
-          )}
-
-          {/* ------------------------------------------ recruitment snapshot */}
+            How active hiring is doing, before what to do about it. The order is
+            the dashboard's argument: orient, then decide. It stays a four-figure
+            summary rather than an analytics screen — the deeper charts are still
+            behind the Analytics disclosure at the foot of the page.
+          */}
           <section aria-labelledby="dashboard-snapshot-heading">
             <div className="min-w-0">
               <h2 id="dashboard-snapshot-heading" className="section-title">
                 Recruitment snapshot
               </h2>
               <p className="text-meta text-slate-500 mt-0.5">
-                {isJobScoped ? `Totals for ${scope.jobTitle}.` : 'Totals across your whole workspace.'}
+                {isJobScoped ? `Totals for ${scope.jobTitle}.` : 'Across every open role. Closed roles move to Closed Jobs.'}
               </p>
             </div>
 
@@ -395,29 +367,47 @@ const Dashboard = () => {
                   <>
                     <StatCard
                       variant="compact"
-                      label="Active jobs"
+                      label="Open jobs"
                       value={metrics?.openJobs ?? 0}
                       to="/jobs"
                       // Only stated when the API actually reports it.
                       subtitle={
-                        metrics?.jobsThisMonth > 0 ? `+${metrics.jobsThisMonth} this month` : 'Open positions'
+                        metrics?.jobsThisMonth > 0 ? `+${metrics.jobsThisMonth} this month` : 'Currently hiring'
                       }
                     />
-                    {/* "Candidates", not "Total applicants": the card navigates to
-                        /candidates and sits beside a nav item of the same name, so
-                        the label should match the destination. The accessible name
-                        is derived from this label, and the e2e suites identify this
-                        card by it — it must stay the only link so named. */}
+                    {/*
+                      "Active candidates", not "Candidates": since closing a job
+                      archives its whole pool, this figure counts only candidates
+                      on open roles. Calling it "Candidates" would read as every
+                      candidate in the system and disagree with the list it links
+                      to. The accessible name is derived from this label.
+                    */}
                     <StatCard
                       variant="compact"
-                      label="Candidates"
+                      label="Active candidates"
                       value={metrics?.totalCandidates ?? 0}
                       to={candidatesLink('sort=score_desc')}
                       subtitle={
                         metrics?.candidatesThisWeek > 0
                           ? `+${metrics.candidatesThisWeek} this week`
-                          : 'Across all roles'
+                          : 'On open roles'
                       }
+                    />
+                    {/*
+                      Replaces the former "Hires" card, which counted SELECTED
+                      candidates across every job but linked to the active
+                      candidate list — where a hire can never appear, because
+                      selecting someone is what closes their role. The number and
+                      its destination disagreed. The hire count now sits in
+                      Analytics beside Closed jobs and Recent hires, where it
+                      belongs and where its link resolves.
+                    */}
+                    <StatCard
+                      variant="compact"
+                      label="Strong matches"
+                      value={metrics?.strongMatch ?? 0}
+                      to={candidatesLink(`minScore=${threshold}&sort=score_desc`)}
+                      subtitle={`${threshold}% match or higher`}
                     />
                     <StatCard
                       variant="compact"
@@ -426,18 +416,50 @@ const Dashboard = () => {
                       to={candidatesLink('hrStatus=SHORTLISTED&sort=score_desc')}
                       subtitle="Progressed by you"
                     />
-                    <StatCard
-                      variant="compact"
-                      label="Hires"
-                      value={metrics?.selectedCandidates ?? 0}
-                      to={candidatesLink('hrStatus=SELECTED')}
-                      subtitle="Candidates selected"
-                    />
                   </>
                 )}
               </div>
             )}
           </section>
+
+          {/* --------------------------------------------- recommended step */}
+          {!isJobScoped && (jobsPending || attentionItems.length > 0) && (
+            <RecommendedAction item={attentionItems[0]} loading={jobsPending} />
+          )}
+
+          {showNoCandidates ? (
+            <NoCandidatesState jobs={jobOptions} />
+          ) : (
+            !isJobScoped && (
+              <NeedsAttention
+                jobs={jobOptions}
+                threshold={threshold}
+                loading={jobsPending}
+                limit={3}
+                skip={1}
+              />
+            )
+          )}
+
+          {!isJobScoped && continueJob && (
+            <section aria-labelledby="continue-work-heading" className="border-y border-slate-200 py-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-label uppercase text-slate-500">Continue where you left off</p>
+                  <h2 id="continue-work-heading" className="text-card-title text-slate-900 mt-1 truncate">
+                    Continue reviewing {continueJob.title}
+                  </h2>
+                  <p className="text-meta text-slate-600 mt-0.5">
+                    {(continueJob.candidateCount || 0).toLocaleString('en-IN')} candidate{continueJob.candidateCount === 1 ? '' : 's'} in this role.
+                  </p>
+                </div>
+                <Link to={`/jobs/${continueJob.id}/candidates`} className="btn btn-sm btn-secondary shrink-0">
+                  Continue review
+                  <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+                </Link>
+              </div>
+            </section>
+          )}
 
           {/*
             Analytics, collapsed by default.
@@ -516,13 +538,24 @@ const Dashboard = () => {
                   </>
                 ) : (
                   <>
+                    {/*
+                      Hires, moved here from the headline row.
+
+                      It counts SELECTED candidates across every job, and a
+                      candidate is only ever SELECTED by closing their role —
+                      so every one of them belongs to a closed job. In the
+                      active snapshot it linked to the active candidate list,
+                      where by construction none of them can appear. Beside
+                      Closed jobs and Recent hires the figure and its
+                      destination finally agree.
+                    */}
                     <StatCard
-                      label={`Strong matches (${threshold}%+)`}
-                      value={metrics?.strongMatch ?? 0}
+                      label="Hires"
+                      value={metrics?.selectedCandidates ?? 0}
                       icon={Award}
                       tone="emerald"
-                      to={candidatesLink(`minScore=${threshold}&sort=score_desc`)}
-                      subtitle="Ranked by relevance"
+                      to="/jobs/closed"
+                      subtitle="Candidates selected"
                     />
                     <StatCard
                       label="Awaiting review"

@@ -20,7 +20,12 @@ const CandidatesList = () => {
   const selectedJobId = searchParams.get('jobId') || '';
 
   // Job options come from the database, never a hard-coded list.
-  const { data: jobsData } = useApiResource((config) => getJobsSummary({ sort: 'newest' }, config), []);
+  // Open roles only: this dropdown scopes the ACTIVE talent pool, and a closed
+  // role has no active candidates to scope it to.
+  const { data: jobsData } = useApiResource(
+    (config) => getJobsSummary({ status: 'OPEN', sort: 'newest' }, config),
+    []
+  );
   const jobs = jobsData?.data || [];
 
   const selectedJob = useMemo(() => jobs.find((job) => job.id === selectedJobId) || null, [jobs, selectedJobId]);

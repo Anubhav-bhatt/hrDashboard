@@ -121,7 +121,7 @@ const JobNextStep = ({
             onClick={onCloseJob}
             className="shrink-0 justify-center"
           >
-            Select final candidate
+            Close job
           </Button>
         ) : action.kind === 'score' && onScore ? (
           <Button
@@ -171,7 +171,7 @@ const JobNextStep = ({
                          focus-visible:ring-2 focus-visible:ring-brand-500"
             >
               <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
-              {closing ? 'Loading shortlist…' : 'Select final candidate'}
+              {closing ? 'Loading shortlist…' : 'Close job'}
             </button>
           )}
 

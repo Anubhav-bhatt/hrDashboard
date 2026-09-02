@@ -19,6 +19,7 @@ const {
   parsePagination,
   parseSort,
   buildCandidateWhere,
+  buildScopeWhere,
   buildPaginationMeta
 } = require('../utils/candidateQuery');
 const { STRONG_MATCH_MIN } = require('../utils/scoreThresholds');
@@ -53,12 +54,27 @@ const listCandidatesForJob = async (jobId, query = {}) => {
 
   const { page, limit, skip } = parsePagination(query);
   const orderBy = parseSort(query.sort);
-  const where = { AND: [{ jobId }, buildCandidateWhere(query, job)] };
+
+  /*
+   * The job's own lifecycle decides the scope.
+   *
+   * A closed job's candidate list is hiring history and must still be readable;
+   * an open job's is live work. Deriving this from the record rather than from a
+   * caller-supplied flag means a client cannot ask for a closed job's pool "as
+   * active", and the archived branch is unreachable for an open job.
+   */
+  const scope = job.status === 'CLOSED' ? 'archived' : 'active';
+  const scopeOptions = { scope, jobId };
+
+  const where = { AND: [{ jobId }, buildCandidateWhere(query, job, scopeOptions)] };
 
   // Tab tallies for this job, ignoring the status filter so every tab keeps a
   // meaningful count while one of them is selected. Same shape as the global
-  // listing, so one component can render either.
-  const tabWhere = { AND: [{ jobId }, buildCandidateWhere({ ...query, hrStatus: undefined }, job)] };
+  // listing, so one component can render either. Built through the same
+  // where-builder, so the lifecycle scope can never drift between rows and counts.
+  const tabWhere = {
+    AND: [{ jobId }, buildCandidateWhere({ ...query, hrStatus: undefined }, job, scopeOptions)]
+  };
 
   const [total, candidates, statusGroups, strongMatchCount, tabTotal] = await Promise.all([
     prisma.candidate.count({ where }),
@@ -85,8 +101,15 @@ const listCandidatesForJob = async (jobId, query = {}) => {
 const listCandidatesAcrossJobs = async (query = {}) => {
   const { page, limit, skip } = parsePagination(query);
   const orderBy = parseSort(query.sort);
-  const where = buildCandidateWhere(query);
-  const tabWhere = buildCandidateWhere({ ...query, hrStatus: undefined });
+
+  /*
+   * The cross-job listing is always active work. There is deliberately no way to
+   * ask it for archived candidates: history is reached one closed job at a time,
+   * through that job. A `?jobId=` naming a closed job therefore returns nothing
+   * here rather than quietly exposing an archived pool in the active talent list.
+   */
+  const where = buildCandidateWhere(query, null, { scope: 'active' });
+  const tabWhere = buildCandidateWhere({ ...query, hrStatus: undefined }, null, { scope: 'active' });
 
   const [total, candidates, statusGroups, strongMatchCount, tabTotal] = await Promise.all([
     prisma.candidate.count({ where }),
@@ -161,8 +184,18 @@ const getCandidateDetail = async (candidateId, { jobId = null, includeResumeText
  * Distinct filter values present in the candidate pool, so filter controls only
  * offer real options.
  */
-const getCandidateFilterOptions = async () => {
+const getCandidateFilterOptions = async ({ scope = 'active', jobId = null } = {}) => {
+  /*
+   * Facets must describe the same population the list is drawing from.
+   *
+   * This previously read every candidate row in the database with no job filter
+   * at all, so an active candidate list offered filter values — skills,
+   * locations, qualifications — that came from archived pools and matched
+   * nothing. Threading the scope rather than hardcoding OPEN keeps the same
+   * endpoint usable for a closed job's historical facets.
+   */
   const rows = await prisma.candidate.findMany({
+    where: { AND: [jobId ? { jobId } : {}, buildScopeWhere(scope, jobId)] },
     select: { skills: true, currentLocation: true, qualification: true },
     take: 5000
   });

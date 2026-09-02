@@ -74,12 +74,14 @@ try {
   });
 
   await page.goto(`${BASE}/`);
-  await page.getByRole('heading', { name: 'Focus', exact: true }).waitFor();
+  // The dashboard heading is 'Dashboard' since the navigation IA revision;
+  // 'Focus' was its previous name and no longer appears in the product.
+  await page.getByRole('heading', { name: 'Dashboard', exact: true }).waitFor();
   const attentionItems = await page.locator('#dashboard-attention-heading + p, #dashboard-attention-heading').count();
   const attentionCards = await page.locator('section[aria-labelledby="dashboard-attention-heading"] li').count();
-  check(attentionItems > 0, 'Focus explains the priority queue');
+  check(attentionItems > 0, 'the dashboard explains the priority queue');
   check(attentionCards <= 3, '100 jobs still render at most three secondary attention items', String(attentionCards));
-  check((await page.locator('body').evaluate((body) => body.scrollWidth <= body.clientWidth)), '100-job Focus has no horizontal overflow');
+  check((await page.locator('body').evaluate((body) => body.scrollWidth <= body.clientWidth)), 'a 100-job dashboard has no horizontal overflow');
 
   await page.goto(`${BASE}/jobs`);
   await page.locator('#job-search').waitFor();

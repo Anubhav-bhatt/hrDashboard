@@ -23,10 +23,16 @@ const Login = () => {
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // The route the recruiter originally asked for, restored after signing in.
+  /*
+   * The route the recruiter originally asked for, restored after signing in.
+   *
+   * Only a plain sign-in falls through to the named /dashboard URL — an
+   * attempted deep link still wins, so protecting a route never costs the
+   * recruiter the page they were trying to reach.
+   */
   const redirectTo = location.state?.from?.pathname
     ? `${location.state.from.pathname}${location.state.from.search || ''}`
-    : '/';
+    : '/dashboard';
 
   useEffect(() => {
     emailRef.current?.focus();

@@ -103,7 +103,7 @@ try {
 
   // Wait for real content, not just network idle: the KPI cards render skeletons
   // until the analytics request resolves.
-  await page.locator('a[aria-label^="Candidates"]').waitFor({ state: 'visible', timeout: 20000 });
+  await page.locator('a[aria-label^="Active candidates"]').waitFor({ state: 'visible', timeout: 20000 });
   const dashboard = await text();
   check(/candidates/i.test(dashboard), 'the dashboard renders its KPI cards');
   check(!/\bNaN\b|\bundefined\b/.test(dashboard), 'no NaN or undefined values appear on the dashboard');
@@ -121,8 +121,8 @@ try {
   await page.locator('button[aria-controls="dashboard-analytics"]').click();
   await page.waitForTimeout(400);
 
-  const totalCard = page.locator('a[aria-label^="Candidates"]');
-  check((await totalCard.count()) === 1, 'the Candidates card is a single interactive element');
+  const totalCard = page.locator('a[aria-label^="Active candidates"]');
+  check((await totalCard.count()) === 1, 'the Active candidates card is a single interactive element');
 
   // Click the far corner of the card, well away from any text, to prove the
   // whole surface is the target rather than just the label. Positioned relative
@@ -181,8 +181,28 @@ try {
   check(visibleValue(selectedCandidate?.professional?.summary), 'the professional summary comes from the resume when available');
   const educationEvidence = selectedCandidate?.educationDetail?.[0]?.degree || selectedCandidate?.education?.[0];
   check(visibleValue(educationEvidence), 'education uses the selected candidate resume data when available');
-  check(/open resume/i.test(profile), 'the resume can be opened');
-  check(/download/i.test(profile), 'the resume can be downloaded');
+  /*
+   * Resume actions follow the data, in both directions.
+   *
+   * These asserted unconditionally that the profile offers "Open resume", which
+   * held only while whichever candidate the search landed on happened to carry
+   * resume bytes. Candidates legitimately have none — a seeded record, or an
+   * import where the blob was deliberately not stored — and offering to open a
+   * document that does not exist would be the actual defect. The API already
+   * states which case this is, so the suite asserts the matching one rather than
+   * depending on the shape of the database it runs against.
+   */
+  const resumeAvailable = selectedCandidate?.resume?.available === true;
+  if (resumeAvailable) {
+    check(/open resume/i.test(profile), 'the resume can be opened when one is stored');
+    check(/download/i.test(profile), 'the resume can be downloaded when one is stored');
+  } else {
+    check(
+      !/open resume/i.test(profile),
+      'no resume action is offered for a candidate without a stored document',
+      `storage=${selectedCandidate?.resume?.storage}`
+    );
+  }
   check(/email candidate/i.test(profile), 'an outreach action is available');
   const certificationEvidence = selectedCandidate?.certifications?.[0]?.name || selectedCandidate?.certifications?.[0];
   check(visibleValue(certificationEvidence), 'certifications use resume data when available');
@@ -197,7 +217,18 @@ try {
     // The resume panel offers a Document / Extracted text switch.
     ['Resume', /extracted text|document not available/i],
     ['Notes', /add a note/i],
-    ['Activity', /resume imported/i]
+    /*
+     * Activity, like the resume actions above, follows the data.
+     *
+     * The tab was asserted to contain "resume imported", which is only true for
+     * a candidate whose import wrote an activity row. A candidate with an empty
+     * trail renders "Nothing recorded yet" — the correct thing to show, and the
+     * assertion has to accept whichever of the two this candidate actually is.
+     */
+    [
+      'Activity',
+      selectedCandidate?.activities?.length > 0 ? /resume imported|status|note/i : /nothing recorded yet/i
+    ]
   ];
 
   for (const [tabName, pattern] of tabExpectations) {

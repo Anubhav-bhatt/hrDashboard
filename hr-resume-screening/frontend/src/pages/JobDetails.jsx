@@ -14,6 +14,7 @@ import {
   Search,
   Sparkles,
   Lock,
+  Trash2,
   UserCheck,
   Users,
   X
@@ -21,6 +22,8 @@ import {
 import {
   analyzeAllCandidates,
   closeJob,
+  deleteJob,
+  getJobDeletionPreview,
   getCandidates,
   getJobById,
   getJobShortlist,
@@ -29,7 +32,9 @@ import {
   updateJobCriteria
 } from '../services/api';
 import CloseJobDialog from '../components/jobs/CloseJobDialog';
+import DeleteJobDialog from '../components/jobs/DeleteJobDialog';
 import { useApiResource } from '../hooks/useApiResource';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ToastProvider';
 import TopCandidates from '../components/dashboard/TopCandidates';
 import {
@@ -150,6 +155,7 @@ const JobDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const { user } = useAuth();
 
   const { data: jobData, error, loading, refetch } = useApiResource((config) => getJobById(id, config), [id]);
   const { data: summaryData, refetch: refetchSummary } = useApiResource(
@@ -208,6 +214,57 @@ const JobDetails = () => {
   const [loadingShortlist, setLoadingShortlist] = useState(false);
   const [closing, setClosing] = useState(false);
   const [closeError, setCloseError] = useState('');
+  /*
+   * Permanent deletion — a different operation from closing, and gated
+   * differently.
+   *
+   * Offered only for a CLOSED job, and only to an ADMIN, because that is what
+   * the API enforces. Rendering it for a recruiter who would receive a 403
+   * would be offering an action that cannot work.
+   */
+  const canDelete = isClosed && user?.role === 'ADMIN';
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletePreview, setDeletePreview] = useState(null);
+  const [loadingDeletePreview, setLoadingDeletePreview] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
+  const openDeleteDialog = async () => {
+    setDeleteError('');
+    setLoadingDeletePreview(true);
+    try {
+      // The dialog states measured figures, so it asks the server what is
+      // actually there rather than describing the deletion in adjectives.
+      const response = await getJobDeletionPreview(id);
+      setDeletePreview(response?.data || null);
+      setDeleteDialogOpen(true);
+    } catch (err) {
+      toast.error(toApiError(err).message);
+    } finally {
+      setLoadingDeletePreview(false);
+    }
+  };
+
+  const confirmDelete = async (confirmation) => {
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      const response = await deleteJob(id, confirmation);
+      const removed = response?.data?.deleted;
+      setDeleteDialogOpen(false);
+      toast.success(
+        removed
+          ? `${job.title} and ${removed.candidates.toLocaleString('en-IN')} candidate records were permanently deleted.`
+          : `${job.title} was permanently deleted.`
+      );
+      // The job no longer exists, so staying on its page would render a 404.
+      navigate('/jobs/closed', { replace: true });
+    } catch (err) {
+      setDeleteError(toApiError(err).message);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   /** Loads the shortlist on demand, so an unopened dialog costs nothing. */
   const openCloseDialog = async () => {
@@ -425,24 +482,51 @@ const JobDetails = () => {
         }
         actions={
           /*
-            The header carries one action, and for an open job it is the quiet one.
-            The dominant action now lives in the Recommended next step section
-            below, derived from the same job state — three filled buttons up here
-            competing with a stated recommendation was four primary actions on one
-            screen, which is no recommendation at all.
+            The header carries the job-level actions, and on an open job none of
+            them is the dominant one. The dominant action lives in the
+            Recommended next step section below, derived from the same job state
+            — filled buttons up here competing with a stated recommendation was
+            four primary actions on one screen, which is no recommendation at all.
           */
           isClosed ? (
-            job.selectedCandidate && (
-              <Link to={`/jobs/${id}/candidates/${job.selectedCandidate.id}`} className="btn btn-md btn-primary">
-                <Users className="w-4 h-4" aria-hidden="true" />
-                View selected candidate
-              </Link>
-            )
+            <>
+              {job.selectedCandidate && (
+                <Link to={`/jobs/${id}/candidates/${job.selectedCandidate.id}`} className="btn btn-md btn-primary">
+                  <Users className="w-4 h-4" aria-hidden="true" />
+                  View selected candidate
+                </Link>
+              )}
+            </>
           ) : (
-            <Link to={`/jobs/${id}/candidates`} className="btn btn-md btn-secondary">
-              <Users className="w-4 h-4" aria-hidden="true" />
-              View candidates
-            </Link>
+            <>
+              <Link to={`/jobs/${id}/candidates`} className="btn btn-md btn-secondary">
+                <Users className="w-4 h-4" aria-hidden="true" />
+                View candidates
+              </Link>
+
+              {/*
+                Finishing the role is a job-level action, so it belongs in the
+                job-level action area — not folded into a row of tools further
+                down the page where a recruiter looking for "close this role"
+                has to read every other option first.
+
+                It is offered on every open job rather than only once a shortlist
+                exists. Closing does require a shortlisted candidate, but a
+                control that simply is not there teaches nobody that rule: this
+                one opens and explains the prerequisite instead. Secondary
+                styling throughout — closing is a major step, but for most of a
+                role's life it is not the next one.
+              */}
+              <button
+                type="button"
+                onClick={openCloseDialog}
+                disabled={loadingShortlist}
+                className="btn btn-md btn-secondary"
+              >
+                <Lock className="w-4 h-4" aria-hidden="true" />
+                {loadingShortlist ? 'Loading shortlist…' : 'Close job'}
+              </button>
+            </>
           )
         }
       />
@@ -504,6 +588,60 @@ const JobDetails = () => {
             </div>
           )}
         </section>
+      )}
+
+      {/*
+        Job actions for a finished role, with the destructive one set apart.
+
+        Deliberately not a red button on the closed-job banner above: deletion is
+        a rare administrative act, not the natural next thing to do with a
+        finished role, and it must not sit where a recruiter reading "who did we
+        hire" would reach. The section names what deletion is — permanent, and
+        the opposite of closing — before offering it, and the button is soft
+        destructive rather than a solid red block, because the confirmed action
+        lives behind the dialog, not here.
+      */}
+      {isClosed && canDelete && (
+        <section
+          aria-labelledby="job-danger-zone-heading"
+          className="rounded-card border border-rose-200 bg-white p-4 sm:p-5"
+        >
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <h2 id="job-danger-zone-heading" className="text-card-title text-slate-900">
+                Delete job data
+              </h2>
+              <p className="text-meta text-slate-600 mt-1 max-w-xl">
+                Closing this role archived it. Deleting it destroys the job, its candidates, their resumes,
+                notes and scoring permanently, and frees the storage they use. This cannot be undone.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={openDeleteDialog}
+              disabled={loadingDeletePreview}
+              className="btn btn-md btn-destructive-soft shrink-0"
+            >
+              <Trash2 className="w-4 h-4" aria-hidden="true" />
+              {loadingDeletePreview ? 'Checking…' : 'Delete job data'}
+            </button>
+          </div>
+        </section>
+      )}
+
+      {deleteDialogOpen && deletePreview && (
+        <DeleteJobDialog
+          job={{ title: job.title }}
+          counts={deletePreview.counts}
+          submitting={deleting}
+          error={deleteError}
+          onConfirm={confirmDelete}
+          onClose={() => {
+            setDeleteDialogOpen(false);
+            setDeleteError('');
+          }}
+        />
       )}
 
       {closeDialogOpen && (

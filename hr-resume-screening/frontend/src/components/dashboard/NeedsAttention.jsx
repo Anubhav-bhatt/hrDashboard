@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, CheckCircle2, ClipboardList, GitCompare, Sparkles, UserPlus } from 'lucide-react';
-import { EmptyState, Skeleton } from '../ui';
+import { Skeleton } from '../ui';
 
 /**
  * Works out the single most useful next step for a job from its real counts.
@@ -115,65 +115,87 @@ const deriveNextAction = (job, threshold) => {
 };
 
 /**
- * Soft semantic tints, one per kind of work.
+ * Which of the three markers a row carries.
  *
- * The hue carries the *type* of action — review, compare, close, unblock — so a
- * recruiter can tell the cards apart before reading them. It is never the only
- * signal: every card also states its fact in words and names its action on the
- * button, so nothing depends on colour alone.
- *
- * These resolve through the theme's colour variables, so each tint becomes a
- * dark wash rather than a bright block when the dark theme is active.
+ * `deriveNextAction` distinguishes six kinds of work, but a marker is only
+ * useful if its colour means something, and six hues across three rows means
+ * nothing. These collapse to the three states a recruiter actually sorts by:
+ * something is waiting on their decision, candidates are waiting to be read, or
+ * the role has not been set up yet. Purely presentational — the underlying
+ * action, wording and destination are untouched.
  */
-/** One attention card: a role, one supporting fact, one action. */
-const AttentionCard = ({ item }) => {
+const INDICATOR_BY_KIND = {
+  close: 'attention-row-decide',
+  decide: 'attention-row-decide',
+  score: 'attention-row-decide',
+  'review-strong': 'attention-row-review',
+  'review-all': 'attention-row-review',
+  'add-candidates': 'attention-row-setup'
+};
+
+/** One row of the queue: a role, why it is here, and the one thing to do. */
+const AttentionRow = ({ item }) => {
+  const indicator = INDICATOR_BY_KIND[item.kind] || 'attention-row-setup';
+
   return (
-    <li className="flex flex-col gap-4 py-5 sm:flex-row sm:items-center">
-      <div className="flex min-w-0 flex-1 items-start gap-3">
-        <span
-          className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-slate-100 text-slate-500"
-          aria-hidden="true"
-        >
-          <item.icon className="w-4 h-4" />
-        </span>
+    <li className={`attention-row ${indicator}`}>
+      <span className="attention-dot" aria-hidden="true" />
 
-        <div className="min-w-0 flex-1">
-          <h3 className="text-card-title text-slate-900 break-words">
-            <Link
-              to={`/jobs/${item.job.id}`}
-              className="rounded hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-            >
-              {item.job.title}
-            </Link>
-          </h3>
-          <p className="text-meta text-slate-700 mt-1">{item.fact}</p>
-          <p className="text-meta text-slate-600">{item.detail}</p>
-        </div>
-      </div>
-
-      {/* The action sits on its own line at the card's foot so every card in the
-          row lines its button up, however long the role title wrapped. */}
-      <div className="flex shrink-0 items-center justify-between gap-4 pl-11 sm:pl-0">
-        {item.metric ? (
-          <span className="text-meta text-slate-600 tabular-nums">
-            {item.metric.label} <strong className="text-slate-900">{item.metric.value}</strong>
-          </span>
-        ) : (
-          <span aria-hidden="true" />
-        )}
-
+      <h3 className="attention-row-title text-card-title text-slate-900 min-w-0 break-words">
         <Link
-          to={item.to}
-          className="btn btn-sm btn-ghost text-brand-700 shrink-0"
-          aria-label={`${item.actionLabel} for ${item.job.title}`}
+          to={`/jobs/${item.job.id}`}
+          className="rounded hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
         >
-          {item.actionLabel}
-          <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+          {item.job.title}
         </Link>
-      </div>
+      </h3>
+
+      {/*
+        A quiet text action, not a filled button: the dashboard's recommended
+        step is the only primary call on this screen, and three solid buttons
+        here would compete with it. The row is not itself a link — the title and
+        the action already go to two different places, and laying a third target
+        over both would make the click ambiguous and the keyboard order worse.
+      */}
+      <Link
+        to={item.to}
+        className="attention-row-action -mx-1 flex shrink-0 items-center gap-1.5 rounded px-1 text-meta font-semibold
+                   text-brand-700 hover:text-brand-800 hover:underline
+                   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+        aria-label={`${item.actionLabel} for ${item.job.title}`}
+      >
+        {item.actionLabel}
+        <ArrowRight className="attention-arrow w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+      </Link>
+
+      {/*
+        The fact carries the number a recruiter scans for, so it leads and is
+        weighted above the sentence explaining it. Both stay on one flowing line
+        and wrap together rather than being stacked into a third row, which is
+        what pushed the old cards past a scannable height.
+      */}
+      <p className="attention-row-context text-meta text-slate-600">
+        <span className="font-medium text-slate-800">{item.fact}</span> {item.detail}
+        {item.metric && (
+          <span className="whitespace-nowrap text-slate-500 tabular-nums">
+            {' · '}
+            {item.metric.label} <strong className="font-semibold text-slate-700">{item.metric.value}</strong>
+          </span>
+        )}
+      </p>
     </li>
   );
 };
+
+/** Placeholder rows that keep the panel's rhythm while the jobs load. */
+const AttentionRowSkeleton = () => (
+  <li className="attention-row">
+    <Skeleton className="attention-dot h-2 w-2 rounded-pill" />
+    <Skeleton className="attention-row-title h-4 w-40" />
+    <Skeleton className="attention-row-action h-4 w-28" />
+    <Skeleton className="attention-row-context h-3 w-64 max-w-full" />
+  </li>
+);
 
 /**
  * Every job that needs something, most urgent first.
@@ -211,69 +233,77 @@ const NeedsAttention = ({ jobs = [], threshold = 80, loading = false, limit = 3,
 
   return (
     <section aria-labelledby="dashboard-attention-heading">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <div className="min-w-0">
           <h2 id="dashboard-attention-heading" className="section-title">
             Needs your attention
           </h2>
-          <p className="text-meta text-slate-500 mt-0.5">The next useful step for each active role.</p>
+          <p className="text-meta text-slate-500 mt-0.5">
+            Roles that need action before hiring can move forward.
+          </p>
         </div>
 
-        {remaining > limit && (
-          <Link to="/jobs" className="btn btn-sm btn-ghost shrink-0">
-            View all {items.length}
-            <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
-          </Link>
+        {/* A count, not a badge: this is orientation, not an alert. */}
+        {!loading && remaining > 0 && (
+          <span className="text-meta text-slate-500 tabular-nums shrink-0">
+            {remaining} item{remaining === 1 ? '' : 's'}
+          </span>
         )}
       </div>
 
       {loading ? (
-        <ul className="mt-4 divide-y divide-slate-200 border-y border-slate-200">
+        <ul className="attention-panel mt-4">
           {Array.from({ length: 3 }, (_, i) => (
-            <li key={i} className="py-5">
-              <div className="flex items-start gap-3">
-                <Skeleton className="w-9 h-9 rounded-control shrink-0" />
-                <div className="flex-1 space-y-2">
-                  <Skeleton className="h-4 w-32" />
-                  <Skeleton className="h-3 w-44" />
-                  <Skeleton className="h-3 w-36" />
-                </div>
-              </div>
-              <div className="mt-4 flex items-center justify-between pl-12">
-                <Skeleton className="h-3 w-24" />
-                <Skeleton className="h-8 w-28 rounded-control" />
-              </div>
-            </li>
+            <AttentionRowSkeleton key={i} />
           ))}
         </ul>
       ) : visible.length === 0 ? (
-        <div className="mt-4">
-          {/* Two different situations, and conflating them would mislead: either
-              nothing anywhere needs work, or the only thing that does is already
-              named in the recommendation above this section. */}
-          <EmptyState
-            icon={CheckCircle2}
-            title={items.length > 0 ? 'Nothing else waiting' : 'Nothing waiting on you'}
-            description={
-              items.length > 0
+        /*
+         * Being finished is good news and should read as one line of it. The
+         * full empty-state block — icon plate, heading, paragraph, button in a
+         * tall bordered box — gave the absence of work more room than the work
+         * itself, which is backwards.
+         *
+         * The two situations stay distinct: either nothing anywhere needs work,
+         * or the only thing that does is already named in the recommendation
+         * directly above this section.
+         */
+        <div className="attention-panel mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3.5">
+          <CheckCircle2 className="w-4 h-4 shrink-0 text-teal-600" aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <p className="text-card-title text-slate-900">
+              {items.length > 0 ? 'Nothing else waiting' : "You're caught up"}
+            </p>
+            <p className="text-meta text-slate-600 mt-0.5">
+              {items.length > 0
                 ? 'That is the only role needing a decision right now.'
-                : 'Every active role is up to date. Create a job to start screening for a new role.'
-            }
-            action={
-              items.length === 0 ? (
-                <Link to="/jobs/new" className="btn btn-sm btn-primary">
-                  Create job
-                </Link>
-              ) : null
-            }
-          />
+                : 'Every active role is up to date. Create a job to start screening for a new role.'}
+            </p>
+          </div>
+          {items.length === 0 && (
+            <Link to="/jobs/new" className="btn btn-sm btn-secondary shrink-0">
+              Create job
+            </Link>
+          )}
         </div>
       ) : (
-        <ul className="mt-4 divide-y divide-slate-200 border-y border-slate-200">
-          {visible.map((item) => (
-            <AttentionCard key={item.job.id} item={item} />
-          ))}
-        </ul>
+        <>
+          <ul className="attention-panel mt-4">
+            {visible.map((item) => (
+              <AttentionRow key={item.job.id} item={item} />
+            ))}
+          </ul>
+
+          {/* The queue is bounded on purpose; the rest is one link away. */}
+          {remaining > limit && (
+            <div className="mt-2 flex justify-end">
+              <Link to="/jobs" className="btn btn-sm btn-ghost text-brand-700">
+                View all {remaining}
+                <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+              </Link>
+            </div>
+          )}
+        </>
       )}
     </section>
   );

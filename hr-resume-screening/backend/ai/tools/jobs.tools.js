@@ -49,8 +49,20 @@ const getJobs = {
   },
 
   execute: async ({ status, search, limit }) => {
+    /*
+     * Open roles unless the agent asks otherwise.
+     *
+     * Omitting the status previously returned open and closed roles interleaved,
+     * so an agent asked to screen, rank or compare could pick a filled vacancy
+     * and work its archived pool as though it were live recruitment. The default
+     * follows the same direction as the candidate scope: forgetting to specify
+     * yields less, not more. History stays reachable with `status: 'CLOSED'`,
+     * the only other value the validator accepts.
+     */
+    const lifecycle = status || 'OPEN';
+
     const result = await getJobSummaries({
-      status: status || undefined,
+      status: lifecycle,
       search: search || '',
       limit,
       page: 1
@@ -62,7 +74,7 @@ const getJobs = {
         resultCount: result.jobs.length,
         totalMatching: result.pagination.total,
         limit,
-        filters: { status: status || null, search: search || null }
+        filters: { status: lifecycle, search: search || null }
       }
     };
   }

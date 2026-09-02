@@ -39,7 +39,15 @@ export const JobPicker = ({ id, value, onChange, label = 'Job', disabled = false
   const fieldId = id || `agent-job-${autoId}`;
 
   const { data, loading, error } = useApiResource(
-    (config) => getJobsSummary({ limit: PICKER_JOB_LIMIT, page: 1 }, config),
+    /*
+     * Open roles only.
+     *
+     * These pickers choose the role an agent will work on, and screening,
+     * ranking or comparing candidates for a filled vacancy is not active
+     * recruitment. The list previously included closed roles and even labelled
+     * them "(Closed)" — offering work that should no longer be startable.
+     */
+    (config) => getJobsSummary({ status: 'OPEN', limit: PICKER_JOB_LIMIT, page: 1 }, config),
     []
   );
 

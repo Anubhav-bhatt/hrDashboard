@@ -267,6 +267,25 @@ export const closeJob = async (jobId, selectedCandidateId) => {
   return response.data;
 };
 
+/**
+ * Permanently deletes a closed job and every record it owns.
+ *
+ * Not the same operation as closing, and deliberately not named as though it
+ * were: closing archives a hiring cycle, this destroys it and releases the
+ * storage. The confirmation phrase — the job's own title — is re-checked on the
+ * server, so this call cannot succeed just because a dialog was rendered.
+ */
+/** What deleting a closed job would destroy — measured, so the dialog can state real figures. */
+export const getJobDeletionPreview = async (jobId, config = {}) => {
+  const response = await api.get(`/jobs/${jobId}/deletion-preview`, config);
+  return response.data;
+};
+
+export const deleteJob = async (jobId, confirmation) => {
+  const response = await api.delete(`/jobs/${jobId}`, { data: { confirmation } });
+  return response.data;
+};
+
 /* ------------------------------------------------------------ resume upload -- */
 
 export const uploadSingleCandidate = async (jobId, file) => {

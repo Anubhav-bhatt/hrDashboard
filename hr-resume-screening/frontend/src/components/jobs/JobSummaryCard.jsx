@@ -8,6 +8,7 @@ import {
   ExternalLink,
   MapPin,
   MoreVertical,
+  Trash2,
   Upload
 } from 'lucide-react';
 import { JobStatusBadge, cx } from '../ui';
@@ -46,7 +47,7 @@ const Metric = ({ value, label, tone = 'default' }) => (
   </div>
 );
 
-export const JobSummaryCard = ({ job, strongMatchThreshold = 80, compact = false, onCloseJob }) => {
+export const JobSummaryCard = ({ job, strongMatchThreshold = 80, compact = false, onCloseJob, onDeleteJob }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -90,10 +91,23 @@ export const JobSummaryCard = ({ job, strongMatchThreshold = 80, compact = false
     ].filter(Boolean);
 
     return (
-      <article className="group grid grid-cols-1 gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_7rem_6rem_7rem_10rem] sm:items-center sm:px-5">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-card-title text-slate-900 truncate">
+      <article className="jobs-grid jobs-row group">
+        <div className="min-w-0">
+          {/*
+            The badge holds its place beside the title rather than wrapping onto
+            a line of its own. Allowed to wrap it added a whole line to the row
+            for long roles — the height came from the badge, not from the title
+            that actually needed the space.
+          */}
+          <div className="flex items-start gap-2">
+            {/*
+              The role stays the dominant field and is allowed two lines before
+              it truncates. A bounded `minmax` on the column is what keeps a long
+              title from dragging the numeric and action columns out of
+              alignment, so the title does not have to be cut short to protect
+              them.
+            */}
+            <h3 className="text-card-title text-slate-900 min-w-0 break-words line-clamp-2">
               <Link
                 to={`/jobs/${job.id}`}
                 className="rounded hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
@@ -101,27 +115,37 @@ export const JobSummaryCard = ({ job, strongMatchThreshold = 80, compact = false
                 {job.title}
               </Link>
             </h3>
-            <JobStatusBadge status={job.status} />
+            <span className="shrink-0 mt-0.5">
+              <JobStatusBadge status={job.status} />
+            </span>
           </div>
+          {/*
+            Below the table breakpoint this line is where the counts are read,
+            which is why the numeric columns can be dropped there rather than
+            crushed.
+          */}
           <p className="text-meta text-slate-600 mt-1 truncate">{facts.join(' · ')}</p>
         </div>
 
-        <p className="hidden text-right text-body font-semibold tabular-nums text-slate-900 sm:block">
-          {(job.candidateCount || 0).toLocaleString('en-IN')}
-        </p>
-        <p className={cx('hidden text-right text-body font-semibold tabular-nums sm:block', job.strongMatchCount > 0 ? 'text-emerald-700' : 'text-slate-500')}>
+        <p className="jobs-row-metric">{(job.candidateCount || 0).toLocaleString('en-IN')}</p>
+        <p className={cx('jobs-row-metric', job.strongMatchCount > 0 ? '!text-emerald-700' : '!text-slate-500')}>
           {job.strongMatchCount || '—'}
         </p>
-        <p className="hidden text-right text-body font-semibold tabular-nums text-slate-900 sm:block">
-          {job.shortlistedCount || '—'}
-        </p>
+        <p className="jobs-row-metric">{job.shortlistedCount || '—'}</p>
 
+        {/*
+          A quiet text action, anchored to the left of its column so the space
+          between it and the shortlisted figure is the column gap on every row —
+          not a leftover that shrinks as the label grows. The "Next:" prefix it
+          used to carry has gone: the column is headed Next, so the row was
+          saying it twice, and the repetition cost 38px in the one column that
+          did not have it to spare.
+        */}
         <Link
           to={nextAction?.to || `/jobs/${job.id}`}
-          className="btn btn-sm btn-ghost text-brand-700 shrink-0 justify-self-start sm:justify-self-end"
-          aria-label={`${nextAction?.actionLabel || 'Open job'} for ${job.title}`}
+          className="jobs-row-next btn btn-sm btn-ghost text-brand-700"
+          aria-label={`${nextAction?.actionLabel || 'View hiring summary'} for ${job.title}`}
         >
-          <span className="text-slate-500 font-normal hidden lg:inline">Next:</span>
           {nextAction?.actionLabel || 'View hiring summary'}
           <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform duration-fast" aria-hidden="true" />
         </Link>
@@ -209,10 +233,33 @@ export const JobSummaryCard = ({ job, strongMatchThreshold = 80, compact = false
                         }}
                       >
                         <Archive className="w-3.5 h-3.5" aria-hidden="true" />
-                        <span>Select hire &amp; close</span>
+                        <span>Close job</span>
                       </button>
                     )}
                   </>
+                )}
+
+                {/*
+                  Deletion lives in the overflow menu, never as a button on the
+                  row. A red control repeated down a list of finished roles is a
+                  standing invitation to a mistake, and this one cannot be undone
+                  — it is reached deliberately or not at all. Shown only to an
+                  ADMIN, matching what the API will actually allow.
+                */}
+                {isClosed && onDeleteJob && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-meta text-rose-700
+                               hover:bg-rose-50 text-left border-t border-slate-100 mt-1"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onDeleteJob(job);
+                    }}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span>Delete job data</span>
+                  </button>
                 )}
               </div>
             )}

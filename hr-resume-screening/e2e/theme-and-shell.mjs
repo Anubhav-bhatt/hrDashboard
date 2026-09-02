@@ -164,7 +164,7 @@ try {
 
   await page.evaluate(() => window.localStorage.setItem('hr-dashboard-theme', 'light'));
   await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
-  await page.locator('a[aria-label^="Candidates"]').waitFor({ state: 'visible', timeout: 20000 });
+  await page.locator('a[aria-label^="Active candidates"]').waitFor({ state: 'visible', timeout: 20000 });
 
   const railWidth = () => page.evaluate(() => document.querySelector('aside')?.getBoundingClientRect().width ?? 0);
   const expandedWidth = await railWidth();

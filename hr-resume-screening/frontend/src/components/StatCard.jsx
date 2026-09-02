@@ -54,22 +54,25 @@ const StatCard = ({
   const trendTone = trend > 0 ? 'text-emerald-600' : trend < 0 ? 'text-rose-600' : 'text-slate-400';
 
   /*
-   * The compact variant leads with the figure and drops the icon and the arrow.
+   * The compact variant: what is being counted, the count, then what it means.
    *
-   * On the dashboard's snapshot row the four cards are read as a set — one
-   * glance across a line of numbers — so the number goes first and the label
-   * becomes its caption. The icons earned their place on the old detail cards,
-   * where each stood alone; repeated four times across a summary row they only
-   * compete with the figures. The link, its accessible name and the NaN guard
-   * are shared with the default variant, so nothing that depends on those
-   * changes behaviour.
+   * The label leads because the row sits at the top of the dashboard and is read
+   * before anything else on the page — a column of bare figures asks the reader
+   * to look twice, once for the number and again for what it counts. The figure
+   * still dominates by size (30px against 14px), so scanning across the row for
+   * the numbers alone still works.
+   *
+   * The icon and the arrow stay dropped. Repeated four times across a summary
+   * row they only compete with the figures the cards exist to show; the link,
+   * its accessible name and the NaN guard are shared with the default variant,
+   * so nothing that depends on those changes behaviour.
    */
   const compactBody = (
     <>
-      <p className="text-metric text-slate-900 tabular-nums leading-none">{loading ? '—' : displayValue}</p>
-      <p className="text-body text-slate-600 mt-2">{label}</p>
+      <p className="text-body font-medium text-slate-600">{label}</p>
+      <p className="text-metric text-slate-900 tabular-nums leading-none mt-3">{loading ? '—' : displayValue}</p>
       {(trendLabel || subtitle) && (
-        <p className="text-meta text-slate-500 mt-1 truncate">{trendLabel || subtitle}</p>
+        <p className="text-xs text-slate-500 mt-1.5 truncate">{trendLabel || subtitle}</p>
       )}
     </>
   );

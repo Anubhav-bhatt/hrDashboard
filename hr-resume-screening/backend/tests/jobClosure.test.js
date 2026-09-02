@@ -388,25 +388,58 @@ const run = async () => {
   });
 
   // ---------------------------------------------------------------- Test 85
-  await testAsync('Test 85: the selected candidate cannot be reverted through the status route', async () => {
+  /*
+   * A closed job's statuses are read-only, and that is now enforced at the route
+   * rather than per candidate.
+   *
+   * These two tests previously asserted the controller's narrower rules —
+   * CANDIDATE_ALREADY_SELECTED for the hire, VALIDATION_ERROR for assigning
+   * SELECTED directly. Both still exist, but on a closed job the lifecycle guard
+   * refuses first, because the old rules protected only the hired candidate and
+   * left everyone else on a filled role re-classifiable after the fact.
+   */
+  await testAsync('Test 85: no candidate status on a closed job can be changed', async () => {
     for (const target of ['REVIEW', 'SHORTLISTED', 'NOT_SUITABLE']) {
       const res = await request('PATCH', `/jobs/${multiJob.id}/candidates/${priya.id}/status`, {
         body: { status: target }
       });
       assert.strictEqual(res.status, 409, `${target} must be refused`);
-      assert.strictEqual(res.body.code, 'CANDIDATE_ALREADY_SELECTED');
+      assert.strictEqual(res.body.code, 'JOB_CLOSED');
+      // The reason has to fit the route: a recruiter changing a status should
+      // not be told that imports are disabled.
+      assert.ok(/hiring history/i.test(res.body.message), res.body.message);
     }
 
     const still = await prisma.candidate.findUnique({ where: { id: priya.id } });
     assert.strictEqual(still.hrStatus, 'SELECTED');
+
+    // Not just the hire — everyone on the closed role.
+    const other = await request('PATCH', `/jobs/${multiJob.id}/candidates/${rahul.id}/status`, {
+      body: { status: 'NOT_SUITABLE' }
+    });
+    assert.strictEqual(other.status, 409, 'a non-hired candidate is equally frozen');
+    const unchangedOther = await prisma.candidate.findUnique({ where: { id: rahul.id } });
+    assert.notStrictEqual(unchangedOther.hrStatus, 'NOT_SUITABLE');
   });
 
-  await testAsync('SELECTED cannot be assigned directly through the status route', async () => {
-    const res = await request('PATCH', `/jobs/${multiJob.id}/candidates/${rahul.id}/status`, {
+  await testAsync('SELECTED cannot be assigned directly on an OPEN job either', async () => {
+    /*
+     * The rule that matters for an open role: selection happens by closing the
+     * job, never by writing the status. Asserted on an open job because that is
+     * now the only place the controller's own validation is reachable — on a
+     * closed one the lifecycle guard answers first.
+     */
+    const openJob = await makeJob(`${PREFIX} Direct Selection Role`);
+    const candidate = await makeCandidate(openJob.id, { name: 'Direct Select Person', score: 91, status: 'SHORTLISTED' });
+
+    const res = await request('PATCH', `/jobs/${openJob.id}/candidates/${candidate.id}/status`, {
       body: { status: 'SELECTED' }
     });
     assert.strictEqual(res.status, 400, 'selection must go through job closure');
     assert.strictEqual(res.body.code, 'VALIDATION_ERROR');
+
+    const still = await prisma.candidate.findUnique({ where: { id: candidate.id } });
+    assert.strictEqual(still.hrStatus, 'SHORTLISTED', 'nothing was written');
   });
 
   // ------------------------------------------------------------ Tests 86, 87
@@ -514,12 +547,42 @@ const run = async () => {
   });
 
   // ---------------------------------------------------------------- Test 92
-  await testAsync('Test 92: the global candidate list filters by SELECTED', async () => {
+  /*
+   * This previously asserted that a hire shows up in the global candidate list
+   * under hrStatus=SELECTED. The archive lifecycle deliberately reverses that:
+   * closing a job moves its entire candidate pool — the hire included — out of
+   * the active workspace, and history is reached one closed job at a time.
+   *
+   * The filter is in fact structurally empty on the active scope, not merely
+   * empty today: SELECTED is only ever written by closing a job, and closing a
+   * job sets it CLOSED. Asserting that keeps the two halves of the lifecycle
+   * honest — Test 81 above proves the same records are still fully readable
+   * through the closed job itself.
+   */
+  await testAsync('Test 92: closing a job takes its candidates out of the active list', async () => {
     const res = await request('GET', '/candidates?hrStatus=SELECTED&limit=100');
     assert.strictEqual(res.status, 200);
-    assert.ok(res.body.data.length >= 2, 'the hires from this suite are present');
-    assert.ok(res.body.data.every((c) => c.hrStatus === 'SELECTED'), 'only selected candidates are returned');
-    assert.ok(res.body.data.some((c) => c.id === priya.id));
+    assert.strictEqual(res.body.data.length, 0, 'a hire always belongs to a closed job, so it is never active');
+    assert.strictEqual(res.body.pagination.total, 0);
+
+    const everyone = await request('GET', '/candidates?limit=200');
+    assert.strictEqual(everyone.status, 200);
+    assert.ok(
+      !everyone.body.data.some((c) => c.id === priya.id),
+      'the hire is gone from the active pool entirely, not just from the SELECTED filter'
+    );
+
+    // The whole cycle leaves, not only the person who was hired.
+    const poolIds = (await prisma.candidate.findMany({ where: { jobId: multiJob.id }, select: { id: true } })).map((c) => c.id);
+    assert.ok(poolIds.length >= 3, 'the closed role still has its pool in the database');
+    assert.ok(
+      !everyone.body.data.some((c) => poolIds.includes(c.id)),
+      'no candidate of a closed role appears in the active list'
+    );
+
+    // Nothing was deleted — closing is an archive, and the rows are still there.
+    const stillStored = await prisma.candidate.count({ where: { jobId: multiJob.id } });
+    assert.strictEqual(stillStored, poolIds.length, 'closing preserves every candidate record');
   });
 
   await testAsync('the job-scoped candidate list also filters by SELECTED', async () => {

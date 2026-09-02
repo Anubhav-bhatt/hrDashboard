@@ -160,7 +160,13 @@ const CloseJobDialog = ({ jobTitle, candidates, submitting, error, onConfirm, on
                 <li>Mark the selected candidate as Selected</li>
                 <li>Mark the job as Closed</li>
                 <li>Disable new candidate imports</li>
-                <li>Preserve all candidate and recruitment history</li>
+                {/*
+                  The archive consequence, stated plainly because it is the one
+                  a recruiter would otherwise discover afterwards: the whole pool
+                  leaves the active workspace, not just the person hired.
+                */}
+                <li>Move every candidate for this role out of active hiring, into Closed Jobs</li>
+                <li>Preserve all candidate and recruitment history — nothing is deleted</li>
               </ul>
             </div>
 
@@ -176,7 +182,7 @@ const CloseJobDialog = ({ jobTitle, candidates, submitting, error, onConfirm, on
               Cancel
             </Button>
             <Button type="submit" variant="primary" disabled={!selectedId} loading={submitting} icon={CheckCircle2}>
-              {submitting ? 'Closing…' : 'Confirm & Close Job'}
+              {submitting ? 'Closing…' : 'Close job'}
             </Button>
           </div>
         </form>

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { AlertCircle, ArrowRight, CheckCircle2, MoreHorizontal, RotateCcw } from 'lucide-react';
 import { formatExperience, formatRelativeTime, getScoreMeta, getStatusMeta } from '../utils/format';
 import { Avatar, Badge, StatusBadge, cx } from './ui';
+import { CandidateActionButtons, getCandidateActions } from './candidate/CandidateActions';
 
 const STATUS_SURFACES = {
   REVIEW: 'candidate-card-review',
@@ -48,6 +49,24 @@ const CandidateCard = ({
           : candidate.hrStatus === 'SHORTLISTED'
             ? 'SHORTLISTED'
             : 'DEFAULT';
+
+  /*
+   * The card body is already a full-size button that opens Quick Look and
+   * carries that accessible name, so the strip's eye icon is a pointer
+   * convenience rather than a second control. Marking it redundant keeps it
+   * visible and clickable while leaving exactly one "Quick look at <name>"
+   * in the accessibility tree.
+   */
+  const actions = getCandidateActions({
+    candidate,
+    isCompared,
+    comparisonDisabled,
+    isShortlisting,
+    onView,
+    onScreen,
+    onCompare,
+    onShortlist
+  }).map((action) => (action.id === 'view' ? { ...action, redundant: true } : action));
 
   return (
     <div className={cx('candidate-card-wrapper group', className)}>
@@ -117,25 +136,30 @@ const CandidateCard = ({
         </button>
 
         <div className="candidate-card-footer">
-          <span className="min-w-0 truncate text-xs text-slate-600">
+          <span className="min-w-0 flex-1 truncate text-xs text-slate-600">
             {formatExperience(candidate.totalExperience, 'Experience not stated')}
           </span>
-          <div className="min-w-0 flex items-center gap-2">
+          <span className="shrink-0">
             <StatusBadge status={candidate.hrStatus} />
-          </div>
-          <div className="candidate-action-dock" role="group" aria-label="Candidate quick actions">
-            <button type="button" className="btn btn-sm btn-ghost" onClick={() => onView(candidate)}>
-              Quick look
-            </button>
-            <button
-              type="button"
-              className="btn btn-icon-sm btn-ghost"
-              onClick={() => onOpenMobileActions(candidate)}
-              aria-label={`More actions for ${candidate.name}`}
-            >
-              <MoreHorizontal className="w-4 h-4" aria-hidden="true" />
-            </button>
-          </div>
+          </span>
+
+          {/*
+            The same action definitions the quick-look panel and the touch
+            action sheet render, so a shortlist fired from a card is the same
+            write — and the same disabled rules — as one fired anywhere else.
+            Which of the two affordances below is shown is decided by pointer
+            capability in CSS, never by viewport width.
+          */}
+          <CandidateActionButtons actions={actions} layout="dock" />
+
+          <button
+            type="button"
+            className="candidate-mobile-actions-trigger btn btn-icon-sm btn-ghost shrink-0"
+            onClick={() => onOpenMobileActions(candidate)}
+            aria-label={`Actions for ${candidate.name}`}
+          >
+            <MoreHorizontal className="w-4 h-4" aria-hidden="true" />
+          </button>
         </div>
 
         {error && (

@@ -6,6 +6,7 @@ const { getJobSummaries, getJobStatusCounts } = require('../services/jobSummaryS
 const { getJobDetails } = require('../services/jobService');
 const { STRONG_MATCH_MIN } = require('../utils/scoreThresholds');
 const { closeJob, getShortlistedCandidates, JobClosureError } = require('../services/jobClosureService');
+const { deleteClosedJob, previewJobDeletion, JobDeletionError } = require('../services/jobDeletionService');
 
 /**
  * @desc    Create a new recruitment job with uploaded JD using Prisma
@@ -487,6 +488,71 @@ const closeJobById = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Permanently delete a CLOSED job and every record it owns
+ * @route   DELETE /api/jobs/:jobId
+ * @access  Private — ADMIN only
+ *
+ * Deliberately distinct from closing a job, and named so throughout: closing
+ * archives a hiring cycle, this destroys it. The rules — closed-only, and the
+ * job's title echoed back as confirmation — are enforced in
+ * jobDeletionService inside one transaction, so neither can be bypassed by a
+ * client that simply does not render the dialog.
+ */
+const deleteJobById = async (req, res, next) => {
+  try {
+    const { jobId } = req.params;
+    const { confirmation } = req.body || {};
+
+    const summary = await deleteClosedJob({
+      jobId,
+      confirmation,
+      actor: req.user || null
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `${summary.job.title} and its candidate data were permanently deleted.`,
+      data: summary
+    });
+  } catch (error) {
+    if (error instanceof JobDeletionError) {
+      return res.status(error.statusCode).json({
+        success: false,
+        code: error.code,
+        message: error.message
+      });
+    }
+    next(error);
+  }
+};
+
+/**
+ * @desc    What permanently deleting a CLOSED job would destroy
+ * @route   GET /api/jobs/:jobId/deletion-preview
+ * @access  Private — ADMIN only
+ *
+ * Read-only. Exists so the confirmation dialog can state measured figures
+ * instead of adjectives, taken from the same measurement the deletion itself
+ * reports. Restricted to the same role as the deletion: the counts describe a
+ * capability a standard recruiter does not have.
+ */
+const getJobDeletionPreview = async (req, res, next) => {
+  try {
+    const preview = await previewJobDeletion(req.params.jobId);
+    return res.status(200).json({ success: true, data: preview });
+  } catch (error) {
+    if (error instanceof JobDeletionError) {
+      return res.status(error.statusCode).json({
+        success: false,
+        code: error.code,
+        message: error.message
+      });
+    }
+    next(error);
+  }
+};
+
 module.exports = {
   createJob,
   getAllJobs,
@@ -494,6 +560,8 @@ module.exports = {
   getJobById,
   getJobShortlist,
   closeJobById,
+  deleteJobById,
+  getJobDeletionPreview,
   updateJobSearchCriteria,
   searchOutlookEmailsForJob
 };

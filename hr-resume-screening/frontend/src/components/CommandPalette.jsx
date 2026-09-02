@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search,
-  Crosshair,
+  LayoutDashboard,
   Briefcase,
   Users,
   Upload,
@@ -23,7 +23,14 @@ import { cx } from './ui';
 
 const STATIC_ACTIONS = [
   // Navigation
-  { id: 'nav-dashboard', label: 'Open Focus', category: 'Navigation', icon: Crosshair, path: '/' },
+  {
+    id: 'nav-dashboard',
+    label: 'Dashboard',
+    subtitle: 'View hiring priorities and recruitment overview',
+    category: 'Navigation',
+    icon: LayoutDashboard,
+    path: '/dashboard'
+  },
   { id: 'nav-jobs', label: 'View All Jobs', category: 'Navigation', icon: Briefcase, path: '/jobs' },
   // `/jobs/new` is the real route. This previously pointed at `/jobs/create`,
   // which matches no static route and therefore resolved to `/jobs/:id` with an
@@ -73,7 +80,7 @@ export const CommandPalette = ({ isOpen, onClose }) => {
 
       // Load jobs for dynamic search
       setLoadingJobs(true);
-      getJobsSummary({ limit: 50 })
+      getJobsSummary({ status: 'OPEN', limit: 50 })
         .then((res) => {
           const list = res?.data || (Array.isArray(res) ? res : []);
           setJobs(list);

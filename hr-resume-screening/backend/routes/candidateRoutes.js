@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const candidateController = require('../controllers/candidateController');
 const upload = require('../middleware/upload');
-const { rejectClosedJob } = require('../middleware/jobLifecycle');
+const { rejectClosedJob, buildRejectClosedJob } = require('../middleware/jobLifecycle');
 
 // Candidate intake and re-analysis are closed once the job is closed: a filled
 // vacancy must not gain new applicants, and historical scores must stay as they
@@ -27,11 +27,31 @@ router.post('/:jobId/candidates/process', rejectClosedJob, candidateController.p
 router.post('/:jobId/candidates/analyze-all', rejectClosedJob, candidateController.analyzeAllCandidates);
 router.post('/:jobId/candidates/:candidateId/analyze', rejectClosedJob, candidateController.analyzeCandidate);
 
-// Candidate HR review status & recruiter notes
-router.patch('/:jobId/candidates/:candidateId/status', candidateController.updateCandidateStatus);
-router.patch('/:jobId/candidates/:candidateId/notes', candidateController.updateCandidateNotes);
+/*
+ * Candidate HR review status.
+ *
+ * Closed to a closed job. The controller already refused to move the recorded
+ * hire off SELECTED, but every other candidate on a filled role could still be
+ * shortlisted or rejected after the fact — rewriting what the pipeline looked
+ * like when the decision was made. A closed job is the history of a hiring
+ * cycle, so its statuses are read-only.
+ */
+router.patch(
+  '/:jobId/candidates/:candidateId/status',
+  buildRejectClosedJob(
+    'This job is closed. Candidate statuses on a closed job are part of its hiring history and cannot be changed.'
+  ),
+  candidateController.updateCandidateStatus
+);
 
-// Append a timestamped recruiter note to the candidate's note history
+/*
+ * Notes are the deliberate exception and stay writable after closure.
+ *
+ * They are commentary about what happened rather than part of the record of
+ * what happened, and a recruiter still needs to be able to add context to a
+ * finished cycle — an outcome, a reason, a note for whoever reads it next.
+ */
+router.patch('/:jobId/candidates/:candidateId/notes', candidateController.updateCandidateNotes);
 router.post('/:jobId/candidates/:candidateId/notes', candidateController.addCandidateNote);
 
 // Stream original candidate resume attachment on-demand from memory buffer

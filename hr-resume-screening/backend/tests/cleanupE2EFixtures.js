@@ -11,11 +11,45 @@
 require('dotenv').config();
 const prisma = require('../config/prisma');
 
-const TAGS = ['e2eclosure', 'e2erank', 'e2ecomp'];
+/*
+ * Every prefix the browser suites stamp onto a fixture job title.
+ *
+ * `e2eaudit` was missing, so two fixture jobs created by the audit runs — one
+ * of them a CLOSED job carrying 12 candidates — survived every cleanup and
+ * accumulated in the development database indefinitely. A tag that no cleanup
+ * knows about is worse than no tag at all: it looks deliberate and reads as
+ * real data.
+ *
+ * Anything added here must be a prefix only the suites generate. A tag that
+ * could occur in a real job title would make this script destructive.
+ */
+const TAGS = ['e2eclosure', 'e2erank', 'e2ecomp', 'e2eaudit', 'e2esimpl', 'visualaudit', 'e2edelete'];
+
+/*
+ * Optional `--tag=<prefix>` restricts the run to one marker.
+ *
+ * A suite that creates a fixture needs to remove its own records without
+ * touching anyone else's — calling the unscoped script from inside a test run
+ * would delete every other fixture in the database, including the visual-audit
+ * dataset a screenshot comparison depends on. The argument must still match one
+ * of the recognised TAGS below, so this narrows the blast radius and can never
+ * widen it into genuine data.
+ */
+const tagArg = (process.argv.find((arg) => arg.startsWith('--tag=')) || '').slice('--tag='.length).trim();
+const activeTags = tagArg
+  ? TAGS.filter((tag) => tagArg.toLowerCase().startsWith(tag))
+  : TAGS;
+
+if (tagArg && activeTags.length === 0) {
+  console.error(`Refusing to clean up "${tagArg}": it is not a recognised fixture tag.`);
+  process.exit(1);
+}
 
 (async () => {
   const jobs = await prisma.job.findMany({
-    where: { OR: TAGS.map((tag) => ({ title: { contains: tag, mode: 'insensitive' } })) },
+    where: tagArg
+      ? { title: { contains: tagArg, mode: 'insensitive' } }
+      : { OR: TAGS.map((tag) => ({ title: { contains: tag, mode: 'insensitive' } })) },
     select: { id: true, title: true }
   });
 

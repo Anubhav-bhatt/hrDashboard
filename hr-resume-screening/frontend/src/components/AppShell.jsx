@@ -6,7 +6,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Crosshair,
+  LayoutDashboard,
   LogOut,
   Menu,
   Settings,
@@ -34,13 +34,33 @@ export const SIDEBAR_STORAGE_KEY = 'hr-dashboard-sidebar-collapsed';
 export const AI_GROUPS_STORAGE_KEY = 'hr-dashboard-ai-group-collapsed';
 
 const MAIN_NAV_ITEMS = [
-  { to: '/', label: 'Focus', icon: Crosshair, matchPaths: ['/', '/dashboard'] },
+  /*
+   * "Dashboard", not "Focus".
+   *
+   * The page follows focus-first principles internally, but a recruiter should
+   * not have to learn that word to find their home screen — and `/focus` is
+   * already Minimal Mode, so one label was naming two unrelated surfaces.
+   *
+   * The link targets the named `/dashboard` URL while `matchPaths` keeps the
+   * item active on `/` too, because both routes render the same component and
+   * `/` remains the app root for existing links and bookmarks.
+   */
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, matchPaths: ['/', '/dashboard'] },
   { to: '/jobs', label: 'Jobs', icon: Briefcase, matchPrefix: '/jobs', excludePaths: ['/jobs/closed'] },
-  { to: '/candidates', label: 'Candidates', icon: Users, matchPrefix: '/candidates' }
+  { to: '/candidates', label: 'Candidates', icon: Users, matchPrefix: '/candidates' },
+  /*
+   * Closed Jobs is a primary destination, not a management setting.
+   *
+   * It was previously nested under Management alongside Settings, which grouped
+   * a high-frequency recruiter destination — hiring history — with configuration
+   * a recruiter touches a few times a year. `end: true` keeps it active only on
+   * the exact path, and the Jobs item above already excludes `/jobs/closed`, so
+   * the two never light up together.
+   */
+  { to: '/jobs/closed', label: 'Closed Jobs', icon: Archive, end: true }
 ];
 
 const MANAGEMENT_NAV_ITEMS = [
-  { to: '/jobs/closed', label: 'Closed Jobs', icon: Archive, end: true },
   { to: '/settings', label: 'Settings', icon: Settings, matchPrefix: '/settings' }
 ];
 
@@ -172,7 +192,7 @@ const AppShell = ({ children }) => {
   // Build breadcrumb segments
   const getBreadcrumbs = () => {
     const path = location.pathname;
-    if (path === '/' || path === '/dashboard') return [{ label: 'Focus', to: '/' }];
+    if (path === '/' || path === '/dashboard') return [{ label: 'Dashboard', to: '/dashboard' }];
     if (path.startsWith('/jobs/create') || path.startsWith('/jobs/new')) return [{ label: 'Jobs', to: '/jobs' }, { label: 'Create Job' }];
     if (path.startsWith('/jobs/closed')) return [{ label: 'Jobs', to: '/jobs' }, { label: 'Closed Jobs' }];
     if (path.startsWith('/jobs/')) return [{ label: 'Jobs', to: '/jobs' }, { label: 'Job Workspace' }];
@@ -229,7 +249,20 @@ const AppShell = ({ children }) => {
               const Icon = item.icon;
 
               return (
-                <NavLink
+                /*
+                 * A plain Link, not a NavLink.
+                 *
+                 * `isSectionActive` already decides activeness for these items,
+                 * including the cases NavLink cannot express — Dashboard is
+                 * active on both `/` and `/dashboard`, and Jobs is inactive on
+                 * `/jobs/closed`. NavLink additionally *overrides* the
+                 * `aria-current` passed to it, recomputing it from its own `to`
+                 * match, so with `to="/dashboard"` the item silently lost
+                 * `aria-current` while visiting `/` even though it was styled
+                 * active. Using Link keeps one source of truth for both the
+                 * class and the announced state.
+                 */
+                <Link
                   key={item.to}
                   to={item.to}
                   className={cx(
@@ -255,7 +288,7 @@ const AppShell = ({ children }) => {
                   />
                   {!isCollapsed && <span className="truncate">{item.label}</span>}
                   {isCollapsed && <CollapsedTooltip label={item.label} />}
-                </NavLink>
+                </Link>
               );
             })}
           </div>

@@ -194,45 +194,105 @@
     @apply relative z-20 flex items-center gap-2 rounded-b-card border-t border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700;
   }
 
+  /*
+   * Candidate quick actions.
+   *
+   * A low-profile strip inside the card footer rather than four bordered
+   * buttons or a floating cluster. Two treatments were prototyped against
+   * these tokens and rejected: separate bordered controls read as a utility
+   * panel and made the active-compare state the loudest object on the card,
+   * and a detached floating cluster cut across the card's own bottom edge
+   * while costing ~26px of height per row.
+   *
+   * So the icons carry no chrome of their own. Colour appears only when an
+   * action has STATE — added to a comparison, or shortlisted — which is the
+   * one thing a recruiter needs to see without reading. The card stays the
+   * dominant object and the row costs no extra vertical space.
+   */
   .candidate-mobile-actions-trigger { display: inline-flex; }
+
   .candidate-action-dock {
-    @apply relative z-30 ml-auto flex items-center gap-1;
+    @apply relative z-30 ml-auto shrink-0 items-center gap-0.5;
+    display: none; /* touch devices use the overflow sheet; see the hover query */
   }
 
   .candidate-action-button {
-    @apply relative flex h-8 w-8 shrink-0 items-center justify-center rounded-control border;
-    transition: color 170ms ease, background-color 170ms ease, border-color 170ms ease,
-      box-shadow 170ms ease, transform 190ms cubic-bezier(0.16, 1, 0.3, 1), opacity 150ms ease;
+    /*
+     * slate-500 rather than slate-400 at rest. These are icon-only controls, so
+     * they carry a 3:1 non-text contrast requirement, and slate-400 lands near
+     * 2.6:1 against the card surface — legible enough to look designed, not
+     * legible enough to be usable. The lift also makes the row read as
+     * interactive rather than decorative.
+     */
+    @apply relative inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center
+           rounded-lg border-0 bg-transparent text-slate-500;
+    transition: background-color 140ms ease, color 140ms ease;
   }
 
-  .candidate-action-view,
-  .candidate-action-screen,
-  .candidate-action-compare,
-  .candidate-action-shortlist { @apply border-slate-200 bg-white text-slate-600; }
+  /* Quick Look is the fastest action, so it sits one step stronger than the rest. */
+  .candidate-action-view { @apply text-slate-700; }
 
-  .candidate-action-view:hover,
-  .candidate-action-view:focus-visible,
-  .candidate-action-screen:hover,
-  .candidate-action-screen:focus-visible,
-  .candidate-action-compare:hover,
-  .candidate-action-compare:focus-visible,
-  .candidate-action-shortlist:hover,
-  .candidate-action-shortlist:focus-visible { @apply border-slate-300 bg-slate-50 text-slate-900; }
+  .candidate-action-button:hover,
+  .candidate-action-button:focus-visible { @apply bg-slate-100 text-slate-900; }
 
-  .candidate-action-button.is-active {
-    @apply border-brand-500 bg-brand-600 text-white;
+  /*
+   * Separator between the two inspect actions and the two state actions.
+   * Drawn by the compare control so no extra element is needed in the markup.
+   */
+  .candidate-action-compare::before {
+    content: '';
+    @apply pointer-events-none absolute left-[-3px] top-1/2 h-4 w-px -translate-y-1/2 bg-slate-200;
+  }
+
+  /* State, not decoration: a soft tint plus a hairline ring. */
+  .candidate-action-compare.is-active {
+    @apply bg-brand-50 text-brand-700;
+    box-shadow: inset 0 0 0 1px rgb(var(--c-brand-200));
+  }
+
+  .candidate-action-shortlist.is-active {
+    @apply bg-emerald-50 text-emerald-700;
+    box-shadow: inset 0 0 0 1px rgb(var(--c-emerald-200));
   }
 
   .candidate-action-button:disabled { @apply cursor-not-allowed opacity-40; }
+  .candidate-action-button:disabled:hover { @apply bg-transparent; }
+  /* A disabled control keeps its state colour — shortlisted stays legibly shortlisted. */
+  .candidate-action-button.is-active:disabled { @apply opacity-100; }
 
+  /*
+   * Tooltip. Opens upward: the strip sits on the card's bottom edge, so a
+   * downward tooltip would hang outside the card and be clipped by the next
+   * grid row.
+   */
   .candidate-action-button::after {
     content: attr(data-tooltip);
-    @apply pointer-events-none absolute left-1/2 top-[calc(100%+0.5rem)] z-50 -translate-x-1/2 whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-[11px] font-normal text-white opacity-0 shadow-overlay;
-    transition: opacity 120ms ease, transform 120ms ease;
+    @apply pointer-events-none absolute bottom-[calc(100%+0.375rem)] left-1/2 z-50
+           -translate-x-1/2 whitespace-nowrap rounded-md border border-slate-700/40
+           bg-slate-900 px-2 py-1 text-[11px] font-normal leading-none text-white opacity-0;
+    box-shadow: var(--shadow-overlay);
+    transition: opacity 120ms ease;
   }
 
   .candidate-action-button:hover::after,
   .candidate-action-button:focus-visible::after { @apply opacity-100; }
+
+  /*
+   * No tooltip on a narrow screen.
+   *
+   * The tooltip is `whitespace-nowrap` and anchored to the centre of a control
+   * that sits near the card's right edge, so on the rightmost card of a narrow
+   * layout it extended past the viewport and gave the page a few pixels of
+   * horizontal scroll — invisible, because a pseudo-element contributes to
+   * scrollWidth without appearing in the element tree.
+   *
+   * Suppressing it costs nothing: the tooltip only ever duplicates the control's
+   * `aria-label`, which assistive technology reads either way, and a pointer
+   * precise enough to hover a 30px target is not what a 390px screen has.
+   */
+  @media (max-width: 640px) {
+    .candidate-action-button::after { content: none; }
+  }
 
   .candidate-selection-bar {
     @apply fixed bottom-4 left-1/2 z-40 flex w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 items-center justify-between gap-3 rounded-card border border-slate-200 bg-white px-3 py-3 shadow-overlay sm:px-4;
@@ -249,35 +309,230 @@
       background-color: rgb(var(--c-slate-50) / 0.35);
     }
 
+    /*
+     * Pointer capability, not viewport width, decides which affordance is
+     * offered. A fine pointer gets the always-visible strip; anything else
+     * keeps the overflow sheet, where the same actions are full-size rows.
+     */
     .candidate-mobile-actions-trigger { display: none; }
+    .candidate-action-dock { display: flex; }
+  }
 
-    .candidate-action-dock {
-      @apply relative z-30 ml-auto items-center gap-1.5;
-      display: flex;
-      pointer-events: auto;
-      background: transparent;
-      border: 0;
-      border-radius: 0;
-      padding: 0;
-      box-shadow: none;
-      backdrop-filter: none;
+
+  /* -------------------------------------------------- attention queue -- */
+  /*
+   * The dashboard's "Needs your attention" priority queue.
+   *
+   * One panel holding several work rows, rather than a stack of cards or a list
+   * ruled off with full-width dividers. The distinction matters: a recruiter
+   * reads this as a single queue of outstanding work, and card-per-item or
+   * heavy rules both break it into unrelated fragments.
+   *
+   * Every colour resolves through the theme variables, so the panel becomes an
+   * elevated dark surface and the indicators become muted washes under `.dark`
+   * without a second set of rules.
+   */
+  .attention-panel {
+    @apply bg-white border border-slate-200 rounded-card overflow-hidden;
+    box-shadow: var(--shadow-card);
+  }
+
+  .attention-row {
+    /* Neutral unless a row states otherwise. */
+    --attention-indicator: var(--c-slate-400);
+    @apply relative grid items-center px-4 py-3.5 transition-colors duration-fast;
+    /*
+     * Marker, role and action share the first grid row; the sentence explaining
+     * the row sits beneath, indented to the role. The three therefore align on
+     * the title's own line at any width, and stay aligned when the sentence
+     * wraps to two or three lines — which is what pulled a vertically centred
+     * layout out of line on narrower screens.
+     */
+    grid-template-columns: 0.5rem minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    column-gap: 0.875rem;
+    row-gap: 0.125rem;
+  }
+
+  /*
+   * All three pinned to the FIRST line of the title, so a long role name that
+   * wraps pushes the sentence down without dragging the marker and the action
+   * into the middle of it. 0.4375rem centres the 8px dot on the 22px line.
+   */
+  .attention-dot { grid-area: 1 / 1; align-self: start; margin-top: 0.4375rem; }
+  .attention-row-title { grid-area: 1 / 2; }
+  .attention-row-action { grid-area: 1 / 3; align-self: start; }
+  .attention-row-context { grid-row: 2; grid-column: 2 / -1; }
+
+  /*
+   * Separators start where the text starts.
+   *
+   * A rule drawn across the full width cuts the panel into slices; inset to the
+   * content column it reads as spacing between related rows instead. Drawn on
+   * the following row so the first row and the panel edge never collide.
+   */
+  .attention-row + .attention-row::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 2.375rem;
+    right: 1rem;
+    height: 1px;
+    background-color: rgb(var(--c-slate-200));
+  }
+
+  .attention-row:hover {
+    background-color: rgb(var(--c-slate-100) / 0.7);
+  }
+
+  /*
+   * Semantic marker, deliberately limited to three meanings — a decision is
+   * waiting, candidates need review, or the role is not set up yet. Mapping
+   * every distinct action to its own hue would turn three rows into a rainbow
+   * and stop the colour meaning anything. Nothing is carried by colour alone:
+   * each row states its situation and names its action in words.
+   */
+  .attention-dot {
+    @apply h-2 w-2 shrink-0 rounded-pill;
+    background-color: rgb(var(--attention-indicator));
+  }
+
+  .attention-row.attention-row-decide { --attention-indicator: var(--c-amber-500); }
+  .attention-row.attention-row-review { --attention-indicator: var(--c-sky-500); }
+  .attention-row.attention-row-setup { --attention-indicator: var(--c-slate-400); }
+
+  /* The arrow leans toward the destination as the row wakes up. */
+  .attention-arrow {
+    transition: transform 150ms ease;
+  }
+
+  .attention-row:hover .attention-arrow {
+    transform: translateX(2px);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .attention-arrow { transition: none; }
+    .attention-row:hover .attention-arrow { transform: none; }
+  }
+
+  /*
+   * Narrow screens: the action drops beneath the text rather than being squeezed
+   * into a column too thin to hold "Review shortlist".
+   */
+  @media (max-width: 639px) {
+    .attention-row {
+      grid-template-columns: 0.5rem minmax(0, 1fr);
+      grid-template-rows: auto auto auto;
     }
 
-    .candidate-action-dock .candidate-action-button {
-      opacity: 1;
-      transform: none;
+    .attention-row-action {
+      grid-area: 3 / 2;
+      justify-self: start;
+      margin-top: 0.375rem;
+    }
+  }
+
+
+  /* ------------------------------------------------------ jobs work index -- */
+  /*
+   * One column template, shared by the header and every row.
+   *
+   * The two previously declared their own grids — identical tracks, but the
+   * header had no column gap and the rows had 12px. The tracks therefore began
+   * at different offsets and every numeric heading sat to the right of the
+   * column it named: 36px off for Candidates, 24px for Strong, 12px for
+   * Shortlisted. Declaring the template in one place is what makes that class of
+   * drift impossible, rather than merely corrected once.
+   */
+  .jobs-grid {
+    grid-template-columns:
+      minmax(190px, 2fr)    /* Role — the dominant field */
+      minmax(76px, 0.7fr)   /* Candidates */
+      minmax(68px, 0.65fr)  /* Strong */
+      minmax(92px, 0.8fr)   /* Shortlisted */
+      minmax(170px, 1.2fr); /* Next — bounded so the action never has to wrap */
+    column-gap: 1.25rem;
+  }
+
+  @media (min-width: 1280px) {
+    .jobs-grid {
+      grid-template-columns:
+        minmax(220px, 2fr)
+        minmax(90px, 0.7fr)
+        minmax(80px, 0.65fr)
+        minmax(110px, 0.8fr)
+        minmax(180px, 1.2fr);
+      column-gap: 1.5rem;
+    }
+  }
+
+  /*
+   * Below the table breakpoint the five columns cannot be held without crushing
+   * the role: at 640px, where the grid used to switch on, the role column had
+   * collapsed to 22px of usable width. The row becomes a stacked card instead
+   * and the counts are read from the summary line already present, so the same
+   * information survives a layout that fits.
+   */
+  .jobs-row {
+    /*
+     * row-gap only, never the  shorthand: the shorthand would also set
+     * column-gap and silently overwrite the shared spacing on .jobs-grid,
+     * which is precisely how the header and the rows drifted apart before.
+     */
+    @apply flex flex-col items-start px-4 py-3;
+    row-gap: 0.625rem;
+  }
+
+  .jobs-row-metric {
+    display: none;
+  }
+
+  @media (min-width: 1024px) {
+    .jobs-row {
+      @apply grid px-5 py-3;
+      row-gap: 0;
+      align-items: center;
     }
 
-    .candidate-card-wrapper:hover .candidate-action-button,
-    .candidate-card-wrapper:focus-within .candidate-action-button {
-      opacity: 1;
-      transform: none;
+    .jobs-row-metric {
+      display: block;
     }
+  }
 
-    .candidate-card-wrapper:hover .candidate-action-button:hover,
-    .candidate-card-wrapper:focus-within .candidate-action-button:focus-visible {
-      transform: none;
-      box-shadow: none;
+  /*
+   * Numbers are read down the column, not across the row, so they are right
+   * aligned on a tabular figure width — 8 and 128 then share an edge and a
+   * digit grid, which is what makes them comparable at a glance.
+   */
+  .jobs-row-metric {
+    @apply text-right text-body font-semibold text-slate-900;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /*
+   * The action starts where its heading starts.
+   *
+   * Right-aligning it made the clear space between the shortlisted figure and
+   * the action a function of how long the label happened to be — 34px after
+   * "Close job", but −21px after "Review candidates", which is the overlap this
+   * was reported for. Anchored to the left edge of its own column, the gap is
+   * the column gap, identical on every row and under every label.
+   */
+  .jobs-row-next {
+    @apply justify-self-start;
+    white-space: nowrap;
+    /*
+     * Stacked, the action reads as the third line of the row, so its text must
+     * start on the same edge as the role and its counts. The button keeps its
+     * padding — the focus ring needs it — and is pulled back by exactly that
+     * amount so the glyphs line up rather than the box.
+     */
+    margin-left: -0.75rem;
+  }
+
+  @media (min-width: 1024px) {
+    .jobs-row-next {
+      margin-left: 0;
     }
   }
 

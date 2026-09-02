@@ -117,6 +117,62 @@ const EXPERIENCE_RANGES = {
 };
 
 /**
+ * Candidate lifecycle scopes.
+ *
+ * A candidate has no lifecycle state of its own — it inherits the state of the
+ * job it belongs to. An OPEN job's candidates are live recruitment work; a
+ * CLOSED job's candidates are hiring history. Deriving this from the relation
+ * rather than storing a second flag on the candidate is what keeps the two from
+ * ever disagreeing, and it means closing a job archives its whole pool in one
+ * write that already happens.
+ */
+const CANDIDATE_SCOPES = Object.freeze(['active', 'archived']);
+
+/** The default. See `buildScopeWhere` for why it is this one. */
+const DEFAULT_CANDIDATE_SCOPE = 'active';
+
+/**
+ * The job-lifecycle condition for a candidate query.
+ *
+ *   active   -> job.status = OPEN
+ *   archived -> job.status = CLOSED, and a jobId is mandatory
+ *
+ * The default is deliberately `active`, and the direction matters: a caller who
+ * forgets to pass a scope gets *fewer* records, not more. Failing the other way
+ * would surface a hired candidate and their whole closed pool inside live
+ * recruitment work, and nothing about the response would look wrong.
+ *
+ * Archived queries require a jobId because history is reached through one closed
+ * job at a time — Closed Jobs, then the role, then its candidates. There is
+ * deliberately no way to ask for every archived candidate across every job.
+ *
+ * That restriction is enforced by *emitting* the jobId into the clause, not only
+ * by validating it. It previously served as a guard alone, which meant the
+ * returned where matched every candidate of every closed job and the promise
+ * above held only because each of the three call sites happened to AND a
+ * `{ jobId }` of its own outside the helper. A caller that trusted the
+ * signature would have silently read the entire archive.
+ *
+ * @param {'active'|'archived'} [scope]
+ * @param {string|null} [jobId]
+ * @throws {Error} archived scope without a jobId
+ */
+const buildScopeWhere = (scope = DEFAULT_CANDIDATE_SCOPE, jobId = null) => {
+  if (!CANDIDATE_SCOPES.includes(scope)) {
+    throw new Error(`Unknown candidate scope "${scope}". Expected one of: ${CANDIDATE_SCOPES.join(', ')}.`);
+  }
+
+  if (scope === 'archived') {
+    if (!jobId) {
+      throw new Error('An archived candidate query requires a jobId. Refusing to return every archived candidate.');
+    }
+    return { jobId, job: { status: 'CLOSED' } };
+  }
+
+  return { job: { status: 'OPEN' } };
+};
+
+/**
  * Builds the Prisma `where` clause for a candidate listing.
  *
  * Every independent condition is pushed onto an AND list. This is what keeps
@@ -124,12 +180,19 @@ const EXPERIENCE_RANGES = {
  * their own OR group, and assigning both to a single top-level `OR` key would
  * make the second silently replace the first.
  *
+ * The lifecycle scope is composed onto the same AND list rather than replacing
+ * anything, so it combines with jobId, status, score, experience, skill,
+ * location, qualification and search exactly as another condition would.
+ *
  * @param {Object} query Request query string values
  * @param {Object} [job] Job record, used to resolve requirement-relative ranges
+ * @param {Object} [options]
+ * @param {'active'|'archived'} [options.scope='active'] Job lifecycle scope
+ * @param {string|null} [options.jobId] Required when scope is 'archived'
  * @returns {Object} Prisma where clause
  */
-const buildCandidateWhere = (query = {}, job = null) => {
-  const and = [];
+const buildCandidateWhere = (query = {}, job = null, { scope = DEFAULT_CANDIDATE_SCOPE, jobId = null } = {}) => {
+  const and = [buildScopeWhere(scope, jobId || query.jobId || null)];
 
   const search = typeof query.search === 'string' ? query.search.trim() : '';
   if (search) {
@@ -268,6 +331,9 @@ const buildPaginationMeta = ({ page, limit, total }) => ({
 });
 
 module.exports = {
+  CANDIDATE_SCOPES,
+  DEFAULT_CANDIDATE_SCOPE,
+  buildScopeWhere,
   HR_STATUSES,
   ASSIGNABLE_HR_STATUSES,
   SORT_OPTIONS,

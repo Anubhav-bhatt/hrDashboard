@@ -29,7 +29,13 @@ const {
 
 const { extractCandidateProfile } = require('../services/candidateExtractor');
 const { extractJDRequirements, extractMinimumExperience } = require('../services/jdRequirementExtractor');
-const { buildCandidateWhere, parsePagination, parseSort, buildPaginationMeta } = require('../utils/candidateQuery');
+const {
+  buildCandidateWhere,
+  buildScopeWhere,
+  parsePagination,
+  parseSort,
+  buildPaginationMeta
+} = require('../utils/candidateQuery');
 const { formatCandidateForApi, formatCandidateDetail, computeCompatibilityFlags } = require('../utils/candidateSerializer');
 
 const suite = createSuite('Unit tests — parsing, querying & serialisation');
@@ -515,15 +521,48 @@ test('requirement extraction tolerates empty and non-string input', () => {
 
 suite.group('Candidate query building');
 
+/*
+ * Every candidate query now carries a job-lifecycle scope clause, and it is the
+ * one condition a caller cannot opt out of (see utils/candidateQuery.js). These
+ * tests therefore assert the scope separately and examine the *filter* clauses
+ * on their own, rather than by position: indexing into AND[0] made each test
+ * quietly depend on the builder never gaining another clause, which is exactly
+ * what happened when the archive scope was introduced.
+ */
+const SCOPE_ACTIVE = { job: { status: 'OPEN' } };
+// Archived carries its jobId: history is reachable one closed job at a time.
+  const SCOPE_ARCHIVED = { jobId: 'job-1', job: { status: 'CLOSED' } };
+const filters = (where) => (where.AND || []).filter((clause) => !clause.job);
+const scopeOf = (where) => (where.AND || []).find((clause) => clause.job) || null;
+
+test('every candidate query carries a lifecycle scope, active by default', () => {
+  assert.deepStrictEqual(scopeOf(buildCandidateWhere({})), SCOPE_ACTIVE);
+  assert.deepStrictEqual(scopeOf(buildCandidateWhere({ search: 'rahul' })), SCOPE_ACTIVE);
+  assert.deepStrictEqual(scopeOf(buildCandidateWhere({ hrStatus: 'SELECTED' })), SCOPE_ACTIVE);
+});
+
+test('the archived scope is reachable only for one named job', () => {
+  assert.deepStrictEqual(scopeOf(buildCandidateWhere({}, null, { scope: 'archived', jobId: 'job-1' })), SCOPE_ARCHIVED);
+  // Refusing an unscoped archived read is what stops a caller from listing every
+  // closed job's candidates at once through an active surface.
+  assert.throws(() => buildCandidateWhere({}, null, { scope: 'archived' }), /requires a jobId/);
+  assert.throws(() => buildScopeWhere('archived'), /requires a jobId/);
+});
+
+test('an unknown scope is refused rather than silently treated as active', () => {
+  assert.throws(() => buildCandidateWhere({}, null, { scope: 'everything' }), /Unknown candidate scope/);
+  assert.throws(() => buildScopeWhere('ALL'), /Unknown candidate scope/);
+});
+
 test('a search term and a location filter both survive as separate AND clauses', () => {
   const where = buildCandidateWhere({ search: 'rahul', location: 'Bengaluru' });
-  assert.strictEqual(where.AND.length, 2, 'both conditions retained');
-  const groups = where.AND.filter((clause) => Array.isArray(clause.OR));
+  assert.strictEqual(filters(where).length, 2, 'both conditions retained');
+  const groups = filters(where).filter((clause) => Array.isArray(clause.OR));
   assert.strictEqual(groups.length, 2, 'each filter keeps its own OR group');
 });
 
 test('search covers name, email, phone, role, location and skills', () => {
-  const [group] = buildCandidateWhere({ search: 'react' }).AND;
+  const [group] = filters(buildCandidateWhere({ search: 'react' }));
   const fields = group.OR.map((condition) => Object.keys(condition)[0]);
   ['name', 'email', 'phone', 'currentRole', 'currentLocation', 'skills'].forEach((field) => {
     assert.ok(fields.includes(field), `search should cover ${field}`);
@@ -531,41 +570,41 @@ test('search covers name, email, phone, role, location and skills', () => {
 });
 
 test('skill matching is case-insensitive via value variants', () => {
-  const [clause] = buildCandidateWhere({ skill: 'react' }).AND;
+  const [clause] = filters(buildCandidateWhere({ skill: 'react' }));
   assert.ok(clause.skills.hasSome.includes('React'), JSON.stringify(clause.skills.hasSome));
   assert.ok(clause.skills.hasSome.includes('react'));
 });
 
 test('repeated skill parameters produce an AND of skills', () => {
   const where = buildCandidateWhere({ skill: ['React', 'Kubernetes'] });
-  const skillClauses = where.AND.filter((clause) => clause.skills);
+  const skillClauses = filters(where).filter((clause) => clause.skills);
   assert.strictEqual(skillClauses.length, 2, 'each skill is required');
 });
 
 test('multiple statuses become an IN filter', () => {
-  const [clause] = buildCandidateWhere({ hrStatus: 'REVIEW,NEEDS_REVIEW' }).AND;
+  const [clause] = filters(buildCandidateWhere({ hrStatus: 'REVIEW,NEEDS_REVIEW' }));
   assert.deepStrictEqual(clause.hrStatus.in, ['REVIEW', 'NEEDS_REVIEW']);
 });
 
 test('an unknown status value is ignored rather than returning nothing', () => {
   const where = buildCandidateWhere({ hrStatus: 'NOT_A_STATUS' });
-  assert.ok(!where.AND || where.AND.length === 0, JSON.stringify(where));
+  assert.strictEqual(filters(where).length, 0, JSON.stringify(where));
 });
 
 test('experience ranges map to numeric bounds, including unknown', () => {
-  assert.deepStrictEqual(buildCandidateWhere({ experienceRange: '2-4' }).AND[0].totalExperience, { gte: 2, lte: 4 });
-  assert.deepStrictEqual(buildCandidateWhere({ experienceRange: '10+' }).AND[0].totalExperience, { gte: 10 });
-  assert.strictEqual(buildCandidateWhere({ experienceRange: 'unknown' }).AND[0].totalExperience, null);
+  assert.deepStrictEqual(filters(buildCandidateWhere({ experienceRange: '2-4' }))[0].totalExperience, { gte: 2, lte: 4 });
+  assert.deepStrictEqual(filters(buildCandidateWhere({ experienceRange: '10+' }))[0].totalExperience, { gte: 10 });
+  assert.strictEqual(filters(buildCandidateWhere({ experienceRange: 'unknown' }))[0].totalExperience, null);
 });
 
 test('requirement-relative experience ranges use the job bounds', () => {
   const job = { minimumExperience: 3, maximumExperience: 6 };
-  assert.deepStrictEqual(buildCandidateWhere({ experienceRange: 'meets_req' }, job).AND[0].totalExperience, { gte: 3, lte: 6 });
-  assert.deepStrictEqual(buildCandidateWhere({ experienceRange: 'below_req' }, job).AND[0].totalExperience, { lt: 3 });
+  assert.deepStrictEqual(filters(buildCandidateWhere({ experienceRange: 'meets_req' }, job))[0].totalExperience, { gte: 3, lte: 6 });
+  assert.deepStrictEqual(filters(buildCandidateWhere({ experienceRange: 'below_req' }, job))[0].totalExperience, { lt: 3 });
 });
 
-test('an empty query produces no filtering', () => {
-  assert.deepStrictEqual(buildCandidateWhere({}), {});
+test('an empty query filters on nothing but the lifecycle scope', () => {
+  assert.deepStrictEqual(buildCandidateWhere({}), { AND: [SCOPE_ACTIVE] });
 });
 
 test('pagination is clamped to sane bounds', () => {

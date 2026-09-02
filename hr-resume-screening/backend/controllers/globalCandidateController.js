@@ -1,3 +1,4 @@
+const prisma = require('../config/prisma');
 const {
   listCandidatesAcrossJobs,
   getCandidateDetail,
@@ -63,7 +64,25 @@ const getCandidate = async (req, res, next) => {
  */
 const getFilterOptions = async (req, res, next) => {
   try {
-    return res.status(200).json({ success: true, data: await getCandidateFilterOptions() });
+    /*
+     * Scope comes from the job named in the request, not from the client.
+     *
+     * A `?jobId=` is resolved to its actual lifecycle here, so a caller cannot
+     * pass `scope=archived` to read a closed pool's facets through the active
+     * endpoint. Without a jobId this is the global active talent pool.
+     */
+    const jobId = typeof req.query.jobId === 'string' && req.query.jobId.trim() ? req.query.jobId.trim() : null;
+    let scope = 'active';
+
+    if (jobId) {
+      const job = await prisma.job.findUnique({ where: { id: jobId }, select: { status: true } });
+      if (!job) {
+        return res.status(404).json({ success: false, code: 'JOB_NOT_FOUND', message: 'Job not found.' });
+      }
+      scope = job.status === 'CLOSED' ? 'archived' : 'active';
+    }
+
+    return res.status(200).json({ success: true, data: await getCandidateFilterOptions({ scope, jobId }) });
   } catch (error) {
     next(error);
   }

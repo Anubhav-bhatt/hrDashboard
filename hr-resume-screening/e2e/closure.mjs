@@ -257,8 +257,8 @@ try {
   body = await text();
   check(/\bActive\b/.test(body), 'the job details header shows Active');
 
-  const closeButton = page.locator('button', { hasText: /select final candidate/i }).first();
-  check((await closeButton.count()) > 0, 'a Select final candidate action is offered on job details');
+  const closeButton = page.locator('button', { hasText: /close job/i }).first();
+  check((await closeButton.count()) > 0, 'a Close job action is offered directly on job details');
   check(await closeButton.isEnabled(), 'it is enabled once candidates are shortlisted');
 
   await closeButton.click();
@@ -277,7 +277,7 @@ try {
   // Nothing preselected: the recruiter must make the choice.
   check((await dialog.locator('input[type=radio]:checked').count()) === 0, 'no candidate is preselected');
 
-  const confirm = dialog.locator('button', { hasText: /confirm & close job/i });
+  const confirm = dialog.locator('button', { hasText: /^close job$/i });
   check(await confirm.isDisabled(), 'confirm is disabled until a candidate is chosen');
 
   // Escape closes the dialog — keyboard users are not trapped.
@@ -292,9 +292,9 @@ try {
   const bravoRadio = dialog.locator(`input[value="${idOf(bravo)}"]`);
   await bravoRadio.check();
   check(await bravoRadio.isChecked(), 'the recruiter selects a candidate who is not the highest scorer');
-  check(await dialog.locator('button', { hasText: /confirm & close job/i }).isEnabled(), 'confirm becomes available');
+  check(await dialog.locator('button', { hasText: /^close job$/i }).isEnabled(), 'confirm becomes available');
 
-  await dialog.locator('button', { hasText: /confirm & close job/i }).click();
+  await dialog.locator('button', { hasText: /^close job$/i }).click();
   await page.waitForTimeout(3000);
 
   body = await text();
@@ -303,8 +303,8 @@ try {
   check(body.includes('Bravo Chosen'), 'the banner names the selected candidate');
   check(/filled on/i.test(body), 'the closure date is shown');
   check(
-    (await page.locator('button', { hasText: /select final candidate/i }).count()) === 0,
-    'the Select final candidate action is gone'
+    (await page.locator('button', { hasText: /close job/i }).count()) === 0,
+    'the Close job action is gone once the role is closed'
   );
   check(
     (await page.locator('a', { hasText: /^Import candidates$/i }).count()) === 0,
@@ -362,29 +362,33 @@ try {
   await page.waitForTimeout(1800);
   check(!(await text()).includes(job.title), 'the closed job no longer appears among active jobs');
 
-  // Primary navigation is the three workspace destinations. Settings and Closed
-  // Jobs sit in a Management group below them, one click away and asserted
-  // separately, so grouping them cannot quietly become losing them. Closed jobs
-  // is also the Closed tab inside Jobs, which is where a recruiter already is
-  // when they want it; the /jobs/closed route still exists for bookmarks.
+  /*
+   * Primary navigation, as approved in the navigation IA revision.
+   *
+   * These previously asserted three destinations — Focus, Jobs, Candidates —
+   * with Closed Jobs demoted into a Management group. That IA was superseded:
+   * Dashboard is named for what it is, and Closed Jobs was promoted to primary
+   * navigation because hiring history is a place recruiters go, not a setting.
+   * Management now holds Settings alone.
+   */
   const navLinks = page.locator('nav[aria-label="Main navigation"] a');
   check(
-    (await navLinks.count()) === 3,
-    'the sidebar offers exactly three workspace destinations',
+    (await navLinks.count()) === 4,
+    'the sidebar offers exactly four workspace destinations',
     `got ${await navLinks.count()}`
   );
   const navLabels = (await navLinks.allInnerTexts()).map((t) => t.trim().toLowerCase());
   check(
-    ['focus', 'jobs', 'candidates'].every((label) => navLabels.includes(label)),
-    'they are Focus, Jobs and Candidates',
+    ['dashboard', 'jobs', 'candidates', 'closed jobs'].every((label) => navLabels.includes(label)),
+    'they are Dashboard, Jobs, Candidates and Closed Jobs',
     navLabels.join(', ')
   );
   const managementLabels = (await page.locator('nav[aria-label="Management"] a').allInnerTexts()).map((t) =>
     t.trim().toLowerCase()
   );
   check(
-    managementLabels.includes('settings') && managementLabels.includes('closed jobs'),
-    'Settings and Closed Jobs remain reachable in Management',
+    managementLabels.includes('settings'),
+    'Settings remains reachable in Management',
     managementLabels.join(', ')
   );
 
@@ -398,8 +402,15 @@ try {
   await page.goto(`${BASE}/jobs/closed`, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1500);
   check(page.url().endsWith('/jobs/closed'), 'the /jobs/closed route still resolves');
+  /*
+   * Closed Jobs is its own destination now, so it — not Jobs — is the current
+   * section on this route. Marking Jobs as current here would tell a recruiter
+   * they were somewhere they are not.
+   */
+  const closedCurrent = await page.locator('a[href="/jobs/closed"][aria-current="page"]').count();
+  check(closedCurrent > 0, 'Closed Jobs is the active section on the history route');
   const jobsCurrent = await page.locator('a[href="/jobs"][aria-current="page"]').count();
-  check(jobsCurrent > 0, 'Jobs stays the active section on the history route');
+  check(jobsCurrent === 0, 'and Jobs is not simultaneously marked current');
 
   /* --------------------------------------------------------- import blocked */
   section('Closed job protections');
@@ -435,30 +446,61 @@ try {
     'the status dropdown is withdrawn for a selected candidate'
   );
 
+  /*
+   * The hire is no longer in the ACTIVE candidate list, and that is the point.
+   *
+   * This asserted that /candidates?hrStatus=SELECTED finds the person hired.
+   * Closing a role now archives its whole pool — the hire included — so the
+   * active list excludes them by design. The filter is in fact structurally
+   * empty on the active scope: SELECTED is only ever written by closing a job,
+   * and closing a job closes it. History is reached through the closed job,
+   * which the assertions above already walked.
+   */
   await page.goto(`${BASE}/candidates?hrStatus=SELECTED`, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(2500);
   body = await text();
-  check(body.includes('Bravo Chosen'), 'the global Selected filter finds the hire');
+  check(!body.includes('Bravo Chosen'), 'the hire has left the active candidate list');
+
   const listStatuses = await api('GET', '/candidates?hrStatus=SELECTED&limit=100');
   check(
-    listStatuses.body.data.every((c) => c.hrStatus === 'SELECTED'),
-    'the Selected filter returns only selected candidates'
+    listStatuses.body.data.length === 0,
+    'a hire always belongs to a closed role, so the active Selected filter is empty',
+    `got ${listStatuses.body.data.length}`
+  );
+
+  // The record itself is intact — archived, not deleted.
+  const archived = await api('GET', `/jobs/${job.id}/candidates?hrStatus=SELECTED&limit=100`);
+  check(
+    archived.body.data.some((c) => c.name === 'Bravo Chosen'),
+    'and is still fully readable through the closed job it belongs to'
   );
 
   /* ------------------------------------------------------------- dashboard */
   section('Dashboard hiring outcome');
   await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
-  await page.locator('a[aria-label^="Candidates"]').waitFor({ state: 'visible', timeout: 20000 });
+  await page.locator('a[aria-label^="Active candidates"]').waitFor({ state: 'visible', timeout: 20000 });
   await page.waitForTimeout(1500);
   body = await text();
-  check(/active jobs/i.test(body), 'the dashboard reports Active jobs');
+  check(/open jobs/i.test(body), 'the dashboard reports Open jobs');
+  check(/active candidates/i.test(body), 'and scopes the candidate figure to active hiring');
   check(/closed jobs/i.test(body), 'and links to Closed jobs');
-  // The headline row reports hires as "Hires / Candidates selected"; the count of
-  // selected candidates is the same backend aggregate, just labelled for HR.
-  check(/\bhires\b/i.test(body) && /candidates selected/i.test(body), 'and the hire count');
+
+  /*
+   * The headline row is active hiring only, so the hire count is no longer in it.
+   *
+   * "Hires" counts SELECTED candidates, and a candidate becomes SELECTED only by
+   * closing their role — so every hire belongs to a closed job. In the active
+   * snapshot the card linked to the active candidate list, where by construction
+   * none of them can appear: the number and its destination disagreed. It now
+   * sits in Analytics beside Closed jobs and Recent hires, so it is asserted
+   * after the disclosure is opened rather than before.
+   */
+  check(!/\bhires\b/i.test(body), 'the hire count has left the active snapshot');
+
   await page.locator('button[aria-controls="dashboard-analytics"]').click();
   await page.waitForTimeout(400);
   body = await text();
+  check(/\bhires\b/i.test(body) && /candidates selected/i.test(body), 'the hire count is in Analytics');
   check(/recent hires/i.test(body), 'the Recent hires section renders');
   check(body.includes('Bravo Chosen'), 'the new hire appears in Recent hires');
   check(!/jobs overview/i.test(body), 'the jobs overview section is no longer on the dashboard');
@@ -521,7 +563,7 @@ try {
   await page.goto(`${BASE}/jobs/${keyboardJob.id}`, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(2200);
 
-  const kbClose = page.locator('button', { hasText: /select final candidate/i }).first();
+  const kbClose = page.locator('button', { hasText: /close job/i }).first();
   await kbClose.focus();
   check(
     await kbClose.evaluate((el) => el === document.activeElement),
@@ -553,7 +595,7 @@ try {
   await page.keyboard.press('Escape');
   await page.waitForTimeout(600);
   const restored = await page.evaluate(() => document.activeElement?.textContent?.trim() || '');
-  check(/select final candidate/i.test(restored), 'focus returns to the trigger after Escape', restored.slice(0, 60));
+  check(/close job/i.test(restored), 'focus returns to the trigger after Escape', restored.slice(0, 60));
 
   section('Runtime health');
   check(pageErrors.length === 0, 'no uncaught exceptions', pageErrors.join(' | '));

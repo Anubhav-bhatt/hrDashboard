@@ -1,12 +1,21 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Archive, Briefcase, Plus, Search, X } from 'lucide-react';
-import { closeJob, getJobShortlist, getJobsSummary, toApiError } from '../services/api';
+import {
+  closeJob,
+  deleteJob,
+  getJobDeletionPreview,
+  getJobShortlist,
+  getJobsSummary,
+  toApiError
+} from '../services/api';
 import { useApiResource } from '../hooks/useApiResource';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useToast } from '../components/ToastProvider';
+import { useAuth } from '../context/AuthContext';
 import JobSummaryCard from '../components/jobs/JobSummaryCard';
 import CloseJobDialog from '../components/jobs/CloseJobDialog';
+import DeleteJobDialog from '../components/jobs/DeleteJobDialog';
 import Pagination from '../components/Pagination';
 import { Button, Card, EmptyState, ErrorState, PageHeader, Skeleton, cx } from '../components/ui';
 
@@ -94,12 +103,61 @@ const JobsList = ({ lockedStatus = null, title = 'Jobs', eyebrow = 'Recruitment'
   const debouncedSearch = useDebouncedValue(searchInput, 350);
 
   const toast = useToast();
+  const { user } = useAuth();
   // Closure from the portal. The dialog's shortlist is fetched only when a
   // recruiter actually opens it, so listing jobs costs no extra queries.
   const [closingJob, setClosingJob] = useState(null);
   const [shortlist, setShortlist] = useState([]);
   const [closeSubmitting, setCloseSubmitting] = useState(false);
   const [closeError, setCloseError] = useState('');
+  /*
+   * Permanent deletion from the list.
+   *
+   * Same two-step contract as the job workspace: measure what is there, then
+   * require the role's own title typed back. Offered only to an ADMIN, because
+   * that is what the API enforces — showing it to a recruiter would be showing
+   * an action that returns 403.
+   */
+  const canDelete = user?.role === 'ADMIN';
+  const [deletingJob, setDeletingJob] = useState(null);
+  const [deletePreview, setDeletePreview] = useState(null);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
+  const openDeleteDialog = async (job) => {
+    setDeleteError('');
+    try {
+      const response = await getJobDeletionPreview(job.id);
+      setDeletePreview(response?.data || null);
+      setDeletingJob(job);
+    } catch (err) {
+      toast.error(toApiError(err).message);
+    }
+  };
+
+  const confirmDelete = async (confirmation) => {
+    setDeleteSubmitting(true);
+    setDeleteError('');
+    try {
+      const response = await deleteJob(deletingJob.id, confirmation);
+      const removed = response?.data?.deleted;
+      const title = deletingJob.title;
+      setDeletingJob(null);
+      setDeletePreview(null);
+      toast.success(
+        removed
+          ? `${title} and ${removed.candidates.toLocaleString('en-IN')} candidate records were permanently deleted.`
+          : `${title} was permanently deleted.`
+      );
+      // Refetch rather than splicing the row out: the closed-job count and the
+      // page boundaries both changed, and the server is the authority on both.
+      refetch();
+    } catch (err) {
+      setDeleteError(toApiError(err).message);
+    } finally {
+      setDeleteSubmitting(false);
+    }
+  };
 
   const openCloseDialog = async (job) => {
     setCloseError('');
@@ -390,12 +448,30 @@ const JobsList = ({ lockedStatus = null, title = 'Jobs', eyebrow = 'Recruitment'
           </div>
 
           <div className={cx('card p-0 overflow-hidden', loading && 'opacity-60')}>
-            <div className="hidden grid-cols-[minmax(0,1fr)_7rem_6rem_7rem_10rem] items-center border-b border-slate-200 bg-slate-50 px-5 py-3 text-label uppercase text-slate-500 sm:grid">
+            {/*
+              The header carries the shared `jobs-grid` template, so its columns
+              are the same tracks the rows below use rather than a second
+              declaration that can drift from them.
+
+              It appears only where the table itself does. Below 1024px the rows
+              are stacked cards, and a column header standing over a stack of
+              cards labels nothing.
+            */}
+            <div
+              data-jobs-header
+              className="jobs-grid hidden items-center border-b border-slate-200 bg-slate-50 px-5 py-3
+                         text-label uppercase text-slate-500 lg:grid"
+            >
               <span>Role</span>
               <span className="text-right">Candidates</span>
               <span className="text-right">Strong</span>
               <span className="text-right">Shortlisted</span>
-              <span className="text-right">Next</span>
+              {/*
+                A closed role has no next step — its hiring is finished — so the
+                column names what it actually holds on each page rather than
+                promising an action the row cannot offer.
+              */}
+              <span>{isHistory || status === 'CLOSED' ? 'Outcome' : 'Next'}</span>
             </div>
             <div className="divide-y divide-slate-100">
               {jobs.map((job) => (
@@ -405,6 +481,7 @@ const JobsList = ({ lockedStatus = null, title = 'Jobs', eyebrow = 'Recruitment'
                   compact
                   strongMatchThreshold={threshold}
                   onCloseJob={openCloseDialog}
+                  onDeleteJob={canDelete ? openDeleteDialog : undefined}
                 />
               ))}
             </div>
@@ -428,6 +505,21 @@ const JobsList = ({ lockedStatus = null, title = 'Jobs', eyebrow = 'Recruitment'
             />
           )}
         </>
+      )}
+
+      {deletingJob && deletePreview && (
+        <DeleteJobDialog
+          job={{ title: deletingJob.title }}
+          counts={deletePreview.counts}
+          submitting={deleteSubmitting}
+          error={deleteError}
+          onConfirm={confirmDelete}
+          onClose={() => {
+            setDeletingJob(null);
+            setDeletePreview(null);
+            setDeleteError('');
+          }}
+        />
       )}
 
       {closingJob && (

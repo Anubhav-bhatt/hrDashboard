@@ -73,7 +73,18 @@ const getDashboardOverview = async ({ jobId = null } = {}) => {
     if (!job) return null;
   }
 
-  const scope = job ? { jobId: job.id } : {};
+  /*
+   * The dashboard reports ACTIVE hiring.
+   *
+   * The global branch previously had no job filter, so every candidate figure —
+   * totals, pipeline, score bands, top and recent candidates — silently counted
+   * closed roles too. A finished hire kept inflating the live workload, and the
+   * "Shortlisted" figure included people whose role had already been filled.
+   *
+   * A job-scoped dashboard stays scoped to exactly that job: the recruiter asked
+   * for that role by name, so its own lifecycle is not a reason to hide it.
+   */
+  const scope = job ? { jobId: job.id } : { job: { status: 'OPEN' } };
   const monthStart = startOfMonth();
   const weekStart = daysAgo(7);
 

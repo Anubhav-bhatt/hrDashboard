@@ -46,7 +46,9 @@ export const getCandidateActions = ({
     {
       id: 'compare',
       label: isCompared ? 'Remove from comparison' : 'Add to comparison',
-      tooltip: 'Compare',
+      // Stateful, because the icon-only dock has nothing else to say what the
+      // control will do next.
+      tooltip: isCompared ? 'Remove from comparison' : 'Compare',
       ariaLabel: `${isCompared ? 'Remove' : 'Compare'} ${candidate.name}${isCompared ? ' from comparison' : ''}`,
       icon: isCompared ? Check : GitCompare,
       onClick: () => onCompare(candidate),
@@ -56,7 +58,7 @@ export const getCandidateActions = ({
     {
       id: 'shortlist',
       label: isSelected ? 'Candidate selected' : isShortlisted ? 'Shortlisted' : 'Shortlist candidate',
-      tooltip: 'Shortlist',
+      tooltip: isSelected ? 'Selected for this role' : isShortlisted ? 'Shortlisted' : 'Shortlist',
       ariaLabel: `Shortlist ${candidate.name}`,
       icon: isShortlisting ? Loader2 : isShortlisted || isSelected ? Check : UserPlus,
       onClick: () => onShortlist(candidate),
@@ -165,6 +167,19 @@ export const CandidateActionButtons = ({ actions, layout = 'dock', onAction }) =
             aria-label={action.ariaLabel || action.label}
             aria-pressed={action.id === 'compare' ? action.active : undefined}
             aria-busy={action.loading || undefined}
+            /*
+             * `redundant` marks a control that duplicates a larger, already
+             * labelled control in the same component — the candidate card's
+             * body is itself a full-size Quick Look button with this exact
+             * name. Two buttons sharing one accessible name is a real defect:
+             * a screen reader announces the candidate twice and offers no way
+             * to tell the two apart. Hiding the smaller copy keeps the pointer
+             * affordance without duplicating the semantics, and loses nothing,
+             * because keyboard and assistive-tech users reach the same action
+             * through the card body.
+             */
+            aria-hidden={action.redundant || undefined}
+            tabIndex={action.redundant ? -1 : undefined}
             onClick={action.onClick}
             disabled={action.disabled}
           >

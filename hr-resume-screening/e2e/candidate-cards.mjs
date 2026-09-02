@@ -57,9 +57,20 @@ try {
   // Keep API reads on the page origin so the browser's authenticated session
   // cookie is included. Calling the backend origin directly creates a separate
   // Playwright request context and incorrectly reports a 401.
-  const jobsPayload = await getJson(`${BASE}/api/jobs/summary?sort=newest&limit=100`);
+  /*
+   * An OPEN job, explicitly.
+   *
+   * This suite shortlists a candidate, and shortlisting is active recruitment
+   * work: a closed job's statuses are its hiring history and the API refuses to
+   * change them. The listing endpoint has no server-side lifecycle default, so
+   * omitting the filter returned open and closed roles interleaved and the suite
+   * picked whichever happened to sort first — which became a closed one, and the
+   * shortlist step then hung waiting for a request the UI correctly never sent.
+   */
+  const jobsPayload = await getJson(`${BASE}/api/jobs/summary?sort=newest&limit=100&status=OPEN`);
   const job = (jobsPayload.data || []).find((item) => item.candidateCount >= 2);
-  if (!job) throw new Error('The test needs a job with at least two candidates.');
+  if (!job) throw new Error('The test needs an OPEN job with at least two candidates.');
+  if (job.status === 'CLOSED') throw new Error('Refusing to run card mutations against a closed job.');
 
   await page.goto(`${BASE}/jobs/${job.id}/candidates`, { waitUntil: 'domcontentloaded' });
   await page.locator('.candidate-card').first().waitFor({ state: 'visible', timeout: 20000 });
@@ -90,34 +101,107 @@ try {
 
   await wrapper.hover();
   const dock = wrapper.locator('.candidate-action-dock');
-  check((await dock.getByRole('button').count()) === 4, 'hover dock exposes four focused actions');
   await page.waitForTimeout(250);
+
+  /*
+   * Approved candidate-action contract.
+   *
+   * This supersedes an earlier design that asserted four floating circular
+   * buttons, one tint per button, sitting 10px+ beneath the card. Two
+   * alternatives were rendered against the real tokens and rejected before
+   * this one was chosen: separate bordered circles turned the active-compare
+   * state into the loudest object on the card, and a detached floating cluster
+   * cut across the card's own bottom edge while adding ~26px of height to every
+   * grid row. The approved treatment is a low-profile strip inside the footer —
+   * no per-icon surface, no extra height, and colour reserved for state.
+   *
+   * Quick Look is deliberately NOT a focusable control in the strip. The card
+   * body is already a full-size button carrying that exact accessible name, and
+   * two buttons sharing one name means a screen reader announces the candidate
+   * twice with no way to tell them apart. The eye icon remains as a pointer
+   * affordance, hidden from the accessibility tree.
+   */
+  const dockIcons = dock.locator('.candidate-action-button');
+  check((await dockIcons.count()) === 4, 'fine-pointer users see all four candidate actions', String(await dockIcons.count()));
+  check(await dock.locator('.candidate-action-view').isVisible(), 'Quick Look action is visible on the card');
+  check(await dock.locator('.candidate-action-screen').isVisible(), 'Screen action is visible on the card');
+  check(await dock.locator('.candidate-action-compare').isVisible(), 'Compare action is visible on the card');
+  check(await dock.locator('.candidate-action-shortlist').isVisible(), 'Shortlist action is visible on the card');
+
+  check(
+    (await card.getByRole('button', { name: /^Quick look at /i }).count()) === 1,
+    'card exposes exactly one accessible Quick Look control'
+  );
+  check(
+    (await dock.getByRole('button').count()) === 3,
+    'Screen, Compare and Shortlist remain keyboard-accessible',
+    String(await dock.getByRole('button').count())
+  );
+
   const dockVisual = await dock.evaluate((element) => {
     const style = getComputedStyle(element);
     const buttons = Array.from(element.querySelectorAll('button'));
+    const surface = getComputedStyle(element.closest('.candidate-card')).backgroundColor;
+    const channel = (value) => {
+      const v = value / 255;
+      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    };
+    const luminance = (colour) => {
+      const [r, g, b] = colour.match(/\d+/g).map(Number).map(channel);
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const contrast = (a, b) => {
+      const [x, y] = [luminance(a), luminance(b)];
+      return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+    };
     return {
       background: style.backgroundColor,
       border: [style.borderTopWidth, style.borderRightWidth, style.borderBottomWidth, style.borderLeftWidth],
       shadow: style.boxShadow,
-      gap: parseFloat(style.columnGap),
       buttonSizes: buttons.map((button) => {
         const rect = button.getBoundingClientRect();
         return [Math.round(rect.width), Math.round(rect.height)];
       }),
-      buttonColors: buttons.map((button) => getComputedStyle(button).backgroundColor)
+      iconContrast: buttons.map((button) => Number(contrast(getComputedStyle(button).color, surface).toFixed(2)))
     };
   });
-  check(dockVisual.background === 'rgba(0, 0, 0, 0)', 'action bridge has no shared background', dockVisual.background);
-  check(dockVisual.border.every((width) => width === '0px') && dockVisual.shadow === 'none', 'action bridge has no shared border or shadow');
-  check(dockVisual.gap >= 14 && dockVisual.buttonSizes.every(([width, height]) => width >= 40 && height >= 40), 'independent action circles have comfortable size and spacing');
-  check(new Set(dockVisual.buttonColors).size === 4, 'each action circle has its own restrained semantic tint', JSON.stringify(dockVisual.buttonColors));
-  const spacing = await Promise.all([card.boundingBox(), dock.boundingBox()]);
-  check(spacing.every(Boolean) && spacing[1].y - (spacing[0].y + spacing[0].height) >= 10, 'actions float at least 10px below the candidate card');
-  if ((await page.locator('.candidate-card-wrapper').count()) > 3) {
-    const nextRowCard = page.locator('.candidate-card').nth(3);
-    const [dockBox, nextRowBox] = await Promise.all([dock.boundingBox(), nextRowCard.boundingBox()]);
-    check(dockBox && nextRowBox && dockBox.y + dockBox.height < nextRowBox.y, 'floating actions do not collide with the next candidate row');
-  }
+  check(dockVisual.background === 'rgba(0, 0, 0, 0)', 'action strip has no surface of its own', dockVisual.background);
+  check(dockVisual.border.every((width) => width === '0px') && dockVisual.shadow === 'none', 'action strip has no border or shadow');
+  check(
+    dockVisual.buttonSizes.every(([width, height]) => width >= 28 && height >= 28),
+    'action controls meet the minimum pointer target',
+    JSON.stringify(dockVisual.buttonSizes)
+  );
+  // Icon-only controls carry a 3:1 non-text contrast requirement.
+  check(
+    dockVisual.iconContrast.every((ratio) => ratio >= 3),
+    'action icons meet the 3:1 non-text contrast floor',
+    JSON.stringify(dockVisual.iconContrast)
+  );
+
+  // The strip lives inside the card, so it costs the grid row no extra height.
+  const [cardBox, dockBox] = await Promise.all([card.boundingBox(), dock.boundingBox()]);
+  check(
+    Boolean(cardBox && dockBox) &&
+      dockBox.y >= cardBox.y &&
+      dockBox.y + dockBox.height <= cardBox.y + cardBox.height + 1,
+    'action strip sits inside the candidate card'
+  );
+
+  // Compare must read its own selected state, not just fire an action.
+  const compareAction = dock.locator('.candidate-action-compare');
+  check((await compareAction.getAttribute('aria-pressed')) === 'false', 'Compare starts in an unselected state');
+  await compareAction.click();
+  await page.waitForTimeout(400);
+  check((await compareAction.getAttribute('aria-pressed')) === 'true', 'Compare reports the selected state');
+  check(((await compareAction.getAttribute('class')) || '').includes('is-active'), 'Compare shows an active treatment when selected');
+  await compareAction.click();
+  await page.waitForTimeout(300);
+  check((await compareAction.getAttribute('aria-pressed')) === 'false', 'Compare clears its selected state');
+
+  // Shortlist's own state treatment is asserted inside the existing shortlist
+  // round-trip further down, where a candidate is actually shortlisted and then
+  // restored — so this contract needs no pre-existing shortlisted data.
 
   await bodyButton.focus();
   await page.waitForTimeout(250);
@@ -174,6 +258,19 @@ try {
       check(response.ok(), 'shortlist uses the existing backend status endpoint');
       await targetCard.getByText('Shortlisted', { exact: true }).waitFor({ state: 'visible' });
       check(true, 'successful shortlist updates the card after the response');
+
+      // The action strip must report the new state, not just the status badge.
+      const shortlistAction = targetCard.locator('.candidate-action-shortlist');
+      check(
+        ((await shortlistAction.getAttribute('class')) || '').includes('is-active'),
+        'Shortlist action reflects the shortlisted state'
+      );
+      check(await shortlistAction.isDisabled(), 'Shortlist action is inert once the candidate is shortlisted');
+      check(
+        /shortlisted/i.test((await shortlistAction.getAttribute('data-tooltip')) || ''),
+        'Shortlist tooltip states the current state',
+        await shortlistAction.getAttribute('data-tooltip')
+      );
 
       const restore = await page.request.patch(
         `${BASE}/api/jobs/${job.id}/candidates/${shortlistCandidate._id}/status`,
