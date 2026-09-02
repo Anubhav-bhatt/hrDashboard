@@ -23,7 +23,14 @@ const ASSISTANT_INTENT_SCHEMA = Object.freeze({
     scope: { type: ['string', 'null'], enum: ['CURRENT_JOB', 'WORKSPACE', null] },
     requiresJobContext: { type: ['boolean', 'null'] }
   },
-  required: ['intent'],
+  required: [
+    'intent',
+    'candidateName',
+    'candidateReference',
+    'candidateCount',
+    'scope',
+    'requiresJobContext'
+  ],
   additionalProperties: false
 });
 

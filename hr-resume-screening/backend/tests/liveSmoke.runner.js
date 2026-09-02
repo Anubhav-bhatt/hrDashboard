@@ -11,7 +11,8 @@
  */
 
 require('dotenv').config();
-const { OpenAIProvider, DEFAULT_MODEL } = require('../ai/providers/OpenAIProvider');
+const { OpenAIProvider } = require('../ai/providers/OpenAIProvider');
+const { OpenRouterProvider } = require('../ai/providers/OpenRouterProvider');
 const { runAssistantAgent } = require('../ai/modes/assistant.agent');
 const { validateAssistantIntent } = require('../ai/providers/schemas/assistantIntent.schema');
 const { evaluateParameterAgreement } = require('../ai/logging/shadowLogger');
@@ -146,35 +147,47 @@ const runLiveSmokeCertification = async () => {
   console.log('  Live API Credential Validation & Shadow Smoke Certification');
   console.log('================================================================\n');
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const providerName = (process.env.AI_PROVIDER || (process.env.OPENROUTER_API_KEY ? 'openrouter' : 'openai')).toLowerCase();
+  const apiKey = providerName === 'openrouter' ? process.env.OPENROUTER_API_KEY : process.env.OPENAI_API_KEY;
   const isKeyConfigured = Boolean(apiKey && apiKey.trim() && !apiKey.includes('your_'));
 
   if (!isKeyConfigured) {
     console.log('  [STATUS] LIVE VALIDATION NOT RUN — CREDENTIAL NOT CONFIGURED');
-    console.log('  Provide OPENAI_API_KEY in backend/.env to run live provider certification.\n');
+    console.log(`  Provide ${providerName === 'openrouter' ? 'OPENROUTER_API_KEY' : 'OPENAI_API_KEY'} in backend/.env to run live provider certification.\n`);
     return {
       status: 'NOT_CONFIGURED',
       passed: false,
-      reason: 'OPENAI_API_KEY not configured in local environment.'
+      reason: `${providerName === 'openrouter' ? 'OPENROUTER_API_KEY' : 'OPENAI_API_KEY'} not configured in local environment.`
     };
   }
 
-  const model = process.env.AI_MODEL || DEFAULT_MODEL;
+  const defaultModel = providerName === 'openrouter' ? 'openai/gpt-4o-mini' : 'gpt-4o-mini';
+  const model = process.env.AI_MODEL || process.env.OPENROUTER_MODEL || defaultModel;
   const timeoutMs = parseInt(process.env.AI_REQUEST_TIMEOUT_MS, 10) || 15000;
   const maxOutputTokens = parseInt(process.env.AI_MAX_OUTPUT_TOKENS, 10) || 500;
+  const baseUrl = process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1';
 
-  console.log(`  Provider:    openai`);
+  console.log(`  Provider:    ${providerName}`);
   console.log(`  Model:       ${model}`);
   console.log(`  Timeout:     ${timeoutMs}ms`);
   console.log(`  Max Tokens:  ${maxOutputTokens}`);
   console.log(`  Credential:  [CONFIGURED LOCALLY - REDACTED]\n`);
 
-  const provider = new OpenAIProvider({
-    apiKey,
-    model,
-    timeoutMs,
-    maxOutputTokens
-  });
+  const provider =
+    providerName === 'openrouter'
+      ? new OpenRouterProvider({
+          apiKey,
+          model,
+          baseUrl,
+          timeoutMs,
+          maxOutputTokens
+        })
+      : new OpenAIProvider({
+          apiKey,
+          model,
+          timeoutMs,
+          maxOutputTokens
+        });
 
   const toolRunner = createMockToolRunner();
 

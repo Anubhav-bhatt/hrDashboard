@@ -18,7 +18,7 @@
 const { AGENT_MODES, AGENT_MODE_IDS } = require('../modes/agentModes');
 
 /** Providers this build can actually construct. */
-const SUPPORTED_PROVIDERS = Object.freeze(['mock', 'openai']);
+const SUPPORTED_PROVIDERS = Object.freeze(['mock', 'openai', 'openrouter']);
 
 /**
  * Providers we intend to support but have not implemented. Naming them lets the
@@ -174,7 +174,18 @@ const resolveAiConfig = (env = process.env) => {
 
   const requestTimeoutMs = parseLimit(env.AI_REQUEST_TIMEOUT_MS, 'AI_REQUEST_TIMEOUT_MS', warnings);
   const maxOutputTokens = parseLimit(env.AI_MAX_OUTPUT_TOKENS, 'AI_MAX_OUTPUT_TOKENS', warnings);
-  const model = env.AI_MODEL || (provider === 'openai' ? 'gpt-4o-mini' : 'mock-v1');
+  const defaultModel =
+    provider === 'openrouter'
+      ? 'openai/gpt-4o-mini'
+      : provider === 'openai'
+        ? 'gpt-4o-mini'
+        : 'mock-v1';
+  const model = env.AI_MODEL || env.OPENROUTER_MODEL || defaultModel;
+  const apiKey =
+    provider === 'openrouter'
+      ? env.OPENROUTER_API_KEY || null
+      : env.OPENAI_API_KEY || null;
+  const openRouterBaseUrl = env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1';
 
   return Object.freeze({
     enabled,
@@ -187,7 +198,8 @@ const resolveAiConfig = (env = process.env) => {
     requestTimeoutMs,
     maxOutputTokens,
     model,
-    apiKey: env.OPENAI_API_KEY || null,
+    apiKey,
+    openRouterBaseUrl,
     warnings: Object.freeze(warnings)
   });
 };

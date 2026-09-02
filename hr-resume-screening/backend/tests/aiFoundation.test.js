@@ -72,7 +72,7 @@ const run = async () => {
   test('the provider defaults to mock, so no API key is ever required', () => {
     assert.strictEqual(resolveAiConfig({}).provider, DEFAULT_PROVIDER);
     assert.strictEqual(DEFAULT_PROVIDER, 'mock');
-    assert.deepStrictEqual(SUPPORTED_PROVIDERS, ['mock', 'openai']);
+    assert.deepStrictEqual(SUPPORTED_PROVIDERS, ['mock', 'openai', 'openrouter']);
   });
 
   test('an empty or whitespace provider falls back to mock rather than failing', () => {

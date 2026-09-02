@@ -20,6 +20,7 @@ const {
 const { aiProviderInvalid, AiError } = require('../errors/ai.errors');
 const { MockAIProvider } = require('./MockAIProvider');
 const { OpenAIProvider } = require('./OpenAIProvider');
+const { OpenRouterProvider } = require('./OpenRouterProvider');
 
 /**
  * Provider name -> factory. Adding a real vendor later means adding one entry
@@ -33,6 +34,17 @@ const PROVIDER_FACTORIES = new Map([
       new OpenAIProvider({
         apiKey: config?.apiKey || process.env.OPENAI_API_KEY,
         model: config?.model || process.env.AI_MODEL,
+        timeoutMs: config?.requestTimeoutMs,
+        maxOutputTokens: config?.maxOutputTokens
+      })
+  ],
+  [
+    'openrouter',
+    (config) =>
+      new OpenRouterProvider({
+        apiKey: config?.apiKey || process.env.OPENROUTER_API_KEY,
+        model: config?.model || process.env.AI_MODEL,
+        baseUrl: config?.openRouterBaseUrl || process.env.OPENROUTER_BASE_URL,
         timeoutMs: config?.requestTimeoutMs,
         maxOutputTokens: config?.maxOutputTokens
       })
