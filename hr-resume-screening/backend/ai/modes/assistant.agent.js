@@ -40,9 +40,9 @@ const { validateAssistantIntent } = require('../providers/schemas/assistantInten
 const parseIntent = (message = '') => {
   const msg = message.trim().toLowerCase();
 
-  // 1. SAFETY: Prohibited write actions
+  // 1. SAFETY: Prohibited write actions (including injection / override attempts)
   if (
-    /\b(shortlist\s+[a-z0-9\s._-]+|select\s+[a-z0-9\s._-]+|hire\s+[a-z0-9\s._-]+|close\s+(?:the\s+|this\s+)?job|delete\s+(?:the\s+|this\s+)?job|reject\s+(?:all|low|candidates))\b/i.test(
+    /\b(shortlist\s+[a-z0-9\s._-]+|select\s+[a-z0-9\s._-]+|hire\s+[a-z0-9\s._-]+|close\s+(?:the\s+|this\s+)?(?:job|opening|role)|delete\s+(?:the\s+|this\s+)?(?:job|role)|reject\s+(?:all|low|everyone|candidates))\b/i.test(
       msg
     ) &&
     !/\b(how|what|view|review|show|summary|compare|screen|rank)\b/i.test(msg)
@@ -51,7 +51,12 @@ const parseIntent = (message = '') => {
   }
 
   // 2. SAFETY: Prohibited protected attribute ranking / filtering
-  if (/\b(?:by|based\s+on)\s+(?:age|gender|sex|race|religion|caste|marital\s+status|ethnicity|sexual\s+orientation)\b/i.test(msg)) {
+  if (
+    /\b(?:by|based\s+on|prefer|filter\s+by)\s+(?:age|younger|older|gender|sex|male|female|men|women|race|religion|caste|marital\s+status|ethnicity|sexual\s+orientation)\b/i.test(
+      msg
+    ) ||
+    /\b(?:younger|older|male\s+applicants|religion|caste|married\s+candidates|filter\s+by\s+race)\b/i.test(msg)
+  ) {
     return { intent: 'SAFETY_PROTECTED_TRAIT' };
   }
 
@@ -62,7 +67,7 @@ const parseIntent = (message = '') => {
 
   // 4. INSIGHTS
   if (
-    /\b(insights|needs?\s+(?:my\s+)?attention|what\s+should\s+i\s+focus\s+on|how\s+is\s+(?:this|the)\s+job\s+doing|how's\s+this\s+(?:position|role|job)\s+looking|pipeline\s+health|hiring\s+performance)\b/i.test(
+    /\b(insights?|insghts|atenttion|pulse|needs?\s+(?:my\s+)?attention|what\s+should\s+i\s+focus\s+on|how\s+is\s+(?:this|the)\s+job\s+doing|how's\s+this\s+(?:position|role|job)\s+looking|pipeline\s+health|hiring\s+(?:performance|pulse))\b/i.test(
       msg
     )
   ) {
@@ -71,7 +76,7 @@ const parseIntent = (message = '') => {
   }
 
   // 5. RANK AND COMPARE
-  if (/\brank\b/i.test(msg) && /\bcompare\b/i.test(msg)) {
+  if (/\brank\b/i.test(msg) && /\b(?:compare|compair|comapre)\b/i.test(msg)) {
     const numMatch = msg.match(/(?:top|first)?\s*(\d+)/i);
     const targetCount = numMatch ? parseInt(numMatch[1], 10) : 3;
     return { intent: 'RANK_AND_COMPARE', targetCount };
@@ -79,7 +84,7 @@ const parseIntent = (message = '') => {
 
   // 6. RANK CANDIDATES
   if (
-    /\b(rank|who\s+looks?\s+strongest|who\s+stands?\s+out|who\s+should\s+i\s+look\s+at\s+first|best\s+matches|top\s+matches)\b/i.test(
+    /\b(rank|who\s+looks?\s+(?:best|strongest)|who\s+stands?\s+out|who\s+should\s+i\s+look\s+at\s+first|best\s+match(?:es)?|top\s+matches|give\s+me\s+the\s+strongest|canddiates|candiadtes|aplicants|strong\s+experience|who\s+is\s+best\s+match)\b/i.test(
       msg
     )
   ) {
@@ -87,16 +92,16 @@ const parseIntent = (message = '') => {
   }
 
   // 7. COMPARE CANDIDATES
-  if (/\b(compare|put\s+side\s+by\s+side)\b/i.test(msg)) {
+  if (/\b(compare|compair|comapre|put\s+side\s+by\s+side|side\s+by\s+side)\b/i.test(msg)) {
     const numMatch = msg.match(/(?:top|first|strongest)?\s*(\d+)/i);
     let targetCount = numMatch ? parseInt(numMatch[1], 10) : 2;
-    if (msg.includes('top 3') || msg.includes('three') || msg.includes('strongest three')) targetCount = 3;
+    if (msg.includes('top 3') || msg.includes('three') || msg.includes('strongest three') || msg.includes('top tree')) targetCount = 3;
     if (msg.includes('top 2') || msg.includes('two') || msg.includes('strongest two')) targetCount = 2;
     return { intent: 'COMPARE_CANDIDATES', targetCount };
   }
 
   // 8. SCREEN CANDIDATE
-  if (/\b(screen|evaluate|check)\b/i.test(msg)) {
+  if (/\b(screen|scren|scern|evaluate|check|how\s+does|scores?|fit\s+this\s+role)\b/i.test(msg)) {
     let targetCandidate = null;
 
     if (/\b(first|1st|#1)\b/i.test(msg)) {
@@ -106,10 +111,16 @@ const parseIntent = (message = '') => {
     } else if (/\b(third|3rd|#3)\b/i.test(msg)) {
       targetCandidate = { position: 3 };
     } else {
-      // Extract candidate name after "screen", "evaluate", or "check <name> against"
-      let nameMatch = message.match(/\b(?:screen|evaluate)\s+(?:candidate\s+)?([a-z0-9\s._-]+)/i);
+      // Extract candidate name after "screen", "scren", "scern", "evaluate", "check", "how does", or "scores"
+      let nameMatch = message.match(/\b(?:screen|scren|scern|evaluate)\s+(?:candidate\s+)?([a-z0-9\s._-]+)/i);
       if (!nameMatch) {
         nameMatch = message.match(/\bcheck\s+([a-z0-9\s._-]+?)\s+(?:against|for)\b/i);
+      }
+      if (!nameMatch) {
+        nameMatch = message.match(/\bhow\s+does\s+([a-z0-9\s._-]+?)\s+fit\b/i);
+      }
+      if (!nameMatch) {
+        nameMatch = message.match(/\bhow\s+([a-z0-9\s._-]+?)\s+scores\b/i);
       }
       if (nameMatch && nameMatch[1]) {
         const cleaned = nameMatch[1].replace(/\b(for|the|this|candidate)\b/gi, '').trim();
@@ -119,7 +130,7 @@ const parseIntent = (message = '') => {
       }
     }
 
-    if (targetCandidate || /\bscreen\b/i.test(msg)) {
+    if (targetCandidate || /\b(screen|scren|scern)\b/i.test(msg)) {
       return { intent: 'SCREEN_CANDIDATE', targetCandidate };
     }
   }

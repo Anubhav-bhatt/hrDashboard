@@ -17,6 +17,7 @@
     "test:ai:provider": "node tests/openAIProvider.test.js",
     "test:ai:shadow": "node tests/shadowMode.test.js",
     "test:ai:live": "node tests/liveMode.test.js",
+    "test:ai:quality": "node tests/providerQuality.test.js",
     "test:api": "node tests/api.test.js",
     "test:jobs": "node tests/jobPortal.test.js",
     "test:closure": "node tests/jobClosure.test.js",

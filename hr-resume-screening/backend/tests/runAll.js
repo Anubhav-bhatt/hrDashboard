@@ -30,7 +30,8 @@ const SUITES = [
   { name: 'AI Assistant Evaluation Framework', file: 'assistantEvaluation.runner.js', requiresDatabase: false },
   { name: 'OpenAI Provider Contract & Normalization', file: 'openAIProvider.test.js', requiresDatabase: false },
   { name: 'AI Assistant Shadow Mode & Telemetry', file: 'shadowMode.test.js', requiresDatabase: false },
-  { name: 'AI Assistant Live Mode & Language Understanding', file: 'liveMode.test.js', requiresDatabase: false }
+  { name: 'AI Assistant Live Mode & Language Understanding', file: 'liveMode.test.js', requiresDatabase: false },
+  { name: 'AI Provider Quality & Rollout Readiness', file: 'providerQuality.test.js', requiresDatabase: false }
 ];
 
 const runSuite = (file) =>
