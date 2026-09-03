@@ -178,16 +178,49 @@ try {
     check(true, 'the AI Recruitment group appears in the sidebar');
 
     const group = aiNav(page);
-    for (const label of ['AI Assistant', 'Screening Agent', 'Ranking Agent', 'Comparison Agent', 'Insights Agent']) {
-      check((await group.getByText(label, { exact: true }).count()) > 0, `the group lists ${label}`);
+
+    /*
+     * The rail names tasks, not agents, and it promotes the two destinations that
+     * answer something on arrival. Screening, ranking and comparison each need a
+     * job or a candidate chosen first, so they sit in a disclosure rather than
+     * competing with the Assistant as equals.
+     */
+    for (const label of ['AI Assistant', 'Hiring Insights']) {
+      check((await group.getByText(label, { exact: true }).count()) > 0, `the group promotes ${label}`);
     }
 
-    // The existing destinations must be untouched by the addition. Scoped to the
-    // sidebar as a whole rather than to Main navigation alone: Settings sits in
-    // the Management group, so pinning it to one group would test the grouping
-    // rather than the thing that matters here, which is that adding the AI
-    // section removed no existing destination.
-    const sidebarNav = page.locator('nav[aria-label="Main navigation"], nav[aria-label="Management"]');
+    const toolsToggle = page.locator('button[aria-controls="ai-tools-group"]');
+    check((await toolsToggle.count()) === 1, 'the specialist tools sit behind one disclosure');
+    check((await toolsToggle.getAttribute('aria-expanded')) === 'false', 'the tools disclosure starts closed');
+
+    // Closed means closed: reduced exposure has to be real, not just visual.
+    for (const label of ['Screen Candidate', 'Find Best Matches', 'Compare Candidates']) {
+      check((await group.getByText(label, { exact: true }).count()) === 0, `${label} is tucked away by default`);
+    }
+
+    await toolsToggle.click();
+    await page.waitForTimeout(300);
+    check((await toolsToggle.getAttribute('aria-expanded')) === 'true', 'the disclosure opens');
+
+    for (const label of ['Screen Candidate', 'Find Best Matches', 'Compare Candidates']) {
+      check((await group.getByText(label, { exact: true }).count()) > 0, `the disclosure lists ${label}`);
+    }
+
+    // Every specialist route stays reachable from the rail — demoted, not removed.
+    for (const href of ['/ai/screening', '/ai/ranking', '/ai/comparison']) {
+      check((await group.locator(`a[href="${href}"]`).count()) === 1, `${href} is still reachable from the rail`);
+    }
+
+    await toolsToggle.click();
+    await page.waitForTimeout(300);
+
+    // The existing destinations must be untouched by the regrouping. Scoped
+    // across the hiring and system groups rather than to Main navigation alone,
+    // because the point being tested is that no destination was lost — not which
+    // heading it now sits under.
+    const sidebarNav = page.locator(
+      'nav[aria-label="Main navigation"], nav[aria-label="Hiring navigation"], nav[aria-label="System navigation"]'
+    );
     for (const label of ['Dashboard', 'Jobs', 'Candidates', 'Closed Jobs', 'Settings']) {
       check((await sidebarNav.getByText(label, { exact: true }).count()) > 0, `existing nav still lists ${label}`);
     }
@@ -209,27 +242,41 @@ try {
     /* ---------------------------------------------------- route + active -- */
     section('Routes and active highlighting');
 
+    /*
+     * Two names per route, deliberately.
+     *
+     * `title` is the agent page's own heading, which is unchanged. `navLabel` is
+     * the task language the rail uses for the same destination. They differ, and
+     * the test says so rather than assuming one name reaches everywhere.
+     */
     const ROUTES = [
-      ['/ai', 'AI Assistant'],
-      ['/ai/screening', 'Screening Agent'],
-      ['/ai/ranking', 'Ranking Agent'],
-      ['/ai/comparison', 'Comparison Agent'],
-      ['/ai/insights', 'Insights Agent']
+      ['/ai', 'AI Assistant', 'AI Assistant'],
+      ['/ai/screening', 'Screening Agent', 'Screen Candidate'],
+      ['/ai/ranking', 'Ranking Agent', 'Find Best Matches'],
+      ['/ai/comparison', 'Comparison Agent', 'Compare Candidates'],
+      ['/ai/insights', 'Insights Agent', 'Hiring Insights']
     ];
 
-    for (const [route, title] of ROUTES) {
+    for (const [route, title, navLabel] of ROUTES) {
       await page.goto(`${BASE}${route}`, { waitUntil: 'networkidle' });
       await page.locator('h1').first().waitFor({ state: 'visible', timeout: 15000 });
 
       const heading = await page.locator('h1').first().innerText();
       check(heading.trim() === title, `${route} renders ${title}`, heading);
 
+      // Standing on a tucked-away tool's route reveals it, so the active item is
+      // never highlighted somewhere the recruiter cannot see.
       const current = page.locator(`nav[aria-label="AI Recruitment"] a[aria-current="page"]`);
       check((await current.count()) === 1, `${route} highlights exactly one sidebar item`);
-      check((await current.innerText()).includes(title), `${route} highlights ${title}`);
+      check((await current.innerText()).includes(navLabel), `${route} highlights ${navLabel}`);
 
-      // Every page carries exactly one AI acknowledgement, not one per element.
-      const badges = await page.getByText('AI', { exact: true }).count();
+      /*
+       * Every page carries exactly one AI acknowledgement, not one per element.
+       * Scoped to the main region: the rail's group heading and the breadcrumb
+       * root are both the word "AI" as well, and they are navigation chrome
+       * rather than the page's badge.
+       */
+      const badges = await page.locator('main').getByText('AI', { exact: true }).count();
       check(badges === 1, `${route} shows a single AI badge`, String(badges));
     }
 
@@ -414,10 +461,15 @@ try {
 
     await aiNav(page).waitFor({ state: 'visible', timeout: 15000 });
 
+    // Ranking is a specialist tool, so its row lives in the disclosure.
+    const toolsDisclosure = page.locator('button[aria-controls="ai-tools-group"]');
+    await toolsDisclosure.click();
+    await page.waitForTimeout(300);
+
     const rankingLink = aiNav(page).locator('a[href="/ai/ranking"]');
     check((await rankingLink.count()) === 0, 'a disabled agent is not a link');
     check(
-      (await aiNav(page).locator('[aria-disabled="true"]:has-text("Ranking Agent")').count()) === 1,
+      (await aiNav(page).locator('[aria-disabled="true"]:has-text("Find Best Matches")').count()) === 1,
       'a disabled agent is shown as unavailable rather than hidden'
     );
     check(/Soon/i.test(await aiNav(page).innerText()), 'the disabled agent is marked "Soon"');
@@ -448,11 +500,18 @@ try {
     check((await aiNav(page).count()) === 0, 'the entire AI group is hidden');
 
     const shell = await bodyText(page);
-    check(!/Screening Agent|Ranking Agent|Comparison Agent/i.test(shell), 'no agent is mentioned anywhere in the shell');
+    check(
+      !/Screening Agent|Ranking Agent|Comparison Agent|Screen Candidate|Find Best Matches|Compare Candidates|Hiring Insights/i.test(
+        shell
+      ),
+      'no agent is mentioned anywhere in the shell, under either name'
+    );
 
     // The recruitment application must be exactly as it was. Sidebar-wide for the
-    // same reason as above — Settings lives in the Management group.
-    const sidebarNav = page.locator('nav[aria-label="Main navigation"], nav[aria-label="Management"]');
+    // same reason as above — Settings lives in the System group.
+    const sidebarNav = page.locator(
+      'nav[aria-label="Main navigation"], nav[aria-label="Hiring navigation"], nav[aria-label="System navigation"]'
+    );
     for (const label of ['Dashboard', 'Jobs', 'Candidates', 'Closed Jobs', 'Settings']) {
       check((await sidebarNav.getByText(label, { exact: true }).count()) > 0, `${label} still present with AI off`);
     }

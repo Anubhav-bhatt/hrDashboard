@@ -210,67 +210,70 @@ try {
   await page.locator('nav[aria-label="Main navigation"]').first().waitFor({ state: 'visible', timeout: 20000 });
 
   /*
-   * Primary navigation is the three workspace destinations; Settings and Closed
-   * Jobs moved into a Management group when the AI section was added, so the
-   * sidebar reads as "where I work" then "what I manage" rather than one flat
-   * list. Both halves are asserted, so the split is verified rather than merely
-   * tolerated: nothing has become unreachable, it has only been grouped.
-   */
-  /*
-   * OLD: three destinations — Focus, Jobs, Candidates.
-   * NEW: four — Dashboard, Jobs, Candidates, Closed Jobs.
+   * The sidebar is four named groups, not one flat list.
    *
-   * WHY: "Focus" was renamed to "Dashboard" because /focus is Minimal Mode and
-   *      one word cannot name two surfaces; Closed Jobs was promoted out of
-   *      Management as a primary recruiter destination. The count is still
-   *      asserted exactly, so the simplification this suite protects — a short,
-   *      fixed primary nav — remains enforced at its new value.
+   * OLD: one "Main navigation" group holding Dashboard, Jobs, Candidates and
+   *      Closed Jobs, plus a "Management" group holding Settings.
+   * NEW: WORKSPACE (where am I) / HIRING (what am I hiring for) / AI (what can
+   *      help me) / SYSTEM (what do I configure).
+   *
+   * WHY: with the funnel sitting beside the Dashboard, "Workspace" had come to
+   *      mean "everything", which is the same as meaning nothing. The property
+   *      this suite protects is unchanged and still asserted exactly — a short,
+   *      fixed set of primary destinations, with not everything promoted to
+   *      primary — it is now asserted per group instead of over one list.
    */
-  const navLinks = page.locator('nav[aria-label="Main navigation"] a');
+  const workspaceNav = page.locator('nav[aria-label="Main navigation"] a');
   check(
-    (await navLinks.count()) === 4,
-    'primary navigation is exactly four workspace destinations',
-    `got ${await navLinks.count()}`
+    (await workspaceNav.count()) === 1,
+    'WORKSPACE is exactly one destination',
+    `got ${await workspaceNav.count()}`
   );
-  const labels = (await navLinks.allInnerTexts()).map((t) => t.trim().toLowerCase());
+  const workspaceLabels = (await workspaceNav.allInnerTexts()).map((t) => t.trim().toLowerCase());
   check(
-    JSON.stringify(labels) === JSON.stringify(['dashboard', 'jobs', 'candidates', 'closed jobs']),
-    'they are Dashboard, Jobs, Candidates, Closed Jobs',
-    labels.join(', ')
+    JSON.stringify(workspaceLabels) === JSON.stringify(['dashboard']),
+    'WORKSPACE is the Dashboard',
+    workspaceLabels.join(', ')
   );
 
-  const managementLinks = page.locator('nav[aria-label="Management"] a');
-  const managementLabels = (await managementLinks.allInnerTexts()).map((t) => t.trim().toLowerCase());
-  check(managementLabels.includes('settings'), 'Settings remains reachable in Management', managementLabels.join(', '));
+  const hiringNav = page.locator('nav[aria-label="Hiring navigation"] a');
+  check(
+    (await hiringNav.count()) === 3,
+    'HIRING is exactly three destinations',
+    `got ${await hiringNav.count()}`
+  );
+  const hiringLabels = (await hiringNav.allInnerTexts()).map((t) => t.trim().toLowerCase());
+  check(
+    JSON.stringify(hiringLabels) === JSON.stringify(['jobs', 'candidates', 'closed jobs']),
+    'they are Jobs, Candidates, Closed Jobs',
+    hiringLabels.join(', ')
+  );
+
+  const systemLinks = page.locator('nav[aria-label="System navigation"] a');
+  const systemLabels = (await systemLinks.allInnerTexts()).map((t) => t.trim().toLowerCase());
+  check(systemLabels.includes('settings'), 'Settings remains reachable under SYSTEM', systemLabels.join(', '));
 
   /*
-   * Closed Jobs placement — approved change.
+   * Closed Jobs sits with the hiring funnel, not with configuration.
    *
-   * OLD: Closed Jobs was intentionally nested under Management, and this suite
-   *      asserted both `Closed Jobs remains reachable in Management` and
-   *      `/jobs/closed is not a permanent sidebar destination`.
-   *
-   * NEW: Closed Jobs is promoted into primary navigation, after Candidates.
-   *
-   * WHY: Hiring history is a high-frequency recruiter destination. Grouping it
-   *      with Settings put a routine workflow behind the same heading as
-   *      configuration a recruiter opens a few times a year. The product
-   *      navigation is being simplified around primary recruiter workflows, so
-   *      the old assertions describe an IA the product no longer has.
-   *
-   * Management keeps Settings, so the "not everything is primary" property the
-   * old assertion protected is still asserted directly above.
+   * Hiring history is a high-frequency recruiter destination; grouping it with
+   * Settings put a routine workflow behind the same heading as configuration a
+   * recruiter opens a few times a year.
    */
-  const primaryClosed = page.locator('nav[aria-label="Main navigation"] a[href="/jobs/closed"]');
-  check((await primaryClosed.count()) === 1, 'Closed Jobs appears exactly once in primary navigation', String(await primaryClosed.count()));
+  const primaryClosed = page.locator('nav[aria-label="Hiring navigation"] a[href="/jobs/closed"]');
+  check(
+    (await primaryClosed.count()) === 1,
+    'Closed Jobs appears exactly once in the hiring group',
+    String(await primaryClosed.count())
+  );
   check(
     (await page.locator('aside nav a[href="/jobs/closed"]').count()) === 1,
     'Closed Jobs is not duplicated across the sidebar'
   );
   check(
-    !managementLabels.includes('closed jobs'),
-    'Closed Jobs no longer sits under Management',
-    managementLabels.join(', ')
+    !systemLabels.includes('closed jobs'),
+    'Closed Jobs does not sit under SYSTEM',
+    systemLabels.join(', ')
   );
   check(
     /closed jobs/i.test((await primaryClosed.innerText()) || (await primaryClosed.getAttribute('aria-label')) || ''),
@@ -279,30 +282,31 @@ try {
 
   // Create Job stays a page action rather than a permanent sidebar destination.
   check(
-    (await page.locator('nav[aria-label="Main navigation"] a[href="/jobs/new"]').count()) === 0,
+    (await page.locator('aside nav a[href="/jobs/new"]').count()) === 0,
     '/jobs/new is not a permanent sidebar destination'
   );
 
   // Active state must move cleanly between Jobs and Closed Jobs.
   await page.goto(`${BASE}/jobs/closed`, { waitUntil: 'domcontentloaded' });
-  await page.locator('nav[aria-label="Main navigation"]').first().waitFor({ state: 'visible', timeout: 20000 });
+  await page.locator('nav[aria-label="Hiring navigation"]').first().waitFor({ state: 'visible', timeout: 20000 });
   check(
-    (await page.locator('nav[aria-label="Main navigation"] a[href="/jobs/closed"]').getAttribute('aria-current')) === 'page',
+    (await page.locator('nav[aria-label="Hiring navigation"] a[href="/jobs/closed"]').getAttribute('aria-current')) ===
+      'page',
     'Closed Jobs is active on /jobs/closed'
   );
   check(
-    (await page.locator('nav[aria-label="Main navigation"] a[href="/jobs"]').getAttribute('aria-current')) !== 'page',
+    (await page.locator('nav[aria-label="Hiring navigation"] a[href="/jobs"]').getAttribute('aria-current')) !== 'page',
     'Jobs does not remain active on /jobs/closed'
   );
   await page.goto(`${BASE}/jobs`, { waitUntil: 'domcontentloaded' });
-  await page.locator('nav[aria-label="Main navigation"]').first().waitFor({ state: 'visible', timeout: 20000 });
+  await page.locator('nav[aria-label="Hiring navigation"]').first().waitFor({ state: 'visible', timeout: 20000 });
   check(
-    (await page.locator('nav[aria-label="Main navigation"] a[href="/jobs"]').getAttribute('aria-current')) === 'page',
+    (await page.locator('nav[aria-label="Hiring navigation"] a[href="/jobs"]').getAttribute('aria-current')) === 'page',
     'Jobs is active on /jobs'
   );
 
   // Keyboard reachability of the promoted destination.
-  const closedLink = page.locator('nav[aria-label="Main navigation"] a[href="/jobs/closed"]');
+  const closedLink = page.locator('nav[aria-label="Hiring navigation"] a[href="/jobs/closed"]');
   await closedLink.focus();
   check(
     await closedLink.evaluate((node) => node === document.activeElement),

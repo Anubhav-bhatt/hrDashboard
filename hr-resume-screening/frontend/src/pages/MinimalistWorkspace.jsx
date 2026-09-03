@@ -11,7 +11,12 @@ import { getCandidateActions } from '../components/candidate/CandidateActions';
 import JobRail, { JobRailSelect } from '../components/workspace/JobRail';
 import BestFits from '../components/workspace/BestFits';
 import AIPowerTools from '../components/workspace/AIPowerTools';
-import { EmptyState, ErrorState } from '../components/ui';
+import ProgressJourney from '../components/workspace/ProgressJourney';
+import RecommendedNextStep from '../components/workspace/RecommendedNextStep';
+import { deriveNextAction } from '../components/dashboard/NeedsAttention';
+import WorkspacePage from '../components/layout/WorkspacePage';
+import PageHeader from '../components/layout/PageHeader';
+import { EmptyState, ErrorState, JobStatusBadge } from '../components/ui';
 
 /**
  * The minimalist workspace.
@@ -137,6 +142,36 @@ const MinimalistWorkspace = () => {
    */
   const screenCandidate = selectedCandidates.length === 1 ? selectedCandidates[0] : candidates[0] || null;
 
+  /*
+   * The one thing to do next on the focused role.
+   *
+   * Reuses `deriveNextAction` — the same funnel ordering the dashboard's
+   * attention cards and the job workspace both read — rather than restating the
+   * rules for minimal mode. Two copies of that ordering would let minimal mode
+   * recommend something the standard job page contradicts, and a recruiter who
+   * switched modes would stop trusting either.
+   *
+   * The job summary already carries every count the function reads, so this is a
+   * presentation of existing derived state and computes no second opinion.
+   */
+  const nextAction = useMemo(
+    () => (selectedJob ? deriveNextAction(selectedJob, threshold) : null),
+    [selectedJob, threshold]
+  );
+
+  /*
+   * One secondary way out of the recommendation, never a competing row of them.
+   * When the recommendation is already "add candidates", offering it again below
+   * would be the same button twice, so the assistant stands in.
+   */
+  const secondaryStep = useMemo(() => {
+    if (!selectedJob) return null;
+    if (nextAction?.kind === 'add-candidates') {
+      return { label: 'Ask Assistant', to: '/ai' };
+    }
+    return { label: 'Add candidates', to: `/jobs/${selectedJob.id}/import` };
+  }, [nextAction, selectedJob]);
+
   const handleSelectJob = useCallback(
     (jobId) => {
       // setJob also discards the previous role's selection, so nothing from one
@@ -247,8 +282,21 @@ const MinimalistWorkspace = () => {
     );
   }
 
+  /*
+   * The context line under the role name.
+   *
+   * Counts only, in plain words, and only words the numbers support: "strong" is
+   * said about candidates who clear the server's threshold and about nobody else.
+   */
+  const contextLine = (() => {
+    if (!selectedJob) return null;
+    if (totalCandidates === 0) return 'No candidates yet.';
+    const people = `${totalCandidates} candidate${totalCandidates === 1 ? '' : 's'}`;
+    return strongCount > 0 ? `${people} · ${strongCount} strong` : people;
+  })();
+
   return (
-    <div className={transitioning ? 'focus-workspace-enter' : undefined}>
+    <WorkspacePage className={transitioning ? 'focus-workspace-enter' : undefined}>
       <div className="grid grid-cols-1 lg:grid-cols-[14rem_minmax(0,1fr)] gap-6 lg:gap-8 min-w-0">
         {/* The rail becomes a select below lg, where a vertical list of roles
             would cost more height than the answer it leads to. */}
@@ -267,7 +315,44 @@ const MinimalistWorkspace = () => {
           loading={jobsLoading}
         />
 
-        <div className="min-w-0 space-y-8">
+        <div className="min-w-0 space-y-5">
+          {/*
+            Level 1 — what is happening. The role being worked on, named once,
+            with its lifecycle state beside it. Nothing here repeats the rail.
+          */}
+          {selectedJob && (
+            <PageHeader
+              title={selectedJob.title || 'Untitled role'}
+              badge={<JobStatusBadge status={selectedJob.status} />}
+              description={contextLine}
+              className="pb-3 mb-0"
+            />
+          )}
+
+          {/*
+            Level 1 continued — where this role has got to. Guidance only: every
+            stage is derived from the job's own counts and the backend lifecycle
+            stays authoritative over what is actually possible.
+          */}
+          {selectedJob && <ProgressJourney job={selectedJob} />}
+
+          {/*
+            Level 2 — what to do next, as one dominant action. `deriveNextAction`
+            returns null when a role needs nothing, and then this simply does not
+            render rather than inventing busywork.
+          */}
+          {nextAction && (
+            <RecommendedNextStep
+              title={nextAction.fact}
+              description={nextAction.detail}
+              actionLabel={nextAction.actionLabel}
+              to={nextAction.to}
+              icon={nextAction.icon}
+              secondaryActionLabel={secondaryStep?.label}
+              secondaryTo={secondaryStep?.to}
+            />
+          )}
+
           {poolError && !poolData ? (
             <ErrorState title="Unable to load candidates" error={poolError} onRetry={refetchPool} />
           ) : (
@@ -309,7 +394,7 @@ const MinimalistWorkspace = () => {
         statusUpdating={statusUpdating === quickViewCandidate?._id}
         actions={quickViewCandidate ? getActionsFor(quickViewCandidate) : []}
       />
-    </div>
+    </WorkspacePage>
   );
 };
 

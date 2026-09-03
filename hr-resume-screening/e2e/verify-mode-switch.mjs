@@ -90,8 +90,14 @@ try {
     await page.waitForURL((url) => url.pathname === '/focus', { timeout: 10000 });
     await page.waitForTimeout(500);
 
-    // Verify focused job context matches sampleJob
-    const currentFocusedJobHeading = await page.locator('#best-fits-heading').innerText().catch(() => '');
+    /*
+     * Verify the focused job context matches sampleJob.
+     *
+     * Read from the workspace heading, which is where the role is now named —
+     * the best-fits section below it carries its own label ("Best fits" /
+     * "Closest candidates") rather than repeating the title.
+     */
+    const currentFocusedJobHeading = await page.locator('h1').first().innerText().catch(() => '');
     check(currentFocusedJobHeading.includes(sampleJob.title), 'currentJobId context preserved in Minimal workspace', currentFocusedJobHeading);
 
     // Switch back to Standard

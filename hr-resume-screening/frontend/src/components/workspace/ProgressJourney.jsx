@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, Circle } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { cx } from '../ui';
 
 /**
@@ -45,7 +45,7 @@ export const deriveJourneyStageStatus = (job = {}) => {
   if (isClosed) {
     return {
       activeStageIndex: 5,
-      stages: STAGES.map((s, idx) => ({ ...s, state: 'completed' }))
+      stages: STAGES.map((stage) => ({ ...stage, state: 'completed' }))
     };
   }
 

@@ -261,13 +261,18 @@ const BestFits = ({
 
   return (
     <section className="min-w-0" aria-labelledby="best-fits-heading">
+      {/*
+        The role is named once on the page, by the workspace header above, which
+        also carries its lifecycle state and pool counts. This section used to
+        repeat the title at nearly the same size directly beneath it, so the
+        recruiter read the same words twice and neither looked like the page's
+        subject. What is left is the label this section actually needs: which
+        question the nodes below are answering.
+      */}
       <header className="text-center">
-        <h2 id="best-fits-heading" className="text-2xl sm:text-3xl font-bold text-slate-900 text-balance">
-          {jobTitle}
-        </h2>
-        <p className="mt-2 text-label uppercase tracking-wider text-slate-500">
+        <h2 id="best-fits-heading" className="text-label uppercase tracking-wider text-slate-500">
           {loading ? 'Finding strongest matches…' : hasStrongMatches ? 'Best fits' : 'Closest candidates'}
-        </p>
+        </h2>
       </header>
 
       {/* The interface stays on screen while the pool loads — only the nodes

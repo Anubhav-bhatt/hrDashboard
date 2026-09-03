@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Sparkles, CheckCircle2 } from 'lucide-react';
+import { ArrowRight, Sparkles } from 'lucide-react';
 import { useWorkspaceMode } from '../../context/WorkspaceModeContext';
 import { Button, cx } from '../ui';
 

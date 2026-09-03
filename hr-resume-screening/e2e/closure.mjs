@@ -371,7 +371,14 @@ try {
    * navigation because hiring history is a place recruiters go, not a setting.
    * Management now holds Settings alone.
    */
-  const navLinks = page.locator('nav[aria-label="Main navigation"] a');
+  /*
+   * The sidebar groups the funnel under HIRING and configuration under SYSTEM.
+   * What matters to closure is that every destination survived the grouping, so
+   * the labels are gathered across the groups rather than from one list.
+   */
+  const navLinks = page.locator(
+    'nav[aria-label="Main navigation"] a, nav[aria-label="Hiring navigation"] a'
+  );
   check(
     (await navLinks.count()) === 4,
     'the sidebar offers exactly four workspace destinations',
@@ -383,13 +390,13 @@ try {
     'they are Dashboard, Jobs, Candidates and Closed Jobs',
     navLabels.join(', ')
   );
-  const managementLabels = (await page.locator('nav[aria-label="Management"] a').allInnerTexts()).map((t) =>
+  const systemLabels = (await page.locator('nav[aria-label="System navigation"] a').allInnerTexts()).map((t) =>
     t.trim().toLowerCase()
   );
   check(
-    managementLabels.includes('settings'),
-    'Settings remains reachable in Management',
-    managementLabels.join(', ')
+    systemLabels.includes('settings'),
+    'Settings remains reachable under SYSTEM',
+    systemLabels.join(', ')
   );
 
   // Reaching closed jobs from the portal, via the Closed tab.

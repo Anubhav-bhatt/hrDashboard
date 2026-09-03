@@ -117,8 +117,19 @@ try {
     const activeJob = await railGroup.locator('[aria-checked=true]').innerText();
     const jobTitle = activeJob.split('\n')[0].trim();
 
-    const heading = await page.locator('#best-fits-heading').innerText();
-    check(heading.trim() === jobTitle, 'best fits are headed by the focused role', `${heading} vs ${jobTitle}`);
+    /*
+     * The role is named by the workspace heading, not by the best-fits section.
+     * That section used to repeat the title directly beneath it at nearly the
+     * same size; the page now states it once, as its h1, with the lifecycle
+     * badge and pool counts. What is asserted is unchanged — the surface is
+     * headed by the role the rail says is focused.
+     */
+    const heading = await page.locator('h1').first().innerText();
+    check(heading.trim() === jobTitle, 'the workspace is headed by the focused role', `${heading} vs ${jobTitle}`);
+    check(
+      (await page.locator('#best-fits-heading').count()) === 1,
+      'the best fits section keeps its own label'
+    );
 
     const jobsPayload = await (await page.request.get(`${API}/api/jobs/summary?sort=newest&limit=100`)).json();
     const job = (jobsPayload.data || []).find((item) => item.title === jobTitle);
@@ -172,7 +183,7 @@ try {
       await jobButtons.nth(1).click();
       await page.waitForTimeout(800);
       const secondTitle = (await railGroup.locator('[aria-checked=true]').innerText()).split('\n')[0].trim();
-      const secondHeading = (await page.locator('#best-fits-heading').innerText()).trim();
+      const secondHeading = (await page.locator('h1').first().innerText()).trim();
       check(secondHeading === secondTitle, 'choosing another role re-heads the answer');
       await jobButtons.nth(0).click();
       await page.waitForTimeout(800);
