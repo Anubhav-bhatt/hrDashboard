@@ -53,7 +53,7 @@ const MinimalistWorkspace = () => {
     // would turn it straight back on — the exit button would appear inert.
     if (adoptedMode.current) return;
     adoptedMode.current = true;
-    if (!isMinimal) enterMinimal('/');
+    if (!isMinimal) enterMinimal();
   }, [enterMinimal, isMinimal]);
   const {
     currentJobId,

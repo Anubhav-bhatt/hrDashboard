@@ -365,24 +365,8 @@ export const DefinitionRow = ({ label, value, icon: Icon, action, fallback = 'No
 
 /* ---------------------------------------------------------------- PageTitle --- */
 
-export const PageHeader = ({ eyebrow, title, description, actions, backTo, backLabel = 'Back', className }) => (
-  <div className={cx('flex flex-col gap-4', className)}>
-    {backTo && (
-      <Link to={backTo} className="inline-flex items-center gap-1.5 text-meta font-medium text-slate-500 hover:text-slate-900 transition-colors duration-fast w-fit">
-        <span aria-hidden="true">←</span>
-        {backLabel}
-      </Link>
-    )}
-    <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-      <div className="min-w-0">
-        {eyebrow && <p className="text-label uppercase text-brand-700 mb-1.5">{eyebrow}</p>}
-        <h1 className="text-page-title sm:text-display">{title}</h1>
-        {description && <p className="text-meta text-slate-500 mt-1.5 max-w-2xl">{description}</p>}
-      </div>
-      {actions && <div className="flex flex-wrap items-center gap-2 shrink-0">{actions}</div>}
-    </div>
-  </div>
-);
+export { default as PageHeader } from '../layout/PageHeader';
+
 
 /* -------------------------------------------------------------------- Meter --- */
 
@@ -635,3 +619,11 @@ export const Spinner = ({ label = 'Loading…', className }) => (
     <p className="text-meta text-slate-500">{label}</p>
   </div>
 );
+
+/* ------------------------------------------- Dual-Mode Shared Primitives --- */
+
+export { default as WorkspacePage } from '../layout/WorkspacePage';
+export { default as RecommendedNextStep } from '../workspace/RecommendedNextStep';
+export { default as ProgressJourney } from '../workspace/ProgressJourney';
+
+

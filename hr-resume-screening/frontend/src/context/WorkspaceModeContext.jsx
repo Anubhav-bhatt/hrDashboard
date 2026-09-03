@@ -103,9 +103,16 @@ export const WorkspaceModeProvider = ({ children }) => {
     [prefersReducedMotion]
   );
 
+  const RETURN_PATH_STORAGE_KEY = 'hr-dashboard-workspace-return-path';
+
   const enterMinimal = useCallback(
     (returnPath) => {
-      if (returnPath) returnPathRef.current = returnPath;
+      if (returnPath) {
+        returnPathRef.current = returnPath;
+        try {
+          window.sessionStorage.setItem(RETURN_PATH_STORAGE_KEY, returnPath);
+        } catch {}
+      }
       setMode(WORKSPACE_MODES.minimal);
     },
     [setMode]
@@ -113,10 +120,22 @@ export const WorkspaceModeProvider = ({ children }) => {
 
   const exitMinimal = useCallback(() => {
     setMode(WORKSPACE_MODES.normal);
-    const target = returnPathRef.current;
+    let target = returnPathRef.current;
+    if (!target) {
+      try {
+        target = window.sessionStorage.getItem(RETURN_PATH_STORAGE_KEY);
+      } catch {}
+    }
     returnPathRef.current = null;
+    try {
+      window.sessionStorage.removeItem(RETURN_PATH_STORAGE_KEY);
+    } catch {}
     return target;
   }, [setMode]);
+
+  const toggleMode = useCallback(() => {
+    setMode(mode === WORKSPACE_MODES.minimal ? WORKSPACE_MODES.normal : WORKSPACE_MODES.minimal);
+  }, [mode, setMode]);
 
   const value = useMemo(
     () => ({
@@ -125,10 +144,11 @@ export const WorkspaceModeProvider = ({ children }) => {
       transitioning,
       prefersReducedMotion,
       setMode,
+      toggleMode,
       enterMinimal,
       exitMinimal
     }),
-    [enterMinimal, exitMinimal, mode, prefersReducedMotion, setMode, transitioning]
+    [enterMinimal, exitMinimal, mode, prefersReducedMotion, setMode, toggleMode, transitioning]
   );
 
   return <WorkspaceModeContext.Provider value={value}>{children}</WorkspaceModeContext.Provider>;
@@ -150,6 +170,7 @@ export const useWorkspaceMode = () => {
     transitioning: false,
     prefersReducedMotion: false,
     setMode: () => {},
+    toggleMode: () => {},
     enterMinimal: () => {},
     exitMinimal: () => null
   };
