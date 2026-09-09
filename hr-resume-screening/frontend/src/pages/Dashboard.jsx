@@ -40,6 +40,10 @@ import {
 } from '../components/ui';
 import { formatRelativeTime, getScoreMeta } from '../utils/format';
 import { useRecruitmentContext } from '../context/RecruitmentContext';
+import { useWorkspaceMode } from '../context/WorkspaceModeContext';
+import WorkspacePage from '../components/layout/WorkspacePage';
+import PageHeader from '../components/layout/PageHeader';
+import MinimalHome from '../components/dashboard/MinimalHome';
 
 const STAGE_BARS = {
   REVIEW: 'bg-slate-400',
@@ -132,6 +136,7 @@ const NoCandidatesState = ({ jobs }) => {
 
 const Dashboard = () => {
   const { user } = useAuth();
+  const { isMinimal } = useWorkspaceMode();
   const { currentJobId } = useRecruitmentContext();
   const [searchParams, setSearchParams] = useSearchParams();
   const [quickViewCandidate, setQuickViewCandidate] = useState(null);
@@ -219,30 +224,62 @@ const Dashboard = () => {
     return `/candidates${query ? `?${query}` : ''}`;
   };
 
-  return (
-    <div className="space-y-8 sm:space-y-10">
-      {/* ------------------------------------------------------------ header */}
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="min-w-0">
-          {/* The page identity matches the navigation label. It still behaves
-              focus-first — one recommendation, a short attention queue — but
-              "Focus" is the name of Minimal Mode at /focus, and one word cannot
-              name two different surfaces. */}
-          <h1 className="text-page-title sm:text-display text-slate-900">Dashboard</h1>
-          <p className="text-body text-slate-600 mt-1">
-            {isJobScoped
-              ? `Viewing ${scope.jobTitle} on its own.`
-              : `${greeting()}, ${firstName}. Here's what needs your attention.`}
-          </p>
-        </div>
+  /*
+   * Minimal Mode gets a different page, not a trimmed one.
+   *
+   * The branch sits below every hook and reads the data this component has
+   * already fetched, so switching mode re-composes what is on screen without
+   * issuing a request. It deliberately ignores the ?jobId scope: Home answers
+   * "what should I work on", which is a question about the whole workspace. The
+   * parameter is left in the URL untouched, so returning to Standard Mode lands
+   * back on the scoped view the recruiter left.
+   */
+  if (isMinimal) {
+    return (
+      <WorkspacePage>
+        {jobsError && (
+          <InlineAlert
+            tone="error"
+            title="Couldn't load your roles"
+            message={jobsError.message}
+          />
+        )}
+        <MinimalHome
+          attentionItems={attentionItems}
+          metrics={metrics}
+          threshold={threshold}
+          jobsPending={jobsPending}
+          hasLoadedJobs={hasLoadedJobs}
+          openJobCount={metrics?.openJobs ?? jobOptions.length}
+        />
+      </WorkspacePage>
+    );
+  }
 
-        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-          {/*
+  return (
+    <WorkspacePage>
+      {/* ------------------------------------------------------------ header */}
+      {/*
+        The shared page header, so the dashboard sits in the same frame as every
+        other workspace surface. The title stays the single word "Dashboard" —
+        it matches the navigation label, and "Focus" already names Minimal Mode
+        at /focus, so one word cannot be asked to name two different surfaces.
+      */}
+      <PageHeader
+        title="Dashboard"
+        className="mb-0"
+        description={
+          isJobScoped
+            ? `Viewing ${scope.jobTitle} on its own.`
+            : `${greeting()}, ${firstName}. Here's what needs your attention.`
+        }
+        actions={
+          /*
             The scope control appears only when there is a choice to make. With
             one role it would be a dropdown containing a single option, and with
             none it would be empty — either way a control that explains nothing.
-          */}
-          {jobOptions.length > 1 && (
+          */
+          jobOptions.length > 1 ? (
             <>
               <label htmlFor="dashboard-scope" className="sr-only">
                 Focus the dashboard on one role
@@ -261,14 +298,15 @@ const Dashboard = () => {
                 ))}
               </select>
             </>
-          )}
-
+          ) : null
+        }
+        primaryAction={
           <Link to="/jobs/new" className="btn btn-sm btn-primary">
             <Plus className="w-3.5 h-3.5" aria-hidden="true" />
             <span>Create job</span>
           </Link>
-        </div>
-      </header>
+        }
+      />
 
       {/* A scoped view is a filtered view; say so plainly and offer the way out. */}
       {isJobScoped && (
@@ -805,7 +843,7 @@ const Dashboard = () => {
         isOpen={Boolean(quickViewCandidate)}
         onClose={() => setQuickViewCandidate(null)}
       />
-    </div>
+    </WorkspacePage>
   );
 };
 

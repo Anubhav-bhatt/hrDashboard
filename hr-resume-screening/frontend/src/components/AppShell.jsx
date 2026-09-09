@@ -465,7 +465,10 @@ const AppShell = ({ children }) => {
   // Build breadcrumb segments
   const getBreadcrumbs = () => {
     const path = location.pathname;
-    if (path === '/' || path === '/dashboard') return [{ label: 'Dashboard', to: '/dashboard' }];
+    /* The crumb names the destination the rail names: "Home" in Minimal Mode,
+       "Dashboard" in Standard, matching the nav item the recruiter clicked. */
+    if (path === '/' || path === '/dashboard')
+      return [{ label: isMinimal ? 'Home' : 'Dashboard', to: '/dashboard' }];
     if (path.startsWith('/jobs/create') || path.startsWith('/jobs/new')) return [{ label: 'Jobs', to: '/jobs' }, { label: 'Create Job' }];
     if (path.startsWith('/jobs/closed')) return [{ label: 'Jobs', to: '/jobs' }, { label: 'Closed Jobs' }];
     if (path.startsWith('/jobs/')) return [{ label: 'Jobs', to: '/jobs' }, { label: 'Job Workspace' }];

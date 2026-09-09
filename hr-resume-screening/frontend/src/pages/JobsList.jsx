@@ -14,6 +14,9 @@ import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useToast } from '../components/ToastProvider';
 import { useAuth } from '../context/AuthContext';
 import JobSummaryCard from '../components/jobs/JobSummaryCard';
+import JobWorkItem from '../components/workspace/JobWorkItem';
+import WorkspacePage from '../components/layout/WorkspacePage';
+import { useWorkspaceMode } from '../context/WorkspaceModeContext';
 import CloseJobDialog from '../components/jobs/CloseJobDialog';
 import DeleteJobDialog from '../components/jobs/DeleteJobDialog';
 import Pagination from '../components/Pagination';
@@ -50,23 +53,22 @@ const STATUS_TABS = [
 
 const PAGE_SIZE = 12;
 
-const JobCardSkeleton = () => (
-  <div className="card card-pad space-y-4">
-    <div className="flex items-start justify-between gap-3">
-      <Skeleton className="h-4 w-40" />
-      <Skeleton className="h-5 w-20 rounded-pill" />
+/*
+ * A placeholder shaped like the row it becomes.
+ *
+ * This used to be a card skeleton — a chip row, a four-up metric block and a
+ * full-width button — laid out in a three-column grid, which is a layout this
+ * page stopped having when the listing became a table. The first paint
+ * therefore predicted the wrong page and the content jumped when it arrived.
+ * One placeholder per row, at the row's own height, so nothing moves.
+ */
+const JobRowSkeleton = () => (
+  <div className="flex items-center justify-between gap-4 px-5 py-4">
+    <div className="min-w-0 flex-1 space-y-2">
+      <Skeleton className="h-4 w-56 max-w-full" />
+      <Skeleton className="h-3 w-40 max-w-full" />
     </div>
-    <Skeleton className="h-3 w-52" />
-    <div className="flex gap-1.5">
-      <Skeleton className="h-5 w-14 rounded-pill" />
-      <Skeleton className="h-5 w-16 rounded-pill" />
-    </div>
-    <div className="grid grid-cols-4 gap-2">
-      {Array.from({ length: 4 }, (_, i) => (
-        <Skeleton key={i} className="h-14 rounded-control" />
-      ))}
-    </div>
-    <Skeleton className="h-9 w-full rounded-control" />
+    <Skeleton className="h-4 w-24 shrink-0" />
   </div>
 );
 
@@ -83,6 +85,7 @@ const JobCardSkeleton = () => (
  * implementation of searching and listing jobs rather than a near-duplicate.
  */
 const JobsList = ({ lockedStatus = null, title = 'Jobs', eyebrow = 'Recruitment' }) => {
+  const { isMinimal } = useWorkspaceMode();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
@@ -318,10 +321,15 @@ const JobsList = ({ lockedStatus = null, title = 'Jobs', eyebrow = 'Recruitment'
   };
 
   return (
-    <div className="space-y-5">
+    <WorkspacePage>
       <PageHeader
         eyebrow={eyebrow}
-        title={title}
+        /*
+          Minimal Mode names the page the way its rail does. The rail says
+          "Active Jobs", so a page headed plainly "Jobs" reads as a different
+          destination from the one the recruiter just clicked.
+        */
+        title={isMinimal && !isHistory ? 'Active jobs' : title}
         description={describe()}
         actions={
           // One dominant action on this page. Creating a job is the only thing a
@@ -382,7 +390,14 @@ const JobsList = ({ lockedStatus = null, title = 'Jobs', eyebrow = 'Recruitment'
           {/* Active / Closed. Rendered on both /jobs and /jobs/closed so the two
               read as one page rather than a navigation hierarchy to learn.
               Counts come from the API under the current search term, so they
-              always describe what switching tab would actually show. */}
+              always describe what switching tab would actually show.
+
+              Withheld in Minimal Mode, where the rail already lists Active Jobs
+              and Closed Jobs as separate destinations: the same choice offered
+              twice on one screen is the density this mode exists to remove.
+              Nothing becomes unreachable — the lifecycle filter still comes from
+              the route and the ?status parameter. */}
+          {!isMinimal && (
           <div role="group" aria-label="Filter jobs by status" className="flex flex-wrap items-center gap-1.5">
             {STATUS_TABS.map((tab) => {
               const active = status === tab.value;
@@ -418,6 +433,7 @@ const JobsList = ({ lockedStatus = null, title = 'Jobs', eyebrow = 'Recruitment'
               );
             })}
           </div>
+          )}
         </div>
       </Card>
 
@@ -425,9 +441,9 @@ const JobsList = ({ lockedStatus = null, title = 'Jobs', eyebrow = 'Recruitment'
       {error && !data ? (
         <ErrorState title="Unable to load jobs" error={error} onRetry={refetch} />
       ) : loading && !data ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+        <div className="card p-0 overflow-hidden divide-y divide-slate-100">
           {Array.from({ length: 6 }, (_, i) => (
-            <JobCardSkeleton key={i} />
+            <JobRowSkeleton key={i} />
           ))}
         </div>
       ) : jobs.length === 0 ? (
@@ -447,6 +463,24 @@ const JobsList = ({ lockedStatus = null, title = 'Jobs', eyebrow = 'Recruitment'
             )}
           </div>
 
+          {/*
+            Minimal Mode lists the same roles as work, not as a table.
+            One line of counts, one named next step, and the title as the way in
+            to everything else — the numeric columns, the column header and the
+            per-row status chips all belong to the Standard table below, which is
+            unchanged. Both branches render from the same query and the same
+            page of results, so switching mode re-composes what is already
+            loaded and issues no request.
+          */}
+          {isMinimal ? (
+            <div className={cx('card p-0 overflow-hidden', loading && 'opacity-60')}>
+              <ul className="divide-y divide-slate-100 px-5">
+                {jobs.map((job) => (
+                  <JobWorkItem key={job.id} job={job} threshold={threshold} />
+                ))}
+              </ul>
+            </div>
+          ) : (
           <div className={cx('card p-0 overflow-hidden', loading && 'opacity-60')}>
             {/*
               The header carries the shared `jobs-grid` template, so its columns
@@ -486,6 +520,7 @@ const JobsList = ({ lockedStatus = null, title = 'Jobs', eyebrow = 'Recruitment'
               ))}
             </div>
           </div>
+          )}
 
           {pagination && pagination.totalPages > 1 && (
             <Pagination
@@ -535,7 +570,7 @@ const JobsList = ({ lockedStatus = null, title = 'Jobs', eyebrow = 'Recruitment'
           }}
         />
       )}
-    </div>
+    </WorkspacePage>
   );
 };
 
