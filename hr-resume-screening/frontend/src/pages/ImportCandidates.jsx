@@ -24,7 +24,8 @@ import {
   getOutlookFolders,
   searchOutlookEmails,
   processCandidates,
-  uploadBulkCandidates
+  uploadBulkCandidates,
+  disconnectOutlook
 } from '../services/api';
 import { Card, EmptyState, InlineAlert, PageHeader, ProgressBar } from '../components/ui';
 import RouteSkeleton from '../components/ui/RouteSkeleton';
@@ -345,6 +346,26 @@ const ImportCandidates = () => {
       setOutlookError(err.response?.data?.message || 'Error processing Outlook resumes.');
     } finally {
       setOutlookProcessing(false);
+    }
+  };
+
+  const handleDisconnectOutlook = async () => {
+    try {
+      setOutlookError('');
+      const res = await disconnectOutlook();
+      if (!res.success) {
+        setOutlookError(res.message || 'Could not disconnect Outlook.');
+        return;
+      }
+
+      setOutlookConnected(false);
+      setOutlookAccount(null);
+      setFolders([]);
+      setSelectedFolder('');
+      setOutlookSummary(null);
+      setOutlookProcessResult(null);
+    } catch (err) {
+      setOutlookError(err.response?.data?.message || 'Could not disconnect Outlook.');
     }
   };
 
