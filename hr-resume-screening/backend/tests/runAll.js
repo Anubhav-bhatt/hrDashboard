@@ -12,6 +12,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 
 const SUITES = [
+  { name: 'Dashboard workflow', file: 'dashboard.test.js', requiresDatabase: false },
   { name: 'Unit', file: 'unit.test.js', requiresDatabase: false },
   { name: 'Scoring & parsing (legacy phase 4)', file: 'phase4.test.js', requiresDatabase: false },
   { name: 'Outlook & matching (legacy phase 5)', file: 'phase5.test.js', requiresDatabase: false },

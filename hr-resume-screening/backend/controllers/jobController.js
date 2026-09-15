@@ -1,4 +1,5 @@
 const prisma = require('../config/prisma');
+const { STRONG_MATCH_THRESHOLD } = require('../config/recruitmentMetrics');
 const { extractJDText } = require('../services/jdParser');
 const { extractJDRequirements } = require('../services/jdRequirementExtractor');
 const outlookService = require('../services/outlookService');
@@ -95,7 +96,7 @@ const getAllJobs = async (req, res, next) => {
         const highMatchCount = await prisma.candidate.count({
           where: {
             jobId: job.id,
-            overallScore: { gte: 90 }
+            overallScore: { gte: STRONG_MATCH_THRESHOLD }
           }
         });
 
@@ -120,6 +121,7 @@ const getAllJobs = async (req, res, next) => {
           candidatesCount,
           analyzedCount,
           highMatchCount,
+          strongMatchThreshold: STRONG_MATCH_THRESHOLD,
           status
         };
       })

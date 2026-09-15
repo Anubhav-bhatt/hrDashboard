@@ -29,6 +29,7 @@ const NAV_ITEMS = [
  */
 const AppShell = ({ children }) => {
   const location = useLocation();
+  const isDashboard = location.pathname === '/' || location.pathname === '/dashboard';
   const { user, signOut } = useAuth();
   const toast = useToast();
 
@@ -130,12 +131,21 @@ const AppShell = ({ children }) => {
       </Link>
 
       <nav className="mt-6 space-y-1" aria-label="Main navigation">
-        {NAV_ITEMS.map((item) => (
-          <NavLink key={item.to} to={item.to} end={item.end} className={navLinkClass}>
-            <item.icon className="w-4 h-4 shrink-0" aria-hidden="true" />
-            {item.label}
-          </NavLink>
-        ))}
+        {NAV_ITEMS.map((item) => {
+          const content = <><item.icon className="w-4 h-4 shrink-0" aria-hidden="true" />{item.label}</>;
+          // NavLink drops aria-current unless its own path matches, so the Dashboard
+          // item tracks both / and the /dashboard alias itself.
+          return item.to === '/' ? (
+            <Link key={item.to} to={item.to} aria-current={isDashboard ? 'page' : undefined}
+              className={navLinkClass({ isActive: isDashboard })}>
+              {content}
+            </Link>
+          ) : (
+            <NavLink key={item.to} to={item.to} end={item.end} className={navLinkClass}>
+              {content}
+            </NavLink>
+          );
+        })}
       </nav>
 
       <div className="mt-6 pt-6 divider">
@@ -182,7 +192,7 @@ const AppShell = ({ children }) => {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className={cx('min-h-screen bg-slate-50', isDashboard && 'dashboard-shell')}>
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:z-[60] focus:top-3 focus:left-3 focus:px-4 focus:py-2 focus:bg-white focus:rounded-control focus:shadow-overlay focus:text-meta focus:font-semibold"
@@ -268,6 +278,7 @@ const AppShell = ({ children }) => {
               className="flex items-center gap-2 pl-1 pr-2 py-1 rounded-control hover:bg-slate-100 transition-colors duration-fast"
               aria-expanded={accountOpen}
               aria-haspopup="menu"
+              aria-label="Account menu"
             >
               <Avatar name={user?.name || user?.email} size="sm" />
               <span className="hidden sm:block text-meta font-semibold text-slate-800 max-w-[10rem] truncate">

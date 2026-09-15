@@ -3,7 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node scenarios.mjs"
+    "test": "node scenarios.mjs",
+    "test:dashboard": "node dashboard.mjs",
+    "test:regression": "node run-regression.mjs"
   },
   "dependencies": {
     "playwright": "^1.62.1"

@@ -7,6 +7,8 @@
     --surface: 255 255 255;
     --surface-muted: 248 250 252;
     --border-subtle: 226 232 240;
+    --text-primary: 15 23 42;
+    --text-muted: 71 85 105;
   }
 
   html {
@@ -55,6 +57,29 @@
 }
 
 @layer components {
+  /* Reuse surface tokens so a future app theme can replace their values. */
+  .dashboard { color: rgb(var(--text-primary)); }
+  .dashboard .dashboard-panel, .dashboard .dashboard-stat {
+    background: rgb(var(--surface));
+    border-color: rgb(var(--border-subtle));
+    @apply shadow-none;
+  }
+  .dashboard-stat { @apply block rounded-card border p-3 sm:p-4 min-w-0; }
+  .dashboard-link { @apply inline-flex min-h-11 items-center gap-2 rounded-control text-xs font-semibold text-brand-700; }
+  .dashboard-track { @apply block h-1 rounded-pill overflow-hidden; background: rgb(var(--border-subtle)); }
+  .dashboard h1, .dashboard h2, .dashboard h3, .dashboard .text-slate-900 { color: rgb(var(--text-primary)); }
+  .dashboard .text-slate-400, .dashboard .text-slate-500, .dashboard .text-slate-600 { color: rgb(var(--text-muted)); }
+  .dashboard .divide-y > :not([hidden]) ~ :not([hidden]) { border-color: rgb(var(--border-subtle)); }
+  .dashboard a:hover { background-color: rgb(var(--surface-muted)); }
+  .dashboard a.btn-primary:hover { @apply bg-brand-700; }
+  .dashboard .btn { @apply min-h-11; }
+  @media (max-width: 1023px) {
+    .dashboard-shell header button, .dashboard-shell aside a, .dashboard-shell aside button {
+      min-height: 44px;
+      min-width: 44px;
+    }
+  }
+
   /* ---------------------------------------------------------------- buttons */
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-control text-meta font-semibold

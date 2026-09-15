@@ -90,7 +90,7 @@ export const logout = async () => {
 
 /* -------------------------------------------------------------- analytics --- */
 
-/** Dashboard KPIs, pipeline, score bands, trend and recent activity. */
+/** Dashboard metrics, workflow priorities, role summaries and recent candidates. */
 export const getDashboardOverview = async (config = {}) => {
   const response = await api.get('/analytics/overview', config);
   return response.data;

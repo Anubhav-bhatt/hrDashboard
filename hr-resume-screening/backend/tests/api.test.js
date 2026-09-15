@@ -291,13 +291,51 @@ const run = async () => {
     const res = await authed('GET', '/analytics/overview');
     assert.strictEqual(res.status, 200);
 
-    const { metrics, pipeline, scoreBands, trend, recentCandidates } = res.body.data;
+    const { metrics, pipeline, scoreBands, hiringRoles, recentCandidates, strongMatchThreshold, needsAttention } = res.body.data;
     assert.ok(metrics.totalCandidates >= 3, `expected at least our 3 candidates, got ${metrics.totalCandidates}`);
     assert.ok(metrics.shortlisted >= 1, 'shortlisted count includes our fixture');
     assert.strictEqual(pipeline.length, 4, 'four pipeline stages');
     assert.strictEqual(scoreBands.length, 5, 'five score bands');
-    assert.strictEqual(trend.length, 14, 'fourteen-day trend');
+    // The unused 14-day trend was replaced by actionable role summaries.
+    assert.ok(!('trend' in res.body.data), 'unused trend is no longer calculated');
+    assert.ok(hiringRoles.length <= 5, 'at most five compact role summaries');
+    assert.ok(needsAttention.length <= 3, 'attention queue is capped');
+    assert.strictEqual(strongMatchThreshold, 80);
     assert.ok(Array.isArray(recentCandidates), 'recent candidates present');
+    assert.ok(recentCandidates.length <= 5, 'recent candidates stay a short list');
+    // Role summaries replaced the undisplayed recent-jobs list.
+    assert.ok(!('recentJobs' in res.body.data), 'recentJobs is superseded by hiringRoles');
+  });
+
+  await testAsync('dashboard totals agree with stored candidates', async () => {
+    const { metrics, scoreBands } = (await authed('GET', '/analytics/overview')).body.data;
+    assert.strictEqual(metrics.totalJobs, await prisma.job.count());
+    assert.strictEqual(metrics.pendingReview, await prisma.candidate.count({ where: { hrStatus: { in: ['REVIEW', 'NEEDS_REVIEW'] } } }));
+    assert.strictEqual(metrics.analyzed, await prisma.candidate.count({ where: { overallScore: { not: null } } }));
+    for (const band of scoreBands) {
+      assert.strictEqual(band.count, await prisma.candidate.count({ where: { overallScore: { gte: band.min, lte: band.max } } }), band.key);
+    }
+  });
+
+  await testAsync('dashboard role summaries agree with stored candidates and share workflow actions', async () => {
+    const { hiringRoles, recommendedAction, needsAttention } = (await authed('GET', '/analytics/overview')).body.data;
+    const { deriveNextAction } = require('../services/dashboardWorkflow');
+    for (const role of [...hiringRoles, ...needsAttention, recommendedAction].filter(Boolean)) {
+      assert.strictEqual(role.candidatesCount, await prisma.candidate.count({ where: { jobId: role.id } }));
+      assert.strictEqual(role.pendingReview, await prisma.candidate.count({ where: { jobId: role.id, hrStatus: { in: ['REVIEW', 'NEEDS_REVIEW'] } } }));
+      assert.strictEqual(role.unscoredCount, await prisma.candidate.count({ where: { jobId: role.id, overallScore: null } }));
+      assert.deepStrictEqual(role.nextAction, deriveNextAction(role));
+    }
+    assert.ok(!needsAttention.some((role) => role.id === recommendedAction?.id));
+  });
+
+  await testAsync('jobs and dashboard use the same strong-match threshold', async () => {
+    const overview = (await authed('GET', '/analytics/overview')).body.data;
+    const jobs = (await authed('GET', '/jobs')).body.data;
+    for (const role of jobs) {
+      assert.strictEqual(role.strongMatchThreshold, overview.strongMatchThreshold);
+      assert.strictEqual(role.highMatchCount, await prisma.candidate.count({ where: { jobId: role.id, overallScore: { gte: overview.strongMatchThreshold } } }));
+    }
   });
 
   await testAsync('every analytics metric is a number, never NaN', async () => {

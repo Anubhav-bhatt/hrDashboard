@@ -1,404 +1,193 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import {
-  Award,
-  BarChart3,
-  Briefcase,
-  CheckCircle2,
-  Clock,
-  FileText,
-  Plus,
-  Sparkles,
-  UserCheck,
-  Users,
-  XCircle
-} from 'lucide-react';
+import { ArrowRight, Briefcase, RefreshCw } from 'lucide-react';
 import { getDashboardOverview } from '../services/api';
 import { useApiResource } from '../hooks/useApiResource';
 import { useAuth } from '../context/AuthContext';
-import StatCard, { PipelineStage } from '../components/StatCard';
 import { CandidateRow } from '../components/CandidateCard';
-import {
-  Badge,
-  Button,
-  Card,
-  CardHeader,
-  EmptyState,
-  ErrorState,
-  Skeleton,
-  StatCardSkeleton
-} from '../components/ui';
-import { formatDate, formatRelativeTime, getScoreMeta } from '../utils/format';
+import { Button, Card, EmptyState, ErrorState, Skeleton } from '../components/ui';
+import { formatRelativeTime } from '../utils/format';
 
-const STAGE_BARS = {
-  REVIEW: 'bg-slate-400',
-  NEEDS_REVIEW: 'bg-amber-500',
-  SHORTLISTED: 'bg-emerald-500',
-  NOT_SUITABLE: 'bg-rose-400'
-};
-
-/** Greeting based on local time — a small touch that makes the page feel alive. */
 const greeting = () => {
   const hour = new Date().getHours();
-  if (hour < 12) return 'Good morning';
-  if (hour < 17) return 'Good afternoon';
-  return 'Good evening';
+  return hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 };
+
+const SectionHeader = ({ id, title, to, linkLabel }) => (
+  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mb-2">
+    <h2 id={id} className="section-title">{title}</h2>
+    {to && <Link to={to} className="dashboard-link">{linkLabel}<ArrowRight className="w-3.5 h-3.5" aria-hidden="true" /></Link>}
+  </div>
+);
+
+const WorkflowLink = ({ job, primary = false }) => (
+  <Link
+    to={job.nextAction.destination}
+    aria-label={`${job.nextAction.actionLabel} for ${job.title}`}
+    className={primary ? 'btn btn-lg btn-primary shrink-0' : 'dashboard-link shrink-0'}
+  >
+    {job.nextAction.actionLabel}<ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+  </Link>
+);
 
 const Dashboard = () => {
   const { user } = useAuth();
-  const { data, error, loading, refetch } = useApiResource(
-    (config) => getDashboardOverview(config),
-    [],
-    { keepPreviousData: true }
+  const { data, error, loading, refetching, refetch } = useApiResource(
+    (config) => getDashboardOverview(config), [], { keepPreviousData: true }
   );
-
   const overview = data?.data;
   const metrics = overview?.metrics;
+  const recommended = overview?.recommendedAction;
+  const attention = overview?.needsAttention || [];
+  const roles = overview?.hiringRoles || [];
   const firstName = (user?.name || '').split(' ')[0] || 'there';
+  const scoredTotal = overview?.scoreBands?.reduce((sum, band) => sum + band.count, 0) || 0;
+  const snapshot = metrics ? [
+    { label: 'Jobs', value: metrics.totalJobs, context: 'All hiring roles', to: '/jobs' },
+    { label: 'Candidates', value: metrics.totalCandidates, context: 'Across all roles', to: '/candidates' },
+    { label: 'Awaiting review', value: metrics.pendingReview, context: 'Review and second look', to: '/candidates?hrStatus=REVIEW,NEEDS_REVIEW&sort=score_desc' },
+    { label: 'Shortlisted', value: metrics.shortlisted, context: 'Selected by recruiters', to: '/candidates?hrStatus=SHORTLISTED&sort=score_desc' }
+  ] : [];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-        <div>
-          <p className="text-label uppercase text-brand-700">Recruitment dashboard</p>
-          <h1 className="text-page-title sm:text-display mt-1.5">
-            {greeting()}, {firstName}
-          </h1>
-          <p className="text-meta text-slate-500 mt-1.5">
-            {loading && !overview
-              ? 'Loading your hiring snapshot…'
-              : metrics
-                ? `${metrics.pendingReview} candidate${metrics.pendingReview === 1 ? '' : 's'} waiting on your review across ${metrics.totalJobs} open role${metrics.totalJobs === 1 ? '' : 's'}.`
-                : 'Your hiring snapshot across every open role.'}
+    <div className="dashboard space-y-4 sm:space-y-5">
+      <header className="flex flex-wrap items-start justify-between gap-x-5 gap-y-2">
+        <div className="min-w-0">
+          <p className="text-label text-slate-600">Recruitment dashboard</p>
+          <h1 className="text-page-title sm:text-display mt-1 break-words">{greeting()}, {firstName}</h1>
+          <p className="text-meta text-slate-600 mt-1">
+            {metrics?.totalJobs
+              ? `${metrics.pendingReview} awaiting review across ${metrics.totalJobs} hiring role${metrics.totalJobs === 1 ? '' : 's'}.`
+              : 'Your recruitment work at a glance.'}
           </p>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Link to="/candidates" className="btn btn-md btn-secondary">
-            <Users className="w-4 h-4" aria-hidden="true" />
-            All candidates
-          </Link>
-          <Link to="/jobs/new" className="btn btn-md btn-primary">
-            <Plus className="w-4 h-4" aria-hidden="true" />
-            Create job
-          </Link>
+        <div className="flex flex-wrap items-center gap-x-3">
+          {overview?.generatedAt && <span className="text-xs text-slate-600">Updated {formatRelativeTime(overview.generatedAt)}</span>}
+          <Button variant="ghost" size="lg" icon={RefreshCw} loading={refetching} disabled={loading} onClick={refetch}>Refresh</Button>
         </div>
-      </div>
+      </header>
 
-      {error && !overview && (
-        <ErrorState
-          title="Unable to load your dashboard"
-          error={error}
-          onRetry={refetch}
-          action={
-            <Link to="/candidates" className="btn btn-sm btn-secondary">
-              Go to candidates
-            </Link>
-          }
-        />
+      {error && <ErrorState title={overview ? 'Refresh failed — showing the last loaded snapshot' : 'Unable to load your dashboard'} error={error} onRetry={refetch} />}
+
+      {loading && !overview && (
+        <div role="status" aria-label="Loading dashboard" className="space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-28" />)}
+          </div>
+          <Skeleton className="h-28" /><Skeleton className="h-44" />
+        </div>
       )}
 
-      {/* KPI cards — each card is one full-surface link */}
-      <section aria-label="Key metrics">
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-          {loading && !overview ? (
-            Array.from({ length: 4 }, (_, i) => <StatCardSkeleton key={i} />)
-          ) : (
-            <>
-              <StatCard
-                label="Total candidates"
-                value={metrics?.totalCandidates}
-                icon={Users}
-                tone="brand"
-                to="/candidates"
-                trend={metrics?.candidatesThisMonth > 0 ? metrics.candidatesThisMonth : undefined}
-                trendLabel={metrics?.candidatesThisMonth > 0 ? 'this month' : 'View all candidates'}
-              />
-              <StatCard
-                label="Shortlisted"
-                value={metrics?.shortlisted}
-                icon={UserCheck}
-                tone="emerald"
-                to="/candidates?hrStatus=SHORTLISTED&sort=score_desc"
-                subtitle="Progressed by recruiters"
-              />
-              <StatCard
-                label="Awaiting review"
-                value={metrics?.pendingReview}
-                icon={Clock}
-                tone="amber"
-                to="/candidates?hrStatus=REVIEW,NEEDS_REVIEW&sort=score_desc"
-                subtitle="Not yet screened"
-              />
-              <StatCard
-                label="Active jobs"
-                value={metrics?.totalJobs}
-                icon={Briefcase}
-                tone="violet"
-                to="/jobs"
-                trend={metrics?.jobsThisMonth > 0 ? metrics.jobsThisMonth : undefined}
-                trendLabel={metrics?.jobsThisMonth > 0 ? 'created this month' : 'Manage open roles'}
-              />
-            </>
-          )}
+      {metrics?.totalJobs === 0 && (
+        <EmptyState icon={Briefcase} title="No hiring activity yet" description="Create your first role to start reviewing candidates."
+          action={<Link to="/jobs/new" className="btn btn-lg btn-primary">Create Job</Link>} />
+      )}
+
+      {metrics?.totalJobs > 0 && <>
+        <section aria-labelledby="snapshot-title">
+          <h2 id="snapshot-title" className="section-title mb-3">Recruitment snapshot</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {snapshot.map((stat) => (
+              <Link key={stat.label} to={stat.to} className="dashboard-stat" aria-label={`${stat.label}: ${stat.value}`}>
+                <p className="text-meta font-medium text-slate-600">{stat.label}</p>
+                <p className="text-metric mt-1 tabular-nums">{stat.value.toLocaleString('en-IN')}</p>
+                <p className="text-xs text-slate-600 mt-1">{stat.context}</p>
+              </Link>
+            ))}
+          </div>
+        </section>
+
+        <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
+        <section aria-labelledby="recommended-title" className="xl:col-span-2">
+          <Card padding="p-4" className="dashboard-panel h-full flex flex-col">
+            <h2 id="recommended-title" className="section-title mb-2">Recommended next step</h2>
+            {/* Side by side with Needs attention on wide screens, the CTA sits at the card foot. */}
+            {recommended ? <div className="flex flex-1 flex-col sm:flex-row xl:flex-col sm:items-center xl:items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-card-title break-words">{recommended.title}</h3>
+                <p className="text-meta text-slate-600 mt-1">{recommended.nextAction.description}</p>
+              </div>
+              <WorkflowLink job={recommended} primary />
+            </div> : <p className="text-meta text-slate-600">Open a role to review its candidates.</p>}
+          </Card>
+        </section>
+
+        <section aria-labelledby="attention-title" className="xl:col-span-3">
+          <Card padding="p-4" className="dashboard-panel h-full">
+            <h2 id="attention-title" className="section-title mb-1">Needs attention</h2>
+            {attention.length ? <ul className="divide-y divide-slate-200">
+              {attention.slice(0, 3).map((job) => <li key={job.id} className="flex flex-wrap items-center justify-between gap-x-4 py-2">
+                <div className="min-w-0 flex-1 basis-44">
+                  <h3 className="text-meta font-semibold break-words">{job.title}</h3>
+                  <p className="text-xs text-slate-600 mt-0.5">{job.nextAction.description}</p>
+                </div>
+                <WorkflowLink job={job} />
+              </li>)}
+            </ul> : <p className="text-meta text-slate-600 py-2">Nothing else needs attention right now.</p>}
+          </Card>
+        </section>
         </div>
 
-        {/* Secondary metrics */}
-        {overview && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mt-4">
-            <StatCard
-              label="Strong matches (80%+)"
-              value={metrics.highMatch}
-              icon={Award}
-              tone="emerald"
-              to="/candidates?minScore=80&sort=score_desc"
-              subtitle="Ranked by relevance"
-            />
-            <StatCard
-              label="Average match score"
-              value={metrics.averageScore !== null ? `${metrics.averageScore}%` : '—'}
-              icon={BarChart3}
-              tone="brand"
-              subtitle={metrics.averageScore !== null ? `Top score ${metrics.topScore}%` : 'No candidates scored yet'}
-            />
-            <StatCard
-              label="Not suitable"
-              value={metrics.notSuitable}
-              icon={XCircle}
-              tone="rose"
-              to="/candidates?hrStatus=NOT_SUITABLE"
-              subtitle="Declined after screening"
-            />
-            <StatCard
-              label="Applied this week"
-              value={metrics.candidatesThisWeek}
-              icon={Sparkles}
-              tone="slate"
-              to="/candidates?sort=newest"
-              subtitle="Last 7 days"
-            />
-          </div>
-        )}
-      </section>
-
-      {/* Pipeline + score distribution */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <Card className="lg:col-span-2" padding="p-0">
-          <div className="p-5 pb-2">
-            <CardHeader
-              title="Hiring pipeline"
-              description="Every stage links to the matching candidate list."
-              actions={
-                <Link to="/candidates" className="btn btn-sm btn-ghost">
-                  View all
-                </Link>
-              }
-            />
-          </div>
-
-          <div className="px-1 pb-3">
-            {loading && !overview ? (
-              <div className="space-y-3 p-4">
-                {Array.from({ length: 4 }, (_, i) => (
-                  <div key={i} className="space-y-2">
-                    <Skeleton className="h-3 w-32" />
-                    <Skeleton className="h-1.5 w-full" />
-                  </div>
-                ))}
-              </div>
-            ) : overview?.pipeline?.some((s) => s.count > 0) ? (
-              overview.pipeline.map((stage) => (
-                <PipelineStage
-                  key={stage.key}
-                  label={stage.label}
-                  description={stage.description}
-                  count={stage.count}
-                  percentage={stage.percentage}
-                  barClass={STAGE_BARS[stage.key]}
-                  to={`/candidates?hrStatus=${stage.key}&sort=score_desc`}
-                />
-              ))
-            ) : (
-              <div className="p-4">
-                <EmptyState
-                  icon={Users}
-                  title="No candidates in the pipeline yet"
-                  description="Create a job, then upload resumes or import them from Outlook to start screening."
-                  action={
-                    <Link to="/jobs/new" className="btn btn-sm btn-primary">
-                      <Plus className="w-3.5 h-3.5" aria-hidden="true" />
-                      Create your first job
-                    </Link>
-                  }
-                  className="border-0 shadow-none py-8"
-                />
-              </div>
-            )}
-          </div>
-        </Card>
-
-        {/* Score distribution */}
-        <Card padding="p-0">
-          <div className="p-5 pb-3">
-            <CardHeader title="Match distribution" description="Scored candidates by relevance band." />
-          </div>
-
-          <div className="px-5 pb-5 space-y-3">
-            {loading && !overview ? (
-              Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="h-8 w-full" />)
-            ) : overview?.scoreBands?.some((b) => b.count > 0) ? (
-              overview.scoreBands.map((band) => {
-                const total = overview.scoreBands.reduce((sum, b) => sum + b.count, 0);
-                const pct = total > 0 ? Math.round((band.count / total) * 100) : 0;
-                const meta = getScoreMeta(band.min === 0 ? 10 : band.min);
-
-                return (
-                  <Link
-                    key={band.key}
-                    to={`/candidates?minScore=${band.min}${band.max < 100 ? `&maxScore=${Math.floor(band.max)}` : ''}&sort=score_desc`}
-                    className="group block focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1 rounded"
-                    aria-label={`${band.count} candidates scored ${band.label}`}
-                  >
-                    <div className="flex items-center justify-between gap-2 text-xs">
-                      <span className="font-semibold text-slate-700 group-hover:text-brand-700 transition-colors duration-fast">
-                        {band.label}
-                      </span>
-                      <span className="tabular-nums text-slate-500">
-                        {band.count} <span className="text-slate-400">({pct}%)</span>
-                      </span>
-                    </div>
-                    <div className="mt-1.5 h-2 w-full rounded-pill bg-slate-100 overflow-hidden">
-                      <div className={`h-full rounded-pill transition-all duration-slow ${meta.bar}`} style={{ width: `${pct}%` }} />
-                    </div>
-                  </Link>
-                );
-              })
-            ) : (
-              <p className="text-meta text-slate-500 py-4">
-                No candidates have been scored yet. Open a job and run the analysis to populate this chart.
-              </p>
-            )}
-          </div>
-
-          {overview && metrics.unanalyzed > 0 && (
-            <div className="mx-5 mb-5 rounded-control border border-amber-200 bg-amber-50 px-3 py-2.5">
-              <p className="text-xs text-amber-900">
-                <strong>{metrics.unanalyzed}</strong> candidate{metrics.unanalyzed === 1 ? '' : 's'} not scored yet. Open
-                the relevant job to run scoring.
-              </p>
-            </div>
-          )}
-        </Card>
-      </div>
-
-      {/* Recent candidates + recent jobs */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <Card className="lg:col-span-2" padding="p-0">
-          <div className="p-5 pb-3">
-            <CardHeader
-              title="Recent candidates"
-              description="Newest applications across all roles."
-              actions={
-                <Link to="/candidates?sort=newest" className="btn btn-sm btn-ghost">
-                  View all
-                </Link>
-              }
-            />
-          </div>
-
-          <div className="divide-y divide-slate-100 border-t border-slate-100">
-            {loading && !overview ? (
-              Array.from({ length: 5 }, (_, i) => (
-                <div key={i} className="flex items-center gap-3 px-4 py-3">
-                  <Skeleton className="w-8 h-8 rounded-pill" />
-                  <div className="flex-1 space-y-1.5">
-                    <Skeleton className="h-3 w-36" />
-                    <Skeleton className="h-2.5 w-52" />
-                  </div>
-                </div>
-              ))
-            ) : overview?.recentCandidates?.length ? (
-              overview.recentCandidates.map((candidate) => <CandidateRow key={candidate._id} candidate={candidate} />)
-            ) : (
-              <div className="p-5">
-                <EmptyState
-                  icon={FileText}
-                  title="No candidates yet"
-                  description="Upload resumes against a job to see applicants appear here."
-                  className="border-0 shadow-none py-6"
-                />
-              </div>
-            )}
-          </div>
-        </Card>
-
-        <Card padding="p-0">
-          <div className="p-5 pb-3">
-            <CardHeader
-              title="Recent jobs"
-              actions={
-                <Link to="/jobs" className="btn btn-sm btn-ghost">
-                  View all
-                </Link>
-              }
-            />
-          </div>
-
-          <div className="divide-y divide-slate-100 border-t border-slate-100">
-            {loading && !overview ? (
-              Array.from({ length: 4 }, (_, i) => (
-                <div key={i} className="px-4 py-3 space-y-1.5">
-                  <Skeleton className="h-3 w-32" />
-                  <Skeleton className="h-2.5 w-24" />
-                </div>
-              ))
-            ) : overview?.recentJobs?.length ? (
-              overview.recentJobs.map((job) => (
-                <Link
-                  key={job._id}
-                  to={`/jobs/${job._id}`}
-                  className="group block px-4 py-3 hover:bg-slate-50 transition-colors duration-fast focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-inset"
-                >
-                  <p className="text-meta font-semibold text-slate-900 truncate group-hover:text-brand-700 transition-colors duration-fast">
-                    {job.title}
+        <section aria-labelledby="roles-title">
+          <Card padding="p-4" className="dashboard-panel">
+            <SectionHeader id="roles-title" title="Hiring roles" to="/jobs" linkLabel="View all jobs" />
+            <p className="text-xs text-slate-600 mb-2">Recent roles and their review progress.</p>
+            <ul className="divide-y divide-slate-200">
+              {roles.map((job, index) => <li key={job.id} className={`py-2 flex-col sm:flex-row sm:items-center gap-x-4 ${index > 2 ? 'hidden sm:flex' : 'flex'}`}>
+                <Link to={`/jobs/${job.id}`} className="min-w-0 flex-1 min-h-11 flex flex-col justify-center rounded-control" aria-label={`Open job: ${job.title}`}>
+                  <h3 className="text-meta font-semibold break-words">{job.title}</h3>
+                  <p className="text-xs text-slate-600 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                    <span>{job.candidatesCount} candidate{job.candidatesCount === 1 ? '' : 's'}</span>
+                    <span>{job.pendingReview} awaiting review</span>
+                    <span>{job.topScore === null ? 'Not scored yet' : `Best match ${job.topScore}%`}</span>
                   </p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs text-slate-400">{formatDate(job.createdAt)}</span>
-                    {job.requiredSkillCount > 0 && (
-                      <Badge variant="neutral">{job.requiredSkillCount} required skills</Badge>
-                    )}
-                  </div>
                 </Link>
-              ))
-            ) : (
-              <div className="p-5">
-                <EmptyState
-                  icon={Briefcase}
-                  title="No jobs yet"
-                  action={
-                    <Link to="/jobs/new" className="btn btn-sm btn-primary">
-                      Create job
-                    </Link>
-                  }
-                  className="border-0 shadow-none py-6"
-                />
-              </div>
-            )}
-          </div>
-        </Card>
-      </div>
+                <div><WorkflowLink job={job} /></div>
+              </li>)}
+            </ul>
+          </Card>
+        </section>
 
-      {overview?.generatedAt && (
-        <p className="text-xs text-slate-400 flex items-center gap-1.5">
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" aria-hidden="true" />
-          Live data, updated {formatRelativeTime(overview.generatedAt)}
-          <Button variant="ghost" size="sm" onClick={refetch} className="ml-1">
-            Refresh
-          </Button>
-        </p>
-      )}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+          <section aria-labelledby="pipeline-title">
+            <Card padding="p-4" className="dashboard-panel">
+              <SectionHeader id="pipeline-title" title="Hiring pipeline" to="/candidates" linkLabel="View all candidates" />
+              {metrics.totalCandidates > 0 ? <ul>
+                {overview.pipeline.map((stage) => <li key={stage.key}>
+                  <Link to={`/candidates?hrStatus=${stage.key}&sort=score_desc`} className="block min-h-11 py-2 rounded-control" aria-label={`${stage.label}: ${stage.count} candidates`}>
+                    <div className="flex items-center justify-between gap-3 text-meta"><span>{stage.label}</span><span className="tabular-nums">{stage.count} <span className="text-xs text-slate-600">({stage.percentage}%)</span></span></div>
+                    <div className="dashboard-track mt-1.5"><div className="bg-brand-600 h-full rounded-pill" style={{ width: `${stage.percentage}%` }} /></div>
+                  </Link>
+                </li>)}
+              </ul> : <p className="text-meta text-slate-600 py-2">Add candidates to a role to begin reviewing.</p>}
+            </Card>
+          </section>
+          <section aria-labelledby="quality-title">
+            <Card padding="p-4" className="dashboard-panel">
+              <h2 id="quality-title" className="section-title mb-2">Match quality</h2>
+              <p className="text-xs text-slate-600 mb-1">Strong matches start at {overview.strongMatchThreshold}%. Scores support recruiter decisions.</p>
+              {scoredTotal > 0 ? <ul>
+                {overview.scoreBands.map((band) => <li key={band.key}>
+                  <Link to={`/candidates?minScore=${band.min}${band.max < 100 ? `&maxScore=${band.max}` : ''}&sort=score_desc`} className="flex min-h-11 items-center gap-3 rounded-control text-xs" aria-label={`${band.label}: ${band.count} candidates`}>
+                    <span className="w-20 shrink-0">{band.label}</span>
+                    <span className="dashboard-track flex-1"><span className="block h-full rounded-pill bg-brand-600" style={{ width: `${Math.round(band.count / scoredTotal * 100)}%` }} /></span>
+                    <span className="tabular-nums w-8 text-right">{band.count}</span>
+                  </Link>
+                </li>)}
+              </ul> : <p className="text-meta text-slate-600 py-2">No scored candidates yet. Use the role workspace to review scoring.</p>}
+            </Card>
+          </section>
+        </div>
+
+        <section aria-labelledby="recent-title">
+          <Card padding="p-0" className="dashboard-panel">
+            <div className="px-4 pt-3"><SectionHeader id="recent-title" title="Recent candidates" to="/candidates?sort=newest" linkLabel="View all candidates" /></div>
+            {overview.recentCandidates?.length ? <ul className="divide-y divide-slate-200">
+              {overview.recentCandidates.slice(0, 5).map((candidate, index) => <li key={candidate._id} className={index > 2 ? 'hidden sm:block' : ''}><CandidateRow candidate={candidate} /></li>)}
+            </ul> : <p className="text-meta text-slate-600 px-4 pb-4">New candidates will appear here after import.</p>}
+          </Card>
+        </section>
+      </>}
     </div>
   );
 };

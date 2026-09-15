@@ -25,7 +25,7 @@ const JobCard = ({ job }) => {
   const stats = [
     { label: 'Candidates', value: job.candidatesCount || 0, tone: 'text-slate-900' },
     { label: 'Scored', value: job.analyzedCount || 0, tone: 'text-slate-900' },
-    { label: '90%+ match', value: job.highMatchCount || 0, tone: 'text-emerald-700' }
+    { label: job.strongMatchThreshold ? `${job.strongMatchThreshold}%+ match` : 'Strong matches', value: job.highMatchCount || 0, tone: 'text-emerald-700' }
   ];
 
   return (

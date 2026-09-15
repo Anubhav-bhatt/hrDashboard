@@ -103,7 +103,8 @@ try {
   /* ------------------------------------------------------- dashboard ---- */
   section('Dashboard');
   await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
-  await page.locator('a[aria-label^="Total candidates"]').waitFor({ state: 'visible', timeout: 20000 });
+  // Candidates replaces Total candidates in the compact snapshot; link behavior is unchanged.
+  await page.locator('a[aria-label^="Candidates:"]').waitFor({ state: 'visible', timeout: 20000 });
 
   const dashAudit = await page.evaluate(() => {
     const interactive = Array.from(document.querySelectorAll('a, button, select, input, [role="tab"]'));
@@ -150,12 +151,12 @@ try {
 
   // KPI cards are real links: focusable, and Enter activates them.
   const cardIsLink = await page.evaluate(() => {
-    const card = document.querySelector('a[aria-label^="Total candidates"]');
+    const card = document.querySelector('a[aria-label^="Candidates:"]');
     return card ? card.tagName === 'A' && card.hasAttribute('href') : false;
   });
   check(cardIsLink, 'the KPI card is an anchor with an href, so Enter works natively');
 
-  await page.locator('a[aria-label^="Total candidates"]').focus();
+  await page.locator('a[aria-label^="Candidates:"]').focus();
   const focusVisible = await page.evaluate(() => {
     const el = document.activeElement;
     if (!el) return false;
@@ -171,6 +172,9 @@ try {
 
   /* -------------------------------------------------- candidate list ---- */
   section('Candidate list');
+  // Dashboard recent-candidate rows share the "Open profile for" label, so wait for
+  // the list's own search field first; otherwise the audit can run on the outgoing page.
+  await page.locator('#candidate-search').waitFor({ state: 'visible', timeout: 20000 });
   await page.locator('a[aria-label^="Open profile for"]').first().waitFor({ state: 'visible', timeout: 20000 });
 
   const listAudit = await page.evaluate(() => {

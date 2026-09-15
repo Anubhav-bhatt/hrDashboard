@@ -103,14 +103,15 @@ try {
 
   // Wait for real content, not just network idle: the KPI cards render skeletons
   // until the analytics request resolves.
-  await page.locator('a[aria-label^="Total candidates"]').waitFor({ state: 'visible', timeout: 20000 });
+  // Eight broad KPIs became four compact metrics; Candidates keeps the same destination.
+  await page.locator('a[aria-label^="Candidates:"]').waitFor({ state: 'visible', timeout: 20000 });
   const dashboard = await text();
-  check(/total candidates/i.test(dashboard), 'the dashboard renders its KPI cards');
+  check(/recruitment snapshot/i.test(dashboard), 'the dashboard renders its KPI cards');
   check(!/\bNaN\b|\bundefined\b/.test(dashboard), 'no NaN or undefined values appear on the dashboard');
   check(/hiring pipeline/i.test(dashboard), 'the hiring pipeline section renders');
   check(/recent candidates/i.test(dashboard), 'the recent candidates section renders');
 
-  const totalCard = page.locator('a[aria-label^="Total candidates"]');
+  const totalCard = page.locator('a[aria-label^="Candidates:"]');
   check((await totalCard.count()) === 1, 'the Total candidates card is a single interactive element');
 
   // Click the far corner of the card, well away from any text, to prove the
