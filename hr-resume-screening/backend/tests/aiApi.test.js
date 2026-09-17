@@ -13,6 +13,15 @@
  * The original environment is restored in teardown.
  */
 require('dotenv').config();
+
+/*
+ * The AI limiter is built when the route module loads, so its ceiling has to be
+ * raised before the app is required rather than in setup. A suite that makes
+ * more calls than a recruiter would must not start reporting rate limits as
+ * though they were product failures.
+ */
+process.env.AI_RATE_LIMIT = '1000';
+
 const http = require('http');
 const { createSuite, assert } = require('./harness');
 
@@ -117,6 +126,39 @@ const setup = async () => {
   });
   created.jobIds.push(job.id);
 
+  /*
+   * Two scored candidates on that job.
+   *
+   * The assistant delegation tests need a specialist to have something real to
+   * work with: ranking has to return rows, and comparison needs two of them.
+   * They are deleted with the job, which cascades.
+   */
+  const candidates = [];
+  for (const [index, fixture] of [
+    { name: `${TEST_PREFIX} Priya Nair`, score: 91 },
+    { name: `${TEST_PREFIX} Arjun Mehta`, score: 78 }
+  ].entries()) {
+    candidates.push(
+      await prisma.candidate.create({
+        data: {
+          jobId: job.id,
+          name: fixture.name,
+          email: `${TEST_PREFIX}.candidate${index}@example.invalid`,
+          currentRole: 'React Developer',
+          headline: 'React Developer',
+          totalExperience: 5,
+          skills: ['React', 'TypeScript'],
+          resumeText: 'React developer with TypeScript experience.',
+          overallScore: fixture.score,
+          hrStatus: 'SHORTLISTED',
+          source: 'MANUAL',
+          outlookMessageId: `${TEST_PREFIX}-message-${index}`,
+          outlookAttachmentId: `${TEST_PREFIX}-attachment-${index}`
+        }
+      })
+    );
+  }
+
   // One sign-in; the cookie is read back the same way a browser would.
   const login = await fetch(`${baseUrl}/auth/login`, {
     method: 'POST',
@@ -129,7 +171,7 @@ const setup = async () => {
   if (!setCookie) throw new Error('Test login issued no session cookie');
   sessionCookie = setCookie.split(';')[0];
 
-  return { job };
+  return { job, candidates };
 };
 
 const teardown = async () => {
@@ -146,7 +188,7 @@ const teardown = async () => {
 /* ---------------------------------------------------------------- tests --- */
 
 const run = async () => {
-  const { job } = await setup();
+  const { job, candidates } = await setup();
 
   /* ------------------------------------------------------ authentication - */
 
@@ -572,6 +614,115 @@ const run = async () => {
         !new RegExp(forbidden, 'i').test(serialized),
         `"${forbidden}" must not appear in the client payload: ${serialized}`
       );
+    }
+  });
+
+  /* --------------------------------------------- assistant delegation ---- */
+
+  /*
+   * The assistant answers some questions itself and hands the rest to a
+   * specialist. That hand-off runs through the same tool layer as a direct
+   * call, so it needs the same authenticated identity.
+   *
+   * These tests exist because a delegated context was once rebuilt from
+   * scratch — `{ jobId, candidateScope }` — which dropped `userId` and
+   * `userRole`. `resolvePermissions` grants nothing without them, so the
+   * specialist's first read failed with "jobs.read required" while the
+   * identical direct call succeeded. Asserting the specialist ran, rather than
+   * that the request returned 200, is what makes that reachable from a test:
+   * the assistant reports a permission failure as a normal answer.
+   */
+  suite.group('Assistant delegation carries the authenticated identity');
+
+  /** Runs an assistant turn with a job in context, the way the UI always does. */
+  const assistantTurn = (message, extraContext = {}) => {
+    setAiEnv(allModesOn());
+    return authed('POST', '/ai/run', {
+      body: { mode: 'assistant', message, context: { jobId: job.id, ...extraContext } }
+    });
+  };
+
+  /** Fails with the delegated result attached, so a regression names itself. */
+  const assertDelegated = (res, specialist) => {
+    assert.strictEqual(res.status, 200, `expected 200, got ${res.status}: ${JSON.stringify(res.body)}`);
+    assert.strictEqual(res.body.success, true, JSON.stringify(res.body));
+
+    const structured = res.body.data.structuredData || {};
+    assert.ok(
+      !/permission/i.test(structured.message || ''),
+      `delegation hit the permission layer: ${structured.message}`
+    );
+    assert.strictEqual(
+      structured.specialistMode,
+      specialist,
+      `expected the ${specialist} specialist to run, got ${structured.specialistMode}: ${structured.message}`
+    );
+    assert.notStrictEqual(structured.result?.placeholder, true, 'the specialist returned a placeholder, not analysis');
+    return structured;
+  };
+
+  await testAsync('ranking through the assistant reaches the ranking specialist', async () => {
+    const structured = assertDelegated(await assistantTurn('Rank candidates for this role'), 'ranking');
+    assert.ok(
+      Array.isArray(structured.result.rankedCandidates) && structured.result.rankedCandidates.length >= 2,
+      'ranking returned no candidates, so the tool layer was not reached'
+    );
+  });
+
+  await testAsync('comparison through the assistant reaches the comparison specialist', async () => {
+    const structured = assertDelegated(
+      await assistantTurn('Compare the top two candidates', { candidateIds: candidates.map((c) => c.id) }),
+      'comparison'
+    );
+    assert.strictEqual(structured.result.candidates?.length, 2, 'comparison did not evaluate both candidates');
+    // The chat bubble is this text, so a summary read off the wrong keys is a
+    // blank answer rather than a crash.
+    for (const candidate of candidates) {
+      assert.ok(structured.message.includes(candidate.name), `the summary omitted ${candidate.name}: ${structured.message}`);
+    }
+  });
+
+  await testAsync('screening through the assistant reaches the screening specialist', async () => {
+    const structured = assertDelegated(
+      await assistantTurn(`Screen ${candidates[0].name}`, { candidateIds: [candidates[0].id] }),
+      'screening'
+    );
+    assert.ok(structured.result.candidateName, 'screening returned no candidate evidence');
+  });
+
+  await testAsync('the rank-then-compare chain keeps identity across both specialists', async () => {
+    // The second hand-off is fed by the first, so a lost identity surfaces here
+    // even when each specialist works on its own.
+    const structured = assertDelegated(await assistantTurn('Rank candidates and compare top 2'), 'comparison');
+    assert.ok(
+      structured.result.candidates?.length >= 2,
+      'the ranking output did not carry into the comparison'
+    );
+    assert.ok(!/undefined/.test(structured.message), `the summary rendered undefined values: ${structured.message}`);
+  });
+
+  await testAsync('delegation cannot be steered by caller-supplied filters', async () => {
+    // Identity travels into the specialist; the caller's data fields must not,
+    // or a stale filter in the browser silently changes what ranking ranks.
+    const structured = assertDelegated(
+      await assistantTurn('Rank candidates for this role', { filters: { candidateScope: 'SHORTLISTED' } }),
+      'ranking'
+    );
+    assert.strictEqual(
+      structured.result.candidateScope,
+      'ALL',
+      'a caller filter overrode the scope the assistant chose'
+    );
+  });
+
+  await testAsync('a client still cannot supply its own identity', async () => {
+    setAiEnv(allModesOn());
+    for (const forged of [{ userId: 'attacker' }, { userRole: 'ADMIN' }, { requestId: 'forged' }]) {
+      const res = await authed('POST', '/ai/run', {
+        body: { mode: 'assistant', message: 'Rank candidates for this role', context: { jobId: job.id, ...forged } }
+      });
+      assert.strictEqual(res.status, 400, `${Object.keys(forged)[0]} was accepted from the request body`);
+      assert.strictEqual(res.body.code, 'AI_REQUEST_INVALID');
     }
   });
 

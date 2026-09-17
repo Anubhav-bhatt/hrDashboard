@@ -107,19 +107,15 @@ try {
   const dashboard = await text();
   check(/candidates/i.test(dashboard), 'the dashboard renders its KPI cards');
   check(!/\bNaN\b|\bundefined\b/.test(dashboard), 'no NaN or undefined values appear on the dashboard');
-  check(/needs your attention/i.test(dashboard), 'the Needs your attention section renders');
-  check(/analytics/i.test(dashboard), 'the Analytics section is offered');
+  check(/needs attention/i.test(dashboard), 'the Needs attention section renders');
 
-  // The pipeline and recent-candidates panels were moved behind the Analytics
-  // disclosure so the first screen stays about what to do next. They are still
-  // present — expanding Analytics must reveal both.
-  await page.locator('button[aria-controls="dashboard-analytics"]').click();
-  await page.waitForTimeout(700);
-  const analytics = await text();
-  check(/hiring pipeline/i.test(analytics), 'the hiring pipeline renders inside Analytics');
-  check(/recent candidates/i.test(analytics), 'the recent candidates panel renders inside Analytics');
-  await page.locator('button[aria-controls="dashboard-analytics"]').click();
-  await page.waitForTimeout(400);
+  // Old: pipeline and recent candidates sat behind a collapsed Analytics disclosure.
+  // New: the compact dashboard shows them directly, with no disclosure.
+  // Why: the dashboard redesign keeps one compact pipeline, match quality and a short
+  // recent list on the page instead of hiding them behind an extra click.
+  check(/hiring pipeline/i.test(dashboard), 'the hiring pipeline renders on the dashboard');
+  check(/recent candidates/i.test(dashboard), 'the recent candidates panel renders on the dashboard');
+  check((await page.locator('button[aria-controls="dashboard-analytics"]').count()) === 0, 'no collapsed Analytics disclosure remains');
 
   const totalCard = page.locator('a[aria-label^="Active candidates"]');
   check((await totalCard.count()) === 1, 'the Active candidates card is a single interactive element');

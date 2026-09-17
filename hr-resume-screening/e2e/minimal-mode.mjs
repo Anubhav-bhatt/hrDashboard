@@ -326,7 +326,13 @@ try {
     await page.waitForTimeout(200);
 
     const layout = await page.evaluate(() => {
-      const connector = document.querySelector('section[aria-labelledby="best-fits-heading"] svg');
+      /*
+       * The connector is the only full-width drawing in this section; every
+       * other svg here is a lucide glyph inside a card or an empty state. A
+       * bare `svg` selector matched those glyphs and reported the connector
+       * visible at every width, so it is identified by its own viewBox.
+       */
+      const connector = document.querySelector('section[aria-labelledby="best-fits-heading"] svg[viewBox="0 0 300 30"]');
       return {
         overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
         connectorVisible: connector ? connector.getBoundingClientRect().height > 0 : false,

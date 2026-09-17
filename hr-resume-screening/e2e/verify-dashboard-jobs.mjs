@@ -200,65 +200,19 @@ const body = (page) => page.locator('body').innerText();
 
 try {
   /* ============================================== STANDARD DASHBOARD ====== */
-  section('Standard Dashboard');
-  {
-    const { context, page } = await open({ mode: 'normal' });
-    await page.goto(`${BASE}/dashboard`, { waitUntil: 'networkidle' });
-    await page.locator('button[aria-controls="dashboard-analytics"]').waitFor({ timeout: 20000 });
-
-    const h1 = await page.locator('h1').first().innerText();
-    check(h1.trim() === 'Dashboard', 'the page is headed "Dashboard"', h1);
-    check((await page.locator('h1').count()) === 1, 'exactly one h1');
-
-    check(
-      (await page.locator('a[href="/jobs/new"]').count()) >= 1,
-      'Create job is the page-level primary action'
-    );
-
-    /* First layer stays four figures — the reduction this redesign protects. */
-    const snapshot = page.locator('section[aria-labelledby="dashboard-snapshot-heading"]');
-    const snapText = await snapshot.innerText();
-    for (const label of ['Open jobs', 'Active candidates', 'Strong matches', 'Shortlisted']) {
-      check(snapText.includes(label), `first layer states ${label}`);
-    }
-    /*
-     * Four figures, and only four.
-     * This is the reduction the redesign protects: the deeper metrics —
-     * awaiting review, hires, closed jobs, averages — stay behind the Analytics
-     * disclosure rather than competing for the first screen.
-     */
-    check(
-      !snapText.includes('Awaiting review') && !snapText.includes('Hires'),
-      'the trailing metrics stay in Analytics'
-    );
-
-    /* Attention leads the decision, and stays bounded. */
-    const attention = page.locator('section[aria-labelledby="dashboard-attention-heading"]');
-    check((await attention.count()) === 1, 'the attention queue is present');
-    const rows = await attention.locator('li').count();
-    check(rows > 0 && rows <= 3, 'the queue is bounded to three roles', String(rows));
-
-    /* Attention must come before Analytics in the document. */
-    const order = await page.evaluate(() => {
-      const a = document.querySelector('section[aria-labelledby="dashboard-attention-heading"]');
-      const an = document.querySelector('button[aria-controls="dashboard-analytics"]');
-      if (!a || !an) return null;
-      return a.compareDocumentPosition(an) & Node.DOCUMENT_POSITION_FOLLOWING ? 'attention-first' : 'analytics-first';
-    });
-    check(order === 'attention-first', 'attention is answered before analytics', String(order));
-
-    check(await page.locator('#dashboard-analytics').isHidden(), 'analytics stays collapsed by default');
-
-    /* Closed roles must not appear in active work. */
-    const text = await body(page);
-    check(!/ARCHIVED Compliance Auditor/i.test(text), 'no closed role leaks onto the dashboard');
-
-    /* Every queue row names an action in words. */
-    const actionLinks = await attention.locator('a').count();
-    check(actionLinks >= rows, 'every queue row offers a next step', `${actionLinks} links / ${rows} rows`);
-
-    await context.close();
-  }
+  /*
+   * Standard Mode's dashboard is covered by dashboard.mjs.
+   *
+   * This section used to assert the composition that preceded the control-surface
+   * rebuild: an h1 reading "Dashboard", Create job as the page-level primary
+   * action, and the deeper figures folded behind an Analytics disclosure. That
+   * page no longer exists, so the assertions could only ever fail. dashboard.mjs
+   * replaces them against the live API, and verify-attention.mjs keeps the
+   * stubbed closed-role and queue-ordering checks that lived here.
+   *
+   * The rest of this suite — Minimal Home, both Jobs compositions, empty and
+   * error states, responsive behaviour and the mode switch — is unchanged.
+   */
 
   /* ================================================== MINIMAL HOME ======== */
   section('Minimal Home');
@@ -408,7 +362,10 @@ try {
       await page.goto(`${BASE}/dashboard`, { waitUntil: 'networkidle' });
       await page.waitForTimeout(900);
       const text = await body(page);
-      check(/create a job|no active jobs|welcome/i.test(text), `${mode}: an empty workspace offers one clear action`);
+      // Each mode words this differently: Standard Mode states the situation
+      // ("No hiring activity yet") above a Create Job button, Minimal Mode
+      // reports no active jobs. Either is one clear action.
+      check(/create (a )?job|no hiring activity|no active jobs|welcome/i.test(text), `${mode}: an empty workspace offers one clear action`);
       check((await page.locator('a[href="/jobs/new"]').count()) >= 1, `${mode}: Create job is offered when empty`);
       await context.close();
     }

@@ -21,6 +21,36 @@ const { logShadowRun } = require('../logging/shadowLogger');
 const { validateAssistantIntent } = require('../providers/schemas/assistantIntent.schema');
 
 /**
+ * Builds the context a delegated specialist runs under.
+ *
+ * A specialist reaches data through the same tool layer as a direct call, and
+ * that layer resolves permissions from `userId` and `userRole`. Those fields are
+ * put on the context by `AgentContext` from the verified session and can never
+ * be supplied by a client, so carrying them across the hand-off is what makes a
+ * delegated read behave exactly like the same read requested directly. Omitting
+ * them granted the specialist nothing at all, and its first tool call failed
+ * with "jobs.read required" while the direct call succeeded.
+ *
+ * Only the server-owned fields travel. The specialist's data inputs — jobId,
+ * candidateIds, candidateScope, filters — come from `overrides`, i.e. from the
+ * branch that decided to delegate, not from whatever the caller happened to
+ * have in context. That distinction matters: `ranking.agent` reads
+ * `filters.candidateScope` ahead of `candidateScope`, so spreading the whole
+ * incoming context would let a stale filter in the browser silently change what
+ * the assistant ranks.
+ *
+ * @param {import('../types/ai.types').AgentContext} context Authenticated context
+ * @param {Object} overrides Specialist inputs chosen by the delegating branch
+ * @returns {Object} Context for the specialist
+ */
+const delegateContext = (context, overrides) => ({
+  requestId: context.requestId,
+  userId: context.userId,
+  userRole: context.userRole,
+  ...overrides
+});
+
+/**
  * Parses deterministic user intent from the message.
  *
  * Supported intents:
@@ -524,10 +554,10 @@ const runAssistantAgent = async ({
 
       const rankResult = await runRankingAgent({
         message,
-        context: {
+        context: delegateContext(context, {
           jobId,
           candidateScope: 'ALL'
-        },
+        }),
         provider,
         config,
         toolRunner
@@ -540,7 +570,9 @@ const runAssistantAgent = async ({
       let text = `Ranking complete for **${jobData.title}** (${rankedList.length} candidate${rankedList.length === 1 ? '' : 's'}):\n\n`;
       const top3 = rankedList.slice(0, 3);
       top3.forEach((c, idx) => {
-        text += `${idx + 1}. **${c.candidateName}** — ${c.overallScore != null ? `${c.overallScore}% match` : 'Unscored'} (${c.fitLevel})\n`;
+        // The ranking result carries `matchScore`; reading `overallScore` here
+        // reported every scored candidate as "Unscored".
+        text += `${idx + 1}. **${c.candidateName}** — ${c.matchScore != null ? `${c.matchScore}% match` : 'Unscored'} (${c.fitLevel})\n`;
       });
 
       const suggestedActions = [
@@ -621,25 +653,28 @@ const runAssistantAgent = async ({
 
       const compResult = await runComparisonAgent({
         message,
-        context: {
+        context: delegateContext(context, {
           jobId,
           candidateIds: validIds
-        },
+        }),
         provider,
         config,
         toolRunner
       });
 
       const structured = compResult.structuredData || {};
-      const evalList = structured.evaluatedCandidates || [];
-      const names = evalList.map((c) => c.name).join(' and ');
+      // Key names follow the comparison result: `candidates` carrying
+      // `candidateName`, and `tradeoffs`. Reading the summary off anything else
+      // renders "Compared  for Job" with the names silently missing.
+      const evalList = structured.candidates || [];
+      const names = evalList.map((c) => c.candidateName).join(' and ');
 
       let text = `Compared ${names} for **${jobData.title}**:\n\n`;
-      if (Array.isArray(structured.tradeOffs) && structured.tradeOffs.length > 0) {
-        text += `**Key Trade-offs:**\n` + structured.tradeOffs.slice(0, 3).map((t) => `• ${t}`).join('\n') + `\n\n`;
+      if (Array.isArray(structured.tradeoffs) && structured.tradeoffs.length > 0) {
+        text += `**Key Trade-offs:**\n` + structured.tradeoffs.slice(0, 3).map((t) => `• ${t}`).join('\n') + `\n\n`;
       }
       if (Array.isArray(structured.bestByDimension) && structured.bestByDimension.length > 0) {
-        text += `**Best by Dimension:**\n` + structured.bestByDimension.slice(0, 3).map((b) => `• ${b.dimension}: **${b.candidateName}** (${b.detail})`).join('\n');
+        text += `**Best by Dimension:**\n` + structured.bestByDimension.slice(0, 3).map((b) => `• ${b.dimension}: **${b.candidateName}** (${b.reason})`).join('\n');
       }
 
       const suggestedActions = [
@@ -675,7 +710,7 @@ const runAssistantAgent = async ({
 
       const rankResult = await runRankingAgent({
         message: 'Rank candidates',
-        context: { jobId, candidateScope: 'ALL' },
+        context: delegateContext(context, { jobId, candidateScope: 'ALL' }),
         provider,
         config,
         toolRunner
@@ -705,22 +740,24 @@ const runAssistantAgent = async ({
 
       const compResult = await runComparisonAgent({
         message: `Compare top ${count} candidates`,
-        context: { jobId, candidateIds: topIds },
+        context: delegateContext(context, { jobId, candidateIds: topIds }),
         provider,
         config,
         toolRunner
       });
 
       const compStructured = compResult.structuredData || {};
-      const evalList = compStructured.evaluatedCandidates || [];
+      // Same result shape as the comparison branch above: `candidates` with
+      // `candidateName` and `matchScore`, and `tradeoffs`.
+      const evalList = compStructured.candidates || [];
 
       let text = `Ranked ${rankedList.length} candidates and compared top ${topIds.length} for **${jobData.title}**:\n\n`;
       evalList.forEach((c, idx) => {
-        text += `${idx + 1}. **${c.name}** (${c.overallScore != null ? `${c.overallScore}%` : 'Unscored'}) — ${c.fitLevel}\n`;
+        text += `${idx + 1}. **${c.candidateName}** (${c.matchScore != null ? `${c.matchScore}%` : 'Unscored'}) — ${c.fitLevel}\n`;
       });
 
-      if (Array.isArray(compStructured.tradeOffs) && compStructured.tradeOffs.length > 0) {
-        text += `\n**Key Comparison Trade-offs:**\n` + compStructured.tradeOffs.slice(0, 2).map((t) => `• ${t}`).join('\n');
+      if (Array.isArray(compStructured.tradeoffs) && compStructured.tradeoffs.length > 0) {
+        text += `\n**Key Comparison Trade-offs:**\n` + compStructured.tradeoffs.slice(0, 2).map((t) => `• ${t}`).join('\n');
       }
 
       const suggestedActions = [
@@ -794,10 +831,10 @@ const runAssistantAgent = async ({
 
       const screenResult = await runScreeningAgent({
         message,
-        context: {
+        context: delegateContext(context, {
           jobId,
           candidateIds: [targetCandidateId]
-        },
+        }),
         provider,
         config,
         toolRunner

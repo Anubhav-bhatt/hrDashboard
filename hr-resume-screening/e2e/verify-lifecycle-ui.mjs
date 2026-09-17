@@ -492,7 +492,16 @@ try {
     );
 
     section('KPI responsive layout');
-    for (const [width, expectedCols] of [[1440, 4], [1024, 4], [768, 2], [430, 2], [390, 2], [360, 2]]) {
+    /*
+     * Four across from 768px, not from 1024px.
+     *
+     * The control-surface rebuild moved the four-column breakpoint down one
+     * step (lg to md). At 768px each card is 171px wide, which holds its label,
+     * its figure and its context line on one line apiece, so the row reads as
+     * one band instead of leaving half the tablet width empty. dashboard.mjs
+     * asserts the same breakpoint across the full width sweep.
+     */
+    for (const [width, expectedCols] of [[1440, 4], [1024, 4], [768, 4], [430, 2], [390, 2], [360, 2]]) {
       await page.setViewportSize({ width, height: 1000 });
       await page.waitForTimeout(250);
       const cols = await page.evaluate(() => {

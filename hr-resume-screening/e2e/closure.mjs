@@ -493,28 +493,29 @@ try {
   check(/closed jobs/i.test(body), 'and links to Closed jobs');
 
   /*
-   * The headline row is active hiring only, so the hire count is no longer in it.
+   * The headline row is active hiring only, so the hire count is not in it.
    *
    * "Hires" counts SELECTED candidates, and a candidate becomes SELECTED only by
-   * closing their role — so every hire belongs to a closed job. In the active
-   * snapshot the card linked to the active candidate list, where by construction
-   * none of them can appear: the number and its destination disagreed. It now
-   * sits in Analytics beside Closed jobs and Recent hires, so it is asserted
-   * after the disclosure is opened rather than before.
+   * closing their role — so every hire belongs to a closed job.
+   *
+   * Old: the hire count and a Recent hires list sat in the dashboard's collapsed
+   *      Analytics disclosure.
+   * New: the compact dashboard has no Analytics disclosure; the hire is asserted
+   *      where hiring outcomes live — Closed Jobs, one navigation click away.
+   * Why: the dashboard redesign limits the page to active work (four KPIs, next
+   *      step, attention, roles, pipeline, match quality, recent candidates).
    */
   check(!/\bhires\b/i.test(body), 'the hire count has left the active snapshot');
-
-  await page.locator('button[aria-controls="dashboard-analytics"]').click();
-  await page.waitForTimeout(400);
-  body = await text();
-  check(/\bhires\b/i.test(body) && /candidates selected/i.test(body), 'the hire count is in Analytics');
-  check(/recent hires/i.test(body), 'the Recent hires section renders');
-  check(body.includes('Bravo Chosen'), 'the new hire appears in Recent hires');
+  check((await page.locator('button[aria-controls="dashboard-analytics"]').count()) === 0, 'no collapsed Analytics disclosure remains');
   check(!/jobs overview/i.test(body), 'the jobs overview section is no longer on the dashboard');
   check(!/\bNaN\b|\bundefined\b/.test(body), 'no NaN or undefined values appear');
 
-  const viewClosed = page.locator('a', { hasText: /view closed jobs/i }).first();
-  check((await viewClosed.count()) > 0, 'Recent hires links through to closed jobs');
+  const closedNav = page.locator('a[href="/jobs/closed"]').first();
+  check((await closedNav.count()) > 0, 'the dashboard shell links through to Closed Jobs');
+  await closedNav.click();
+  await page.waitForURL('**/jobs/closed', { timeout: 15000 });
+  await page.getByText('Bravo Chosen').first().waitFor({ state: 'visible', timeout: 20000 }).catch(() => {});
+  check((await text()).includes('Bravo Chosen'), 'the new hire appears on Closed Jobs');
 
   /* ------------------------------------------------------------ dark theme */
   section('Dark mode');

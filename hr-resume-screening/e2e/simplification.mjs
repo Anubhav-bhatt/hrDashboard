@@ -322,30 +322,43 @@ try {
    * had nothing to do with what they test.
    */
   await page.goto(BASE, { waitUntil: 'domcontentloaded' });
-  await page.locator('button[aria-controls="dashboard-analytics"]').waitFor({ state: 'visible', timeout: 25000 });
+  await page.locator('section[aria-labelledby="dashboard-snapshot-heading"]').waitFor({ state: 'visible', timeout: 25000 });
 
   /* ----------------------------------------------- Test 11: dashboard focus */
+  /*
+   * The first screen stays about what to do next.
+   *
+   * This used to be asserted against a collapsed Analytics disclosure, with the
+   * pipeline, score distribution, top candidates and recent hires folded inside
+   * it. The control-surface rebuild removed the disclosure: the recommendation
+   * and the attention queue lead, and the supporting figures sit on the page in
+   * compact form rather than one click away. The intent asserted here is
+   * unchanged — what leads is the decision, not the analytics. dashboard.mjs
+   * covers the composition in full; these checks keep this suite honest about
+   * the claim it makes.
+   */
   section('Tests 11-15 — dashboard focus');
   const dash = await text();
-  check(/needs your attention/i.test(dash), 'Needs your attention is present');
-  check(/analytics/i.test(dash), 'Analytics is offered as a disclosure');
+  check(/needs attention/i.test(dash), 'Needs attention is present');
+  check(
+    (await page.locator('button[aria-controls="dashboard-analytics"]').count()) === 0,
+    'no Analytics disclosure stands between the recruiter and the figures'
+  );
 
-  const analyticsPanel = page.locator('#dashboard-analytics');
-  check(await analyticsPanel.isHidden(), 'analytics is collapsed by default');
-  const toggle = page.locator('button[aria-controls="dashboard-analytics"]');
-  check((await toggle.getAttribute('aria-expanded')) === 'false', 'the disclosure reports its collapsed state');
-  await toggle.click();
-  await page.waitForTimeout(600);
-  check(await analyticsPanel.isVisible(), 'expanding Analytics reveals it');
-  check((await toggle.getAttribute('aria-expanded')) === 'true', 'and updates aria-expanded');
-  const analyticsText = await text();
-  check(/hiring pipeline/i.test(analyticsText), 'the pipeline is preserved inside Analytics');
-  check(/score distribution|match score/i.test(analyticsText), 'score distribution is preserved');
-  check(/top candidates/i.test(analyticsText), 'top candidates is preserved');
-  check(/recent hires/i.test(analyticsText), 'Recent hires is preserved inside Analytics');
+  const recommended = page.locator('section[aria-labelledby="dashboard-recommended-heading"]');
+  check((await recommended.count()) === 1, 'the recommended next step leads the page');
+  check(
+    (await page.locator('main .btn-primary').count()) === 1,
+    'the recommendation is the only primary call to action'
+  );
+
+  // The supporting figures are on the page, not behind a click.
+  check(/hiring pipeline/i.test(dash), 'the pipeline is present on the dashboard');
+  check(/match quality/i.test(dash), 'match quality is present on the dashboard');
+  check(/recent candidates/i.test(dash), 'recent candidates is present on the dashboard');
 
   // The attention cards must be built from real job state, not invented.
-  const attentionActions = page.locator('a', { hasText: /review shortlist|review candidates|add candidates|score candidates/i });
+  const attentionActions = page.locator('a', { hasText: /review shortlist|review candidates|add candidates|score candidates|close job/i });
   check((await attentionActions.count()) > 0, 'attention cards offer a concrete next action');
 
   /* ------------------------------------------- Tests 61: jobs experience */
