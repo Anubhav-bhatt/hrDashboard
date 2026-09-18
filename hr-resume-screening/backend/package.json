@@ -27,7 +27,8 @@
     "seed:user": "node prisma/seedUser.js",
     "prisma:generate": "prisma generate",
     "prisma:deploy": "prisma migrate deploy",
-    "prisma:push": "prisma db push"
+    "prisma:push": "prisma db push",
+    "db:reset": "prisma db push --force-reset && node prisma/seedUser.js"
   },
   "keywords": [
     "hr",
