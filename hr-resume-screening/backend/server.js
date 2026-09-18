@@ -83,6 +83,14 @@ const healthHandler = (req, res) => {
     timestamp: new Date().toISOString()
   });
 };
+app.get('/', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'HR Resume Screening Backend API is running',
+    health: '/health',
+    api: '/api'
+  });
+});
 app.get('/health', healthHandler);
 app.get('/api/health', healthHandler);
 
