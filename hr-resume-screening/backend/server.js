@@ -29,7 +29,7 @@ const allowedOrigins = Array.from(
       ...(process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',') : []),
       ...(process.env.NODE_ENV === 'production' ? [] : DEV_ORIGINS)
     ]
-      .map((o) => o.trim())
+      .map((o) => o.trim().replace(/\/+$/, ''))
       .filter(Boolean)
   )
 );
@@ -38,7 +38,9 @@ app.use(
   cors({
     origin: (origin, callback) => {
       // Same-origin / server-to-server requests carry no Origin header.
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin) return callback(null, true);
+      const cleanOrigin = origin.trim().replace(/\/+$/, '');
+      if (allowedOrigins.includes(cleanOrigin)) {
         return callback(null, true);
       }
       return callback(null, false);
