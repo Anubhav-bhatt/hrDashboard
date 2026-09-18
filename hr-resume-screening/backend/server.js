@@ -40,7 +40,13 @@ app.use(
       // Same-origin / server-to-server requests carry no Origin header.
       if (!origin) return callback(null, true);
       const cleanOrigin = origin.trim().replace(/\/+$/, '');
-      if (allowedOrigins.includes(cleanOrigin)) {
+      const isAllowed =
+        allowedOrigins.includes(cleanOrigin) ||
+        cleanOrigin.endsWith('.vercel.app') ||
+        cleanOrigin.includes('localhost') ||
+        cleanOrigin.includes('127.0.0.1');
+
+      if (isAllowed) {
         return callback(null, true);
       }
       return callback(null, false);
