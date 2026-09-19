@@ -18,6 +18,10 @@ const http = require('http');
 const { createSuite, assert } = require('./harness');
 
 const prisma = require('../config/prisma');
+const { ensureTestWorkspace, addWorkspaceMember, cleanupTestWorkspaces } = require('./workspaceFixture');
+
+// Jobs are workspace-owned, so fixtures need one before they can create any.
+let testWorkspaceId;
 const app = require('../server');
 const { hashPassword } = require('../services/authService');
 
@@ -58,6 +62,7 @@ let seq = 0;
 const makeJob = async (title) => {
   const job = await prisma.job.create({
     data: {
+      workspaceId: testWorkspaceId,
       title,
       jdFileName: `${title}.txt`,
       jdMimeType: 'text/plain',
@@ -127,6 +132,7 @@ const setup = async () => {
     create: { email: ADMIN_EMAIL, passwordHash: await hashPassword(PASSWORD), name: 'Delete Admin', role: 'ADMIN' }
   });
   created.userIds.push(admin.id);
+  testWorkspaceId = await ensureTestWorkspace(admin.id, { name: 'Deletion Tester' });
 
   // A standard recruiter, to prove the destructive route is not open to one.
   const recruiter = await prisma.user.upsert({
@@ -140,6 +146,7 @@ const setup = async () => {
     }
   });
   created.userIds.push(recruiter.id);
+  await addWorkspaceMember(testWorkspaceId, recruiter.id, 'MEMBER');
 
   const adminLogin = await request('POST', '/auth/login', { body: { email: ADMIN_EMAIL, password: PASSWORD }, cookie: '' });
   adminCookie = adminLogin.setCookie.split(';')[0];
@@ -160,6 +167,7 @@ const teardown = async () => {
   await prisma.candidate.deleteMany({ where: { id: { in: created.candidateIds } } }).catch(() => {});
   await prisma.importSession.deleteMany({ where: { jobId: { in: created.jobIds } } }).catch(() => {});
   await prisma.job.deleteMany({ where: { id: { in: created.jobIds } } }).catch(() => {});
+  await cleanupTestWorkspaces(created.userIds).catch(() => {});
   await prisma.user.deleteMany({ where: { id: { in: created.userIds } } }).catch(() => {});
   await prisma.$disconnect().catch(() => {});
   if (server) await new Promise((resolve) => server.close(resolve));

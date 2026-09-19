@@ -1,5 +1,12 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { fetchCurrentUser, login as loginRequest, logout as logoutRequest, onUnauthorized, toApiError } from '../services/api';
+import {
+  fetchCurrentUser,
+  login as loginRequest,
+  signup as signupRequest,
+  logout as logoutRequest,
+  onUnauthorized,
+  toApiError
+} from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -12,6 +19,9 @@ const AuthContext = createContext(null);
  */
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  // Which workspace the recruiter is acting in. Resolved by the session probe;
+  // sign-in and sign-up do not carry it, so it stays null until /auth/me answers.
+  const [workspace, setWorkspace] = useState(null);
   const [status, setStatus] = useState('loading'); // loading | authenticated | anonymous
   const [sessionMessage, setSessionMessage] = useState('');
 
@@ -19,10 +29,12 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await fetchCurrentUser();
       setUser(response.data.user);
+      setWorkspace(response.data.workspace || null);
       setStatus('authenticated');
     } catch (error) {
       const apiError = toApiError(error);
       setUser(null);
+      setWorkspace(null);
       setStatus('anonymous');
       // A network failure is worth surfacing; an ordinary 401 is not.
       if (apiError.code === 'NETWORK_ERROR') {
@@ -41,6 +53,7 @@ export const AuthProvider = ({ children }) => {
     () =>
       onUnauthorized((apiError) => {
         setUser(null);
+        setWorkspace(null);
         setStatus('anonymous');
         setSessionMessage(
           apiError?.code === 'SESSION_EXPIRED'
@@ -59,6 +72,21 @@ export const AuthProvider = ({ children }) => {
     return response.data.user;
   }, []);
 
+  /**
+   * Creates an account and leaves the person signed in.
+   *
+   * The server issues the same session cookies as sign-in, so there is no
+   * second step and no bounce back to the login screen — the account exists and
+   * the recruiter is already working.
+   */
+  const signUp = useCallback(async ({ name, email, password }) => {
+    const response = await signupRequest({ name, email, password });
+    setUser(response.data.user);
+    setStatus('authenticated');
+    setSessionMessage('');
+    return response.data.user;
+  }, []);
+
   const signOut = useCallback(async () => {
     try {
       await logoutRequest();
@@ -66,6 +94,7 @@ export const AuthProvider = ({ children }) => {
       // Clear locally even if the request failed, so the UI cannot keep showing
       // candidate data after the recruiter asked to sign out.
       setUser(null);
+      setWorkspace(null);
       setStatus('anonymous');
       setSessionMessage('');
     }
@@ -74,16 +103,18 @@ export const AuthProvider = ({ children }) => {
   const value = useMemo(
     () => ({
       user,
+      workspace,
       status,
       isAuthenticated: status === 'authenticated',
       isLoading: status === 'loading',
       sessionMessage,
       clearSessionMessage: () => setSessionMessage(''),
       signIn,
+      signUp,
       signOut,
       refresh: loadSession
     }),
-    [user, status, sessionMessage, signIn, signOut, loadSession]
+    [user, workspace, status, sessionMessage, signIn, signUp, signOut, loadSession]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

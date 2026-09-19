@@ -13,6 +13,7 @@
  * status code.
  */
 const prisma = require('../config/prisma');
+const { jobScope, throughJobScope } = require('./workspaceService');
 const { formatCandidateForApi } = require('../utils/candidateSerializer');
 const { LIST_SELECT } = require('../utils/candidateQuery');
 const { getCandidateStatsByJob, emptyStats } = require('./jobSummaryService');
@@ -59,14 +60,14 @@ const daysAgo = (days) => {
  * @returns {Promise<Object|null>} Null when a requested job does not exist, so
  *   the caller decides how to report that.
  */
-const getDashboardOverview = async ({ jobId = null } = {}) => {
+const getDashboardOverview = async ({ jobId = null, workspaceId = null } = {}) => {
   const requestedJobId = typeof jobId === 'string' ? jobId.trim() : '';
 
   // A job filter is enforced in PostgreSQL, not by filtering in the client.
   let job = null;
   if (requestedJobId) {
-    job = await prisma.job.findUnique({
-      where: { id: requestedJobId },
+    job = await prisma.job.findFirst({
+      where: { id: requestedJobId, ...jobScope(workspaceId) },
       select: { id: true, title: true, createdAt: true, requiredSkills: true, preferredSkills: true }
     });
 
@@ -84,7 +85,11 @@ const getDashboardOverview = async ({ jobId = null } = {}) => {
    * A job-scoped dashboard stays scoped to exactly that job: the recruiter asked
    * for that role by name, so its own lifecycle is not a reason to hide it.
    */
-  const scope = job ? { jobId: job.id } : { job: { status: 'OPEN' } };
+  // The workspace rides on the same object the candidate figures already share,
+  // so every count, band and trend below inherits it and none can be forgotten.
+  // The job-scoped branch is already confined to a job proven to be in this
+  // workspace, so naming it is sufficient.
+  const scope = job ? { jobId: job.id } : { job: { status: 'OPEN', ...jobScope(workspaceId) } };
   const monthStart = startOfMonth();
   const weekStart = daysAgo(7);
 
@@ -104,13 +109,13 @@ const getDashboardOverview = async ({ jobId = null } = {}) => {
     trendRows
   ] = await Promise.all([
     prisma.candidate.count({ where: scope }),
-    job ? Promise.resolve(1) : prisma.job.count(),
+    job ? Promise.resolve(1) : prisma.job.count({ where: jobScope(workspaceId) }),
     prisma.candidate.groupBy({ by: ['hrStatus'], where: scope, _count: { _all: true } }),
     prisma.candidate.count({ where: { ...scope, overallScore: { not: null } } }),
     prisma.candidate.count({ where: { ...scope, overallScore: { gte: STRONG_MATCH_MIN } } }),
     prisma.candidate.count({ where: { ...scope, createdAt: { gte: monthStart } } }),
     prisma.candidate.count({ where: { ...scope, createdAt: { gte: weekStart } } }),
-    job ? Promise.resolve(0) : prisma.job.count({ where: { createdAt: { gte: monthStart } } }),
+    job ? Promise.resolve(0) : prisma.job.count({ where: { ...jobScope(workspaceId), createdAt: { gte: monthStart } } }),
     prisma.candidate.aggregate({ where: scope, _avg: { overallScore: true }, _max: { overallScore: true } }),
     prisma.candidate.findMany({
       where: scope,
@@ -173,12 +178,12 @@ const getDashboardOverview = async ({ jobId = null } = {}) => {
   const [openJobs, closedJobs, selectedCandidates, recentHires] = job
     ? [null, null, null, []]
     : await Promise.all([
-        prisma.job.count({ where: { status: 'OPEN' } }),
-        prisma.job.count({ where: { status: 'CLOSED' } }),
-        prisma.candidate.count({ where: { hrStatus: 'SELECTED' } }),
+        prisma.job.count({ where: { ...jobScope(workspaceId), status: 'OPEN' } }),
+        prisma.job.count({ where: { ...jobScope(workspaceId), status: 'CLOSED' } }),
+        prisma.candidate.count({ where: { ...throughJobScope(workspaceId), hrStatus: 'SELECTED' } }),
         // One query with a projected relation — not a per-job candidate lookup.
         prisma.job.findMany({
-          where: { status: 'CLOSED', selectedCandidateId: { not: null } },
+          where: { ...jobScope(workspaceId), status: 'CLOSED', selectedCandidateId: { not: null } },
           orderBy: { closedAt: 'desc' },
           take: RECENT_HIRE_LIMIT,
           select: {
@@ -263,9 +268,9 @@ const getDashboardOverview = async ({ jobId = null } = {}) => {
  * @param {string} jobId
  * @returns {Promise<Object|null>} Null when the job does not exist.
  */
-const getJobSummaryData = async (jobId) => {
-  const job = await prisma.job.findUnique({
-    where: { id: jobId },
+const getJobSummaryData = async (jobId, { workspaceId = null } = {}) => {
+  const job = await prisma.job.findFirst({
+    where: { id: jobId, ...jobScope(workspaceId) },
     select: {
       id: true,
       title: true,

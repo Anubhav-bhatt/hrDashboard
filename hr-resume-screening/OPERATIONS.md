@@ -10,15 +10,42 @@ The API refuses to start in production unless these are set:
 
 | Variable | Requirement |
 | --- | --- |
-| `JWT_SECRET` | At least 32 characters. Generate with `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"` |
-| `FRONTEND_URL` | Comma-separated CORS allow list. Without it there is no allow list, so the server will not boot. |
+| `ACCESS_TOKEN_SECRET` | At least 32 characters. Generate with `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`. `JWT_SECRET` is still accepted under its old name. |
+| `FRONTEND_URL` | Comma-separated **exact** origin allow list. Without it there is no allow list, so the server will not boot. |
 
 Also confirm before going live:
 
 - `NODE_ENV=production` — this disables the Outlook development fixture mode and suppresses stack traces in API responses.
-- `TRUST_PROXY=true` when running behind a reverse proxy, so client IPs resolve for rate limiting and the session cookie is issued as `Secure`.
+- `TRUST_PROXY=true` when running behind a reverse proxy, so client IPs resolve for rate limiting and the auth cookies are issued as `Secure`.
+- `COOKIE_SAME_SITE=lax` (the default). Setting it to `none` marks the cookies
+  cross-site, which Safari refuses to store — see [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md).
+- `FRONTEND_URL` lists origins exactly. Suffix or substring matching must not be
+  reintroduced: `.endsWith('.vercel.app')` admits any free Vercel signup, and
+  `.includes('localhost')` admits `https://localhost.attacker.example`. Both
+  would be granted credentialed CORS and could read candidate records out of a
+  signed-in recruiter's browser.
 - At least one recruiter account exists (`npm run seed:user -- email password "Name" ADMIN`).
 - Rotate the seeded password away from any value committed to `.env.example` or shared during setup.
+
+### Workspaces and account isolation
+
+Recruitment records are owned by a **workspace**, not shared across the whole
+database. `Job.workspaceId` is the single authority; candidates, notes,
+activities and imports are reached through their job.
+
+- Public signup (`POST /api/auth/signup`) creates an account, a workspace and an
+  OWNER membership in one transaction, and signs the person in.
+- Accounts created before workspaces existed were attached to
+  **Existing Recruitment Workspace** by the tenancy migration, with all of their
+  jobs. New signups never join it.
+- An account with no membership is refused with `NO_WORKSPACE` rather than shown
+  an empty dashboard. `npm run seed:user` creates the workspace alongside the
+  account, so this should only appear if a user row was inserted by hand.
+
+Full detail, including the enforcement points and the deployment order, is in
+[docs/WORKSPACES.md](docs/WORKSPACES.md).
+
+---
 
 ### Recruiter account management
 
@@ -138,6 +165,21 @@ npx prisma generate
 ```bash
 npx prisma migrate deploy
 ```
+
+> [!IMPORTANT]
+> The migration history is not a complete history — the schema was originally
+> created with `prisma db push`, and the earliest migration `ALTER`s tables it
+> never creates. `migrate deploy` therefore works against an existing database
+> but **cannot build an empty one**. If `_prisma_migrations` is missing or empty,
+> baseline before deploying:
+>
+> ```bash
+> npx prisma migrate resolve --applied 20260814000000_add_job_closure_and_candidate_selection
+> npx prisma migrate deploy
+> ```
+>
+> Full detail, including the auth-session migration and rollback,
+> is in [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md).
 
 ---
 

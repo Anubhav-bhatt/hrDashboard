@@ -303,7 +303,7 @@ const RailFooter = ({ collapsed, onToggle }) => (
 
 const AppShell = ({ children }) => {
   const location = useLocation();
-  const { user, signOut } = useAuth();
+  const { user, workspace, signOut } = useAuth();
   const { enabled: aiEnabled, isModeEnabled } = useAiConfig();
   const { isMinimal } = useWorkspaceMode();
   const toast = useToast();
@@ -845,6 +845,14 @@ const AppShell = ({ children }) => {
                     <span className="inline-block mt-1 px-1.5 py-0.2 rounded bg-brand-50 text-brand-700 text-[10px] font-bold uppercase">
                       {user?.role || 'RECRUITER'}
                     </span>
+                    {/* Which workspace these records belong to. Shown only once
+                        there is one to name, so a single-workspace account is
+                        not asked to think about tenancy it never chose. */}
+                    {workspace?.name && (
+                      <p className="text-[11px] text-slate-500 truncate mt-1.5 pt-1.5 border-t border-slate-100">
+                        {workspace.name}
+                      </p>
+                    )}
                   </div>
 
                   <Link

@@ -20,7 +20,7 @@ const {
  */
 const listCandidates = async (req, res, next) => {
   try {
-    const { candidates, pagination, facets } = await listCandidatesAcrossJobs(req.query);
+    const { candidates, pagination, facets } = await listCandidatesAcrossJobs(req.query, { workspaceId: req.workspaceId });
 
     return res.status(200).json({
       success: true,
@@ -40,7 +40,7 @@ const listCandidates = async (req, res, next) => {
  */
 const getCandidate = async (req, res, next) => {
   try {
-    const data = await getCandidateDetail(req.params.candidateId, { includeResumeText: true });
+    const data = await getCandidateDetail(req.params.candidateId, { includeResumeText: true, workspaceId: req.workspaceId });
 
     if (!data) {
       return res.status(404).json({
@@ -82,7 +82,7 @@ const getFilterOptions = async (req, res, next) => {
       scope = job.status === 'CLOSED' ? 'archived' : 'active';
     }
 
-    return res.status(200).json({ success: true, data: await getCandidateFilterOptions({ scope, jobId }) });
+    return res.status(200).json({ success: true, data: await getCandidateFilterOptions({ scope, jobId, workspaceId: req.workspaceId }) });
   } catch (error) {
     next(error);
   }

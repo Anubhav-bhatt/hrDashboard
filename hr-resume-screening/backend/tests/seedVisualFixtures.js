@@ -34,6 +34,7 @@
  */
 require('dotenv').config();
 const prisma = require('../config/prisma');
+const { ensureWorkspaceForUser } = require('../services/workspaceService');
 
 /** The marker every visual fixture carries. Also listed in cleanupE2EFixtures.js. */
 const FIXTURE_TAG = 'visualaudit';
@@ -205,7 +206,19 @@ const bandLabel = (score) => {
     process.exit(1);
   }
 
-  const actor = await prisma.user.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } });
+  const actor = await prisma.user.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true, name: true, email: true } });
+  if (!actor) {
+    console.error('[seedVisualFixtures] No account exists. Run "npm run seed:user" first.');
+    process.exit(1);
+  }
+
+  // Fixtures land in that account's workspace, so the screens they are meant to
+  // fill actually show them. A job with no workspace cannot be created at all.
+  const workspaceId = await ensureWorkspaceForUser(prisma, {
+    userId: actor.id,
+    userName: actor.name,
+    email: actor.email
+  });
   const rand = rng(20260831);
   let createdJobs = 0;
   let createdCandidates = 0;
@@ -213,6 +226,7 @@ const bandLabel = (score) => {
   for (const [index, role] of ROLES.entries()) {
     const job = await prisma.job.create({
       data: {
+        workspaceId,
         title: `${FIXTURE_TAG} ${role.title}`,
         jdFileName: `${role.title.toLowerCase().replace(/\s+/g, '-')}-jd.pdf`,
         jdMimeType: 'application/pdf',

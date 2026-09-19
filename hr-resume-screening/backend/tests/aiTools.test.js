@@ -15,6 +15,10 @@ require('dotenv').config();
 const { createSuite, assert } = require('./harness');
 
 const prisma = require('../config/prisma');
+const { ensureTestWorkspace, addWorkspaceMember, cleanupTestWorkspaces } = require('./workspaceFixture');
+
+// Jobs are workspace-owned, so fixtures need one before they can create any.
+let testWorkspaceId;
 const { hashPassword } = require('../services/authService');
 const { executeTool, describeTools, listToolNames, getTool } = require('../ai/tools/toolRegistry');
 const { resolveAiConfig } = require('../ai/config/aiConfig');
@@ -33,7 +37,8 @@ const created = { userIds: [], jobIds: [], candidateIds: [] };
 const config = resolveAiConfig({ AI_ENABLED: 'true' });
 
 /** An execution context as the authenticated pipeline would build it. */
-const contextFor = (user) => normalizeAgentContext({}, { user, requestId: 'tool-test-request' });
+const contextFor = (user) =>
+  normalizeAgentContext({}, { user, workspaceId: testWorkspaceId, requestId: 'tool-test-request' });
 
 let recruiter;
 let admin;
@@ -53,12 +58,14 @@ const setup = async () => {
     }
   });
   created.userIds.push(user.id);
+  testWorkspaceId = await ensureTestWorkspace(user.id, { name: 'AI Tools Tester' });
   recruiter = { id: user.id, role: user.role, name: user.name };
   admin = { id: user.id, role: 'ADMIN', name: 'Tool Test Admin' };
   ctx = contextFor(recruiter);
 
   const job = await prisma.job.create({
     data: {
+      workspaceId: testWorkspaceId,
       title: `${TEST_PREFIX} Senior React Developer`,
       jdFileName: 'tool-jd.txt',
       jdMimeType: 'text/plain',
@@ -80,6 +87,7 @@ const setup = async () => {
   // A second job, used to prove job-scoped lookups cannot cross over.
   const otherJob = await prisma.job.create({
     data: {
+      workspaceId: testWorkspaceId,
       title: `${TEST_PREFIX} Unrelated Python Role`,
       jdFileName: 'other-tool-jd.txt',
       jdMimeType: 'text/plain',
@@ -96,6 +104,7 @@ const setup = async () => {
   // A job with no candidates and no optional fields set.
   const bareJob = await prisma.job.create({
     data: {
+      workspaceId: testWorkspaceId,
       title: `${TEST_PREFIX} Bare Job`,
       jdFileName: 'bare.txt',
       jdMimeType: 'text/plain',
@@ -217,6 +226,7 @@ const teardown = async () => {
   await prisma.candidateNote.deleteMany({ where: { candidateId: { in: created.candidateIds } } });
   await prisma.candidate.deleteMany({ where: { jobId: { in: created.jobIds } } });
   await prisma.job.deleteMany({ where: { id: { in: created.jobIds } } });
+  await cleanupTestWorkspaces(created.userIds);
   await prisma.user.deleteMany({ where: { id: { in: created.userIds } } });
   await prisma.$disconnect();
 };
@@ -401,6 +411,7 @@ const run = async () => {
     // them; the tool must return the same values without saving.
     const legacy = await prisma.job.create({
       data: {
+        workspaceId: testWorkspaceId,
         title: `${TEST_PREFIX} Legacy Job`,
         jdFileName: 'legacy.txt',
         jdMimeType: 'text/plain',
@@ -743,7 +754,7 @@ const run = async () => {
 
   await testAsync('getDashboardMetrics matches the dashboard service exactly', async () => {
     const tool = await call('getDashboardMetrics', {});
-    const dashboard = await getDashboardOverview({});
+    const dashboard = await getDashboardOverview({ workspaceId: testWorkspaceId });
 
     assert.strictEqual(tool.success, true);
     assert.deepStrictEqual(tool.data.metrics, dashboard.metrics, 'metrics must be identical');
@@ -753,7 +764,7 @@ const run = async () => {
 
   await testAsync('a job-scoped dashboard matches too', async () => {
     const tool = await call('getDashboardMetrics', { jobId: job.id });
-    const dashboard = await getDashboardOverview({ jobId: job.id });
+    const dashboard = await getDashboardOverview({ jobId: job.id, workspaceId: testWorkspaceId });
 
     assert.deepStrictEqual(tool.data.metrics, dashboard.metrics);
     assert.strictEqual(tool.data.scope.jobId, job.id);
@@ -763,7 +774,7 @@ const run = async () => {
 
   await testAsync('getJobMetrics matches the job summary service exactly', async () => {
     const tool = await call('getJobMetrics', { jobId: job.id });
-    const service = await getJobSummaryData(job.id);
+    const service = await getJobSummaryData(job.id, { workspaceId: testWorkspaceId });
 
     assert.strictEqual(tool.success, true);
     assert.deepStrictEqual(tool.data.stats, service.stats, 'stats must be identical');
@@ -774,7 +785,7 @@ const run = async () => {
 
   await testAsync('getPipelineMetrics matches the dashboard pipeline', async () => {
     const tool = await call('getPipelineMetrics', { jobId: job.id });
-    const dashboard = await getDashboardOverview({ jobId: job.id });
+    const dashboard = await getDashboardOverview({ jobId: job.id, workspaceId: testWorkspaceId });
 
     assert.deepStrictEqual(tool.data.pipeline, dashboard.pipeline);
     const stageCounts = Object.fromEntries(tool.data.pipeline.map((s) => [s.key, s.count]));

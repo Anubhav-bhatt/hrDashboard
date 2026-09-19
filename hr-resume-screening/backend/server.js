@@ -20,36 +20,19 @@ if (process.env.TRUST_PROXY === 'true') {
 // Security Middlewares
 app.use(helmet());
 
-// CORS Configuration — the allow list is explicit. Arbitrary origins are never
-// reflected back, because the session cookie is sent with credentials.
-const DEV_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173'];
-const allowedOrigins = Array.from(
-  new Set(
-    [
-      ...(process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',') : []),
-      ...(process.env.NODE_ENV === 'production' ? [] : DEV_ORIGINS)
-    ]
-      .map((o) => o.trim().replace(/\/+$/, ''))
-      .filter(Boolean)
-  )
-);
+// CORS Configuration — the allow list is explicit and exact. Arbitrary origins
+// are never reflected back, because the session cookies are sent with
+// credentials: reflecting an attacker's origin would let their page read
+// candidate records out of a signed-in recruiter's browser.
+const { buildAllowedOrigins, isOriginAllowed } = require('./config/origins');
+const allowedOrigins = buildAllowedOrigins();
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Same-origin / server-to-server requests carry no Origin header.
+      // Same-origin and server-to-server requests carry no Origin header.
       if (!origin) return callback(null, true);
-      const cleanOrigin = origin.trim().replace(/\/+$/, '');
-      const isAllowed =
-        allowedOrigins.includes(cleanOrigin) ||
-        cleanOrigin.endsWith('.vercel.app') ||
-        cleanOrigin.includes('localhost') ||
-        cleanOrigin.includes('127.0.0.1');
-
-      if (isAllowed) {
-        return callback(null, true);
-      }
-      return callback(null, false);
+      return callback(null, isOriginAllowed(origin, allowedOrigins));
     },
     credentials: true
   })
@@ -59,6 +42,11 @@ app.use(
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(cookieParser());
+
+// Origin check for state-changing requests. Defence in depth behind
+// sameSite=lax; see middleware/csrf.js for why a missing Origin is allowed.
+const { requireTrustedOrigin } = require('./middleware/csrf');
+app.use('/api', requireTrustedOrigin(allowedOrigins));
 
 // Baseline API rate limit. Generous enough for dashboard use, low enough to
 // blunt scripted scraping of candidate records.
@@ -257,10 +245,20 @@ const startServer = async () => {
       console.error('[Server] DATABASE_URL must be set in production. Refusing to start.');
       process.exit(1);
     }
-    const secret = process.env.JWT_SECRET || '';
+    // Either name is accepted so an existing deployment keeps booting;
+    // ACCESS_TOKEN_SECRET is the name to prefer going forward.
+    const secret = process.env.ACCESS_TOKEN_SECRET || process.env.JWT_SECRET || '';
     if (secret.length < 32) {
-      console.error('[Server] JWT_SECRET must be at least 32 characters in production. Refusing to start.');
+      console.error(
+        '[Server] ACCESS_TOKEN_SECRET (or JWT_SECRET) must be at least 32 characters in production. Refusing to start.'
+      );
       process.exit(1);
+    }
+    if ((process.env.COOKIE_SAME_SITE || 'lax').toLowerCase() === 'none') {
+      console.warn(
+        '[Server] COOKIE_SAME_SITE=none sets a cross-site cookie, which Safari refuses to store. ' +
+          'With the same-origin /api rewrite in place this is not needed; prefer lax.'
+      );
     }
     if (allowedOrigins.length === 0) {
       console.error('[Server] FRONTEND_URL must be set in production so CORS has an allow list. Refusing to start.');

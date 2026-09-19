@@ -77,7 +77,7 @@ const processApplications = async (req, res, next) => {
       return res.status(404).json({ success: false, code: 'JOB_NOT_FOUND', message: 'Job not found.' });
     }
 
-    const connection = await prisma.outlookConnection.findFirst({ orderBy: { connectedAt: 'desc' } });
+    const connection = await prisma.outlookConnection.findFirst({ where: { workspaceId: req.workspaceId }, orderBy: { connectedAt: 'desc' } });
     if (!connection) {
       return res.status(401).json({
         success: false,
@@ -537,7 +537,7 @@ const getCandidateResumeStream = async (req, res, next) => {
     let mimeType = candidate.resumeMimeType || 'application/octet-stream';
 
     if (!buffer && String(candidate.source || '').toUpperCase() === 'OUTLOOK') {
-      const connection = await prisma.outlookConnection.findFirst({ orderBy: { connectedAt: 'desc' } });
+      const connection = await prisma.outlookConnection.findFirst({ where: { workspaceId: req.workspaceId }, orderBy: { connectedAt: 'desc' } });
       if (!connection || !connection.accessToken) {
         return res.status(409).json({
           success: false,
@@ -612,7 +612,7 @@ const getCandidateResumeStream = async (req, res, next) => {
  */
 const getCandidatesByJob = async (req, res, next) => {
   try {
-    const result = await listCandidatesForJob(req.params.jobId, req.query);
+    const result = await listCandidatesForJob(req.params.jobId, req.query, { workspaceId: req.workspaceId });
 
     if (!result) {
       return res.status(404).json({ success: false, code: 'JOB_NOT_FOUND', message: 'Job not found.' });
@@ -639,7 +639,7 @@ const getCandidateById = async (req, res, next) => {
   try {
     const { jobId, candidateId } = req.params;
 
-    const data = await getCandidateDetail(candidateId, { jobId, includeResumeText: true });
+    const data = await getCandidateDetail(candidateId, { jobId, includeResumeText: true, workspaceId: req.workspaceId });
     if (!data) return notFoundCandidate(res);
 
     return res.status(200).json({ success: true, data });

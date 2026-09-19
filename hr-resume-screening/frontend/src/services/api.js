@@ -1,11 +1,52 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+/**
+ * Where the browser sends API requests.
+ *
+ * In production this is the bare path `/api`, which means the page's own
+ * origin. Vercel rewrites it to the Render backend server-side (see
+ * frontend/vercel.json), so the browser only ever talks to one origin and the
+ * auth cookies are first-party. That is the whole fix for Safari: WebKit's
+ * tracking prevention refuses to store a cookie set by a third-party origin, so
+ * while the browser called the Render host directly, sign-in could return 200,
+ * set a cookie, and still leave the next request unauthenticated.
+ *
+ * Development keeps the existing strategy: VITE_API_URL, defaulting to the
+ * local backend. Setting it to `/api` routes through the Vite dev proxy and is
+ * recommended — see vite.config.js.
+ */
+const resolveBaseUrl = () => {
+  const configured = import.meta.env.VITE_API_URL;
+
+  if (import.meta.env.DEV) return configured || 'http://localhost:5000/api';
+  if (!configured) return '/api';
+
+  // A leftover absolute URL in the production environment would quietly
+  // reinstate the cross-site architecture this exists to remove, and the
+  // symptom — Safari signs in, then immediately signs out — looks nothing like
+  // a stale environment variable. Prefer the same-origin path and say so.
+  const isAbsolute = /^https?:\/\//i.test(configured);
+  if (isAbsolute && import.meta.env.VITE_ALLOW_CROSS_ORIGIN_API !== 'true') {
+    const sameOrigin =
+      typeof window !== 'undefined' && configured.startsWith(window.location.origin);
+    if (!sameOrigin) {
+      console.warn(
+        '[api] Ignoring a cross-origin VITE_API_URL in a production build and using /api instead. ' +
+          'Cross-site auth cookies are not stored by Safari. Set VITE_ALLOW_CROSS_ORIGIN_API=true to override.'
+      );
+      return '/api';
+    }
+  }
+
+  return configured;
+};
+
+const API_BASE_URL = resolveBaseUrl();
 
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: { 'Content-Type': 'application/json' },
-  // The session lives in an httpOnly cookie, so every request must send credentials.
+  // The session lives in httpOnly cookies, so every request must send credentials.
   withCredentials: true
 });
 
@@ -50,28 +91,146 @@ export const toApiError = (error) => {
   };
 };
 
+const notifyUnauthorized = (apiError) => {
+  unauthorizedHandlers.forEach((handler) => {
+    try {
+      handler(apiError);
+    } catch {
+      /* a broken subscriber must not swallow the original error */
+    }
+  });
+};
+
+/* --------------------------------------------------------- refresh coordinator -- */
+
+/**
+ * The in-flight refresh, if there is one.
+ *
+ * A dashboard screen fires several requests at once, so an expired access token
+ * surfaces as a handful of simultaneous 401s rather than one. Without this, each
+ * would start its own refresh: the first rotates the token, the rest present the
+ * one it just replaced, and the server — correctly — reads that as a replayed
+ * token and revokes the session. The recruiter would be signed out by the act of
+ * loading a page.
+ *
+ * Holding one promise means the first 401 refreshes and the others wait on it.
+ */
+let refreshInFlight = null;
+
+/**
+ * Renews the session at most once at a time.
+ *
+ * The refresh call is made with a bare axios instance rather than `api`, so it
+ * cannot re-enter this interceptor. That is what bounds the retry: a failing
+ * refresh returns a rejection to its waiters and never triggers another refresh.
+ */
+const refreshSession = () => {
+  if (!refreshInFlight) {
+    refreshInFlight = axios
+      .post(`${API_BASE_URL}/auth/refresh`, null, { withCredentials: true })
+      .finally(() => {
+        refreshInFlight = null;
+      });
+  }
+  return refreshInFlight;
+};
+
+/**
+ * 401 codes worth spending one refresh attempt on.
+ *
+ * All three describe the *access* token, not the session, and the refresh
+ * endpoint is the only thing that can say whether the session itself is still
+ * alive — so each gets exactly one attempt:
+ *
+ *   SESSION_EXPIRED  the token aged out. The ordinary case.
+ *   AUTH_REQUIRED    no token at all. What a deep link looks like after the
+ *                    access cookie reaches its Max-Age and the browser drops it.
+ *   INVALID_SESSION  the token will not verify. Usually a cookie left over from
+ *                    an older deployment, and after a signing-secret rotation it
+ *                    is what every access token looks like while the refresh
+ *                    token is still perfectly good.
+ *
+ * Attempting here is also what gets stale cookies cleared: a failed refresh is
+ * answered with cookie-clearing headers, so the browser stops carrying a dead
+ * credential instead of presenting it on every request forever.
+ *
+ * 403 is absent deliberately — that is an authorization answer, and no token
+ * will change it.
+ */
+const RENEWABLE_CODES = new Set(['SESSION_EXPIRED', 'AUTH_REQUIRED', 'INVALID_SESSION']);
+
+const isAuthEndpoint = (url = '') =>
+  url.includes('/auth/login') ||
+  url.includes('/auth/signup') ||
+  url.includes('/auth/refresh') ||
+  url.includes('/auth/logout');
+
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     const status = error?.response?.status;
-    const url = error?.config?.url || '';
+    const code = error?.response?.data?.code;
+    const config = error?.config;
+    const url = config?.url || '';
 
-    // A 401 anywhere other than the auth probe itself means the session ended.
-    if (status === 401 && !url.includes('/auth/login') && !url.includes('/auth/me')) {
-      unauthorizedHandlers.forEach((handler) => {
-        try {
-          handler(toApiError(error));
-        } catch {
-          /* a broken subscriber must not swallow the original error */
-        }
-      });
+    // 403 is an authorization answer, not an authentication one: the recruiter
+    // is known and simply may not do this. Renewing a token cannot change that,
+    // and retrying would loop.
+    if (status !== 401 || isAuthEndpoint(url)) return Promise.reject(error);
+
+    // `/auth/me` is the provider's own bootstrap probe. It still gets the silent
+    // refresh below, but never the notification: the provider is already
+    // deciding what the session state is, and a first visit with no cookies at
+    // all is an ordinary signed-out visitor, not an expired session to announce.
+    const announce = !url.includes('/auth/me');
+
+    // One attempt, tracked on the request itself, so a request can never be
+    // retried twice and a failing refresh can never start another.
+    if (RENEWABLE_CODES.has(code) && config && !config.__sessionRetried) {
+      config.__sessionRetried = true;
+      try {
+        await refreshSession();
+        return await api(config);
+      } catch (refreshError) {
+        // The refresh itself failed: the session is genuinely over. Announce it
+        // once, describing why the *renewal* failed rather than why the original
+        // request did — "your session expired" is the honest and useful message,
+        // and the original 401 only ever says the access token was missing.
+        if (announce) notifyUnauthorized(toApiError(refreshError));
+        return Promise.reject(error);
+      }
     }
+
+    // A terminal authentication failure — INVALID_SESSION, or a renewable code
+    // on a request that has already been retried once.
+    if (announce) notifyUnauthorized(toApiError(error));
 
     return Promise.reject(error);
   }
 );
 
+/**
+ * Startup needs no special case.
+ *
+ * The provider's `/auth/me` probe goes through the interceptor above like any
+ * other request, so a still-valid refresh cookie is spent and the probe retried
+ * before the provider ever sees a failure. The recruiter opening a deep link
+ * with an expired access token lands on the page they asked for, not on the
+ * dashboard and not on a sign-in screen that flashes past.
+ */
+
 /* ------------------------------------------------------------------- auth --- */
+
+/**
+ * Creates an account and returns the signed-in recruiter.
+ *
+ * The server sets the same session cookies login does, so there is no second
+ * step: the response arriving means the person is already authenticated.
+ */
+export const signup = async ({ name, email, password }) => {
+  const response = await api.post('/auth/signup', { name, email, password });
+  return response.data;
+};
 
 export const login = async (email, password) => {
   const response = await api.post('/auth/login', { email, password });

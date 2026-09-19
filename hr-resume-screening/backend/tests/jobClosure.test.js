@@ -18,6 +18,10 @@ const { randomUUID } = require('crypto');
 const { createSuite, assert } = require('./harness');
 
 const prisma = require('../config/prisma');
+const { ensureTestWorkspace, addWorkspaceMember, cleanupTestWorkspaces } = require('./workspaceFixture');
+
+// Jobs are workspace-owned, so fixtures need one before they can create any.
+let testWorkspaceId;
 const app = require('../server');
 const { hashPassword } = require('../services/authService');
 const { closeJob } = require('../services/jobClosureService');
@@ -89,6 +93,7 @@ let jobSeq = 0;
 const makeJob = async (title, requiredSkills = ['React']) => {
   const job = await prisma.job.create({
     data: {
+      workspaceId: testWorkspaceId,
       title,
       jdFileName: `${title}.txt`,
       jdMimeType: 'text/plain',
@@ -117,6 +122,7 @@ const setup = async () => {
     create: { email: TEST_EMAIL, passwordHash: await hashPassword(TEST_PASSWORD), name: 'Closure Tester', role: 'ADMIN' }
   });
   created.userIds.push(user.id);
+  testWorkspaceId = await ensureTestWorkspace(user.id, { name: 'Closure Tester' });
 
   const login = await request('POST', '/auth/login', { body: { email: TEST_EMAIL, password: TEST_PASSWORD } });
   cookie = login.setCookie.split(';')[0];
@@ -131,6 +137,7 @@ const teardown = async () => {
   await prisma.candidateActivity.deleteMany({ where: { candidateId: { in: created.candidateIds } } }).catch(() => {});
   await prisma.candidate.deleteMany({ where: { id: { in: created.candidateIds } } }).catch(() => {});
   await prisma.job.deleteMany({ where: { id: { in: created.jobIds } } }).catch(() => {});
+  await cleanupTestWorkspaces(created.userIds).catch(() => {});
   await prisma.user.deleteMany({ where: { id: { in: created.userIds } } }).catch(() => {});
   await prisma.$disconnect().catch(() => {});
   if (server) await new Promise((resolve) => server.close(resolve));
@@ -452,9 +459,14 @@ const run = async () => {
     assert.ok(Number.isInteger(metrics.closedJobs));
     assert.ok(Number.isInteger(metrics.selectedCandidates));
 
-    const dbOpen = await prisma.job.count({ where: { status: 'OPEN' } });
-    const dbClosed = await prisma.job.count({ where: { status: 'CLOSED' } });
-    const dbSelected = await prisma.candidate.count({ where: { hrStatus: 'SELECTED' } });
+    // Counted within this suite's workspace, because the dashboard is scoped to
+    // one. Counting the whole table would compare a tenant's figure against
+    // every tenant's rows and fail for the right reason in the wrong place.
+    const dbOpen = await prisma.job.count({ where: { workspaceId: testWorkspaceId, status: 'OPEN' } });
+    const dbClosed = await prisma.job.count({ where: { workspaceId: testWorkspaceId, status: 'CLOSED' } });
+    const dbSelected = await prisma.candidate.count({
+      where: { hrStatus: 'SELECTED', job: { workspaceId: testWorkspaceId } }
+    });
     assert.strictEqual(metrics.openJobs, dbOpen, 'openJobs must equal COUNT(status=OPEN)');
     assert.strictEqual(metrics.closedJobs, dbClosed);
     assert.strictEqual(metrics.selectedCandidates, dbSelected);

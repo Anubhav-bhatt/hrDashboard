@@ -62,7 +62,7 @@ const openDashboard = async (path = '/') => {
   const jobsResponse = page.waitForResponse(isApi('/jobs/summary'));
   await page.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' });
   const [overview, jobs] = await Promise.all([overviewResponse, jobsResponse].map(async (r) => (await (await r).json()).data));
-  await page.locator(`${SNAPSHOT}, [role="alert"], h3:has-text("No hiring activity yet")`).first().waitFor({ state: 'visible', timeout: 20000 });
+  await page.locator(`${SNAPSHOT}, [role="alert"], h3:has-text("No open roles"), h2:has-text("Welcome")`).first().waitFor({ state: 'visible', timeout: 20000 });
   return { overview, jobs };
 };
 
@@ -302,7 +302,12 @@ try {
   await page.route('**/jobs/summary**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: [] }) }));
   await openDashboard('/');
   const emptyText = await page.locator('main').innerText();
-  check(/No hiring activity yet/.test(emptyText) && /Create your first role/.test(emptyText), 'no open roles shows the empty state');
+  // Two different nothing-to-show states, and they say different things. This
+  // one is "you closed everything": the workspace still reports jobs overall,
+  // so the dashboard offers another role rather than explaining the product.
+  // The first-run state a brand-new workspace sees is covered in auth-signup.mjs.
+  check(/No open roles/.test(emptyText), 'no open roles shows the empty state');
+  check(/Create another/.test(emptyText), 'and offers another role rather than a first-run walkthrough');
   check((await page.locator(SNAPSHOT).count()) === 0, 'no zero KPI cards or empty panels');
   const create = page.locator('main a', { hasText: 'Create Job' });
   check((await create.count()) === 1 && await hrefOf(create) === '/jobs/new', 'empty state links to Create Job');

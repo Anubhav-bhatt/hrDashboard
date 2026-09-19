@@ -43,6 +43,9 @@ const createJob = async (req, res, next) => {
     // Save job to PostgreSQL via Prisma
     const job = await prisma.job.create({
       data: {
+        // The creating recruiter's workspace owns the job, and through it every
+        // candidate, note and import that will hang off it.
+        workspaceId: req.workspaceId,
         title: title.trim(),
         jdFileName: file.originalname,
         jdMimeType: file.mimetype,
@@ -95,11 +98,12 @@ const getAllJobs = async (req, res, next) => {
         search: req.query.search,
         status: req.query.status,
         limit: req.query.limit,
-        page: req.query.page
+        page: req.query.page,
+        workspaceId: req.workspaceId
       }),
       // Counts for the All / Active / Closed selector, under the same search
       // term but ignoring the current lifecycle filter.
-      getJobStatusCounts({ search: req.query.search })
+      getJobStatusCounts({ search: req.query.search, workspaceId: req.workspaceId })
     ]);
 
     return res.status(200).json({
@@ -133,9 +137,10 @@ const getJobsSummary = async (req, res, next) => {
         search: req.query.search,
         status: req.query.status,
         limit: req.query.limit,
-        page: req.query.page
+        page: req.query.page,
+        workspaceId: req.workspaceId
       }),
-      getJobStatusCounts({ search: req.query.search })
+      getJobStatusCounts({ search: req.query.search, workspaceId: req.workspaceId })
     ]);
 
     return res.status(200).json({
@@ -164,7 +169,7 @@ const getJobsSummary = async (req, res, next) => {
  */
 const getJobById = async (req, res, next) => {
   try {
-    const data = await getJobDetails(req.params.id, { backfillRequirements: true });
+    const data = await getJobDetails(req.params.id, { backfillRequirements: true, workspaceId: req.workspaceId });
 
     if (!data) {
       return res.status(404).json({
@@ -351,7 +356,7 @@ const searchOutlookEmailsForJob = async (req, res, next) => {
       });
     }
 
-    const connection = await prisma.outlookConnection.findFirst({ orderBy: { connectedAt: 'desc' } });
+    const connection = await prisma.outlookConnection.findFirst({ where: { workspaceId: req.workspaceId }, orderBy: { connectedAt: 'desc' } });
     if (!connection) {
       return res.status(401).json({
         success: false,

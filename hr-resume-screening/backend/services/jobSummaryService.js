@@ -1,6 +1,7 @@
 const prisma = require('../config/prisma');
 const { STRONG_MATCH_MIN, EXCELLENT_MATCH_MIN, PENDING_REVIEW_STATUSES } = require('../utils/scoreThresholds');
 const { SELECTED_CANDIDATE_SELECT } = require('./jobClosureService');
+const { jobScope } = require('./workspaceService');
 
 /**
  * Per-job candidate statistics, aggregated in PostgreSQL.
@@ -170,12 +171,19 @@ const findJobIdsMatchingSkill = async (term) => {
  * or search keyword, and — via the relation — the name of the candidate selected
  * for a closed job, so searching a person finds the role they were hired for.
  *
+ * The workspace is *emitted* into the clause rather than merely validated, for
+ * the same reason the archived-candidate scope is: a caller that forgot to pass
+ * one would otherwise get every job of every workspace back. An absent
+ * workspace produces a clause that matches nothing, so the failure mode of a
+ * missing tenant is an empty list rather than the whole table.
+ *
  * @param {Object} [params]
  * @param {string} [params.search] Free-text term
  * @param {string} [params.status] OPEN | CLOSED; omit for both
+ * @param {string|null} [params.workspaceId] Owning workspace
  */
-const buildJobWhere = async ({ search = '', status = null } = {}) => {
-  const and = [];
+const buildJobWhere = async ({ search = '', status = null, workspaceId = null } = {}) => {
+  const and = [jobScope(workspaceId)];
   const lifecycle = parseJobStatus(status);
   if (lifecycle) and.push({ status: lifecycle });
 
@@ -205,10 +213,10 @@ const buildJobWhere = async ({ search = '', status = null } = {}) => {
  * filter, so the tabs keep showing how many jobs the other tab holds. One
  * grouped query.
  */
-const getJobStatusCounts = async ({ search = '' } = {}) => {
+const getJobStatusCounts = async ({ search = '', workspaceId = null } = {}) => {
   const groups = await prisma.job.groupBy({
     by: ['status'],
-    where: await buildJobWhere({ search }),
+    where: await buildJobWhere({ search, workspaceId }),
     _count: { _all: true }
   });
 
@@ -232,8 +240,8 @@ const getJobStatusCounts = async ({ search = '' } = {}) => {
  * @param {number} [options.limit] Maximum jobs to return after sorting
  * @returns {Promise<Object[]>}
  */
-const getJobSummaries = async ({ sort = 'newest', search = '', status = null, limit = null, page = null } = {}) => {
-  const where = await buildJobWhere({ search, status });
+const getJobSummaries = async ({ sort = 'newest', search = '', status = null, limit = null, page = null, workspaceId = null } = {}) => {
+  const where = await buildJobWhere({ search, status, workspaceId });
 
   // Sorts that map to a column can be ordered and paginated by Postgres.
   // `candidates` and `best_match` rank on candidate aggregates that do not live

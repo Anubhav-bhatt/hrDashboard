@@ -533,7 +533,11 @@ const SCOPE_ACTIVE = { job: { status: 'OPEN' } };
 // Archived carries its jobId: history is reachable one closed job at a time.
   const SCOPE_ARCHIVED = { jobId: 'job-1', job: { status: 'CLOSED' } };
 const filters = (where) => (where.AND || []).filter((clause) => !clause.job);
-const scopeOf = (where) => (where.AND || []).find((clause) => clause.job) || null;
+// Two different clauses now hang off the job relation: the lifecycle scope and
+// the owning workspace. They are told apart by which key they carry, so a
+// helper cannot accidentally assert one while meaning the other.
+const scopeOf = (where) => (where.AND || []).find((clause) => clause.job && clause.job.status) || null;
+const workspaceOf = (where) => (where.AND || []).find((clause) => clause.job && 'workspaceId' in clause.job) || null;
 
 test('every candidate query carries a lifecycle scope, active by default', () => {
   assert.deepStrictEqual(scopeOf(buildCandidateWhere({})), SCOPE_ACTIVE);
@@ -547,6 +551,25 @@ test('the archived scope is reachable only for one named job', () => {
   // closed job's candidates at once through an active surface.
   assert.throws(() => buildCandidateWhere({}, null, { scope: 'archived' }), /requires a jobId/);
   assert.throws(() => buildScopeWhere('archived'), /requires a jobId/);
+});
+
+test('every candidate query carries its owning workspace', () => {
+  assert.deepStrictEqual(workspaceOf(buildCandidateWhere({}, null, { workspaceId: 'ws-1' })), {
+    job: { workspaceId: 'ws-1' }
+  });
+  assert.deepStrictEqual(
+    workspaceOf(buildCandidateWhere({ search: 'rahul' }, null, { workspaceId: 'ws-1' })),
+    { job: { workspaceId: 'ws-1' } }
+  );
+});
+
+test('a query built without a workspace matches nothing rather than everything', () => {
+  // The direction matters more than the sentinel value: forgetting the tenant
+  // must return an empty list, never every workspace's candidates.
+  const clause = workspaceOf(buildCandidateWhere({}));
+  assert.ok(clause, 'a workspace clause is emitted even when none was supplied');
+  assert.notStrictEqual(clause.job.workspaceId, undefined, 'and it is not an unfiltered wildcard');
+  assert.notStrictEqual(clause.job.workspaceId, null);
 });
 
 test('an unknown scope is refused rather than silently treated as active', () => {
@@ -604,7 +627,9 @@ test('requirement-relative experience ranges use the job bounds', () => {
 });
 
 test('an empty query filters on nothing but the lifecycle scope', () => {
-  assert.deepStrictEqual(buildCandidateWhere({}), { AND: [SCOPE_ACTIVE] });
+  assert.deepStrictEqual(buildCandidateWhere({}, null, { workspaceId: 'ws-1' }), {
+    AND: [{ job: { workspaceId: 'ws-1' } }, SCOPE_ACTIVE]
+  });
 });
 
 test('pagination is clamped to sane bounds', () => {

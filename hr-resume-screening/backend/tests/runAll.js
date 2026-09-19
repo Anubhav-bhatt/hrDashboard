@@ -18,6 +18,8 @@ const SUITES = [
   { name: 'Outlook & matching (legacy phase 5)', file: 'phase5.test.js', requiresDatabase: false },
   { name: 'AI foundation (flags, provider, orchestrator)', file: 'aiFoundation.test.js', requiresDatabase: false },
   { name: 'API integration', file: 'api.test.js', requiresDatabase: true },
+  { name: 'Authentication, refresh rotation & sessions', file: 'authSession.test.js', requiresDatabase: true },
+  { name: 'Workspace isolation between accounts', file: 'workspaceIsolation.test.js', requiresDatabase: true },
   { name: 'Jobs portal & job-wise dashboard', file: 'jobPortal.test.js', requiresDatabase: true },
   { name: 'Job closure & candidate selection', file: 'jobClosure.test.js', requiresDatabase: true },
   { name: 'AI API (POST /api/ai/run)', file: 'aiApi.test.js', requiresDatabase: true },

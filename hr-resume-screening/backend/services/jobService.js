@@ -13,6 +13,7 @@
  * without writing. The default is `true`, so the existing path is unchanged.
  */
 const prisma = require('../config/prisma');
+const { jobScope } = require('./workspaceService');
 const { extractJDRequirements } = require('./jdRequirementExtractor');
 const { SELECTED_CANDIDATE_SELECT } = require('./jobClosureService');
 
@@ -26,8 +27,8 @@ const { SELECTED_CANDIDATE_SELECT } = require('./jobClosureService');
  *   leave it out.
  * @returns {Promise<Object|null>} Null when the job does not exist.
  */
-const getJobDetails = async (jobId, { backfillRequirements = true, includeJdText = true } = {}) => {
-  let job = await prisma.job.findUnique({ where: { id: jobId } });
+const getJobDetails = async (jobId, { backfillRequirements = true, includeJdText = true, workspaceId = null } = {}) => {
+  let job = await prisma.job.findFirst({ where: { id: jobId, ...jobScope(workspaceId) } });
 
   if (!job) return null;
 

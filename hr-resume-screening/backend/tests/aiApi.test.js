@@ -26,6 +26,10 @@ const http = require('http');
 const { createSuite, assert } = require('./harness');
 
 const prisma = require('../config/prisma');
+const { ensureTestWorkspace, addWorkspaceMember, cleanupTestWorkspaces } = require('./workspaceFixture');
+
+// Jobs are workspace-owned, so fixtures need one before they can create any.
+let testWorkspaceId;
 const app = require('../server');
 const { hashPassword } = require('../services/authService');
 const { MODE_CONTENT } = require('../ai/providers/MockAIProvider');
@@ -110,9 +114,11 @@ const setup = async () => {
     }
   });
   created.userIds.push(user.id);
+  testWorkspaceId = await ensureTestWorkspace(user.id, { name: 'AI API Tester' });
 
   const job = await prisma.job.create({
     data: {
+      workspaceId: testWorkspaceId,
       title: `${TEST_PREFIX} React Developer`,
       jdFileName: 'ai-jd.txt',
       jdMimeType: 'text/plain',
@@ -180,6 +186,7 @@ const teardown = async () => {
     else process.env[key] = originalEnv[key];
   }
   await prisma.job.deleteMany({ where: { id: { in: created.jobIds } } });
+  await cleanupTestWorkspaces(created.userIds);
   await prisma.user.deleteMany({ where: { id: { in: created.userIds } } });
   await new Promise((resolve) => server.close(resolve));
   await prisma.$disconnect();
@@ -212,7 +219,7 @@ const run = async () => {
     setAiEnv(allModesOn());
     const res = await request('POST', '/ai/run', {
       body: { mode: 'screening', message: 'test' },
-      cookie: 'hr_session=not.a.real.token'
+      cookie: 'hr_access=not.a.real.token'
     });
     assert.strictEqual(res.status, 401);
   });

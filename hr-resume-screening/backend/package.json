@@ -28,7 +28,9 @@
     "prisma:generate": "prisma generate",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:push": "prisma db push",
-    "db:reset": "prisma db push --force-reset && node prisma/seedUser.js"
+    "db:reset": "prisma db push --force-reset && node prisma/seedUser.js",
+    "test:auth": "node tests/authSession.test.js",
+    "test:isolation": "node tests/workspaceIsolation.test.js"
   },
   "keywords": [
     "hr",

@@ -9,6 +9,7 @@
 require('dotenv').config();
 const prisma = require('../config/prisma');
 const { hashPassword } = require('../services/authService');
+const { ensureWorkspaceForUser } = require('../services/workspaceService');
 
 const run = async () => {
   const [emailArg, passwordArg, nameArg, roleArg] = process.argv.slice(2);
@@ -33,13 +34,20 @@ const run = async () => {
 
   const passwordHash = await hashPassword(password);
 
-  const user = await prisma.user.upsert({
-    where: { email },
-    update: { passwordHash, name, role, isActive: true },
-    create: { email, passwordHash, name, role }
+  // The account and its workspace are created together. Without a workspace the
+  // account signs in successfully and is then refused by every scoped query.
+  const { user, workspaceId } = await prisma.$transaction(async (tx) => {
+    const created = await tx.user.upsert({
+      where: { email },
+      update: { passwordHash, name, role, isActive: true },
+      create: { email, passwordHash, name, role }
+    });
+    const ws = await ensureWorkspaceForUser(tx, { userId: created.id, userName: name, email });
+    return { user: created, workspaceId: ws };
   });
 
   console.log(`[Seed] Recruiter account ready: ${user.email} (role ${user.role}, id ${user.id})`);
+  console.log(`[Seed] Workspace: ${workspaceId}`);
 };
 
 run()

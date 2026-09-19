@@ -13,6 +13,10 @@ const http = require('http');
 const { createSuite, assert } = require('./harness');
 
 const prisma = require('../config/prisma');
+const { ensureTestWorkspace, addWorkspaceMember, cleanupTestWorkspaces } = require('./workspaceFixture');
+
+// Jobs are workspace-owned, so fixtures need one before they can create any.
+let testWorkspaceId;
 const app = require('../server');
 const { hashPassword } = require('../services/authService');
 
@@ -45,13 +49,17 @@ const request = async (method, path, { body, cookie, raw = false, headers = {} }
 
   const response = await fetch(`${baseUrl}${path}`, options);
   const setCookie = response.headers.get('set-cookie');
+  // Login now sets more than one cookie, and `get` folds them into a single
+  // comma-joined string that cannot be parsed reliably. Keep the list too.
+  const setCookies = response.headers.getSetCookie ? response.headers.getSetCookie() : [];
 
   if (raw) {
     return {
       status: response.status,
       headers: response.headers,
       buffer: Buffer.from(await response.arrayBuffer()),
-      setCookie
+      setCookie,
+      setCookies
     };
   }
 
@@ -63,7 +71,7 @@ const request = async (method, path, { body, cookie, raw = false, headers = {} }
     json = { parseError: true, text: text.slice(0, 200) };
   }
 
-  return { status: response.status, body: json, headers: response.headers, setCookie };
+  return { status: response.status, body: json, headers: response.headers, setCookie, setCookies };
 };
 
 const authed = (method, path, options = {}) => request(method, path, { ...options, cookie: sessionCookie });
@@ -86,9 +94,11 @@ const setup = async () => {
     }
   });
   created.userIds.push(user.id);
+  testWorkspaceId = await ensureTestWorkspace(user.id, { name: 'Integration Recruiter' });
 
   const job = await prisma.job.create({
     data: {
+      workspaceId: testWorkspaceId,
       title: `${TEST_PREFIX} React Developer`,
       jdFileName: 'integration-jd.txt',
       jdMimeType: 'text/plain',
@@ -107,6 +117,7 @@ const setup = async () => {
 
   const otherJob = await prisma.job.create({
     data: {
+      workspaceId: testWorkspaceId,
       title: `${TEST_PREFIX} Unrelated Role`,
       jdFileName: 'other-jd.txt',
       jdMimeType: 'text/plain',
@@ -195,6 +206,7 @@ const teardown = async () => {
   await prisma.candidateNote.deleteMany({ where: { candidateId: { in: created.candidateIds } } });
   await prisma.candidate.deleteMany({ where: { jobId: { in: created.jobIds } } });
   await prisma.job.deleteMany({ where: { id: { in: created.jobIds } } });
+  await cleanupTestWorkspaces(created.userIds);
   await prisma.user.deleteMany({ where: { id: { in: created.userIds } } });
   await new Promise((resolve) => server.close(resolve));
   await prisma.$disconnect();
@@ -261,14 +273,27 @@ const run = async () => {
     assert.strictEqual(unknown.body.code, 'INVALID_CREDENTIALS', 'must not reveal that the account is unknown');
   });
 
-  await testAsync('login succeeds and issues an httpOnly session cookie', async () => {
+  await testAsync('login issues httpOnly access and refresh cookies', async () => {
     const res = await request('POST', '/auth/login', { body: { email: TEST_EMAIL, password: TEST_PASSWORD } });
     assert.strictEqual(res.status, 200);
-    assert.ok(res.setCookie, 'a session cookie is set');
-    assert.ok(/HttpOnly/i.test(res.setCookie), 'cookie is HttpOnly');
-    assert.ok(/SameSite=Lax/i.test(res.setCookie), 'cookie is SameSite=Lax');
+
+    const access = res.setCookies.find((c) => c.startsWith('hr_access='));
+    const refresh = res.setCookies.find((c) => c.startsWith('hr_refresh='));
+
+    assert.ok(access, 'an access cookie is set');
+    assert.ok(refresh, 'a refresh cookie is set');
+    assert.ok(/HttpOnly/i.test(access), 'access cookie is HttpOnly');
+    assert.ok(/HttpOnly/i.test(refresh), 'refresh cookie is HttpOnly');
+    assert.ok(/SameSite=Lax/i.test(access), 'access cookie is SameSite=Lax');
+    assert.ok(/SameSite=Lax/i.test(refresh), 'refresh cookie is SameSite=Lax');
+    assert.ok(/Path=\/api\/auth/i.test(refresh), 'refresh cookie is scoped to the auth routes');
     assert.ok(!('passwordHash' in res.body.data.user), 'password hash is never returned');
-    sessionCookie = res.setCookie.split(';')[0];
+
+    // Neither raw token may appear in the response body.
+    const serialized = JSON.stringify(res.body);
+    assert.ok(!/hr_refresh|refreshToken/i.test(serialized), 'no refresh token in the response body');
+
+    sessionCookie = [access.split(';')[0], refresh.split(';')[0]].join('; ');
   });
 
   await testAsync('GET /auth/me returns the signed-in recruiter', async () => {
@@ -277,10 +302,16 @@ const run = async () => {
     assert.strictEqual(res.body.data.user.email, TEST_EMAIL);
   });
 
-  await testAsync('a malformed session token is refused', async () => {
-    const res = await request('GET', '/auth/me', { cookie: 'hr_session=not-a-real-token' });
+  await testAsync('a malformed access token is refused', async () => {
+    const res = await request('GET', '/auth/me', { cookie: 'hr_access=not-a-real-token' });
     assert.strictEqual(res.status, 401);
     assert.strictEqual(res.body.code, 'INVALID_SESSION');
+  });
+
+  await testAsync('a cookie from the previous single-token design is not honoured', async () => {
+    const res = await request('GET', '/auth/me', { cookie: 'hr_session=anything-at-all' });
+    assert.strictEqual(res.status, 401);
+    assert.strictEqual(res.body.code, 'AUTH_REQUIRED', 'the legacy cookie is not read as a credential');
   });
 
   /* --------------------------------------------------------- analytics --- */
@@ -821,15 +852,26 @@ const run = async () => {
     assert.strictEqual(response.status, 400);
   });
 
-  await testAsync('sign-out clears the session cookie', async () => {
+  await testAsync('sign-out clears both auth cookies', async () => {
     const res = await authed('POST', '/auth/logout');
     assert.strictEqual(res.status, 200);
-    assert.ok(res.setCookie, 'a cookie-clearing header is sent');
-    assert.ok(/hr_session=;|hr_session=(?=;)/.test(res.setCookie) || /Expires=Thu, 01 Jan 1970/i.test(res.setCookie), res.setCookie);
+    assert.ok(res.setCookies.length, 'cookie-clearing headers are sent');
+
+    const cleared = (name) =>
+      res.setCookies.some(
+        (c) => c.startsWith(`${name}=`) && (/=;/.test(c) || /Expires=Thu, 01 Jan 1970/i.test(c))
+      );
+
+    assert.ok(cleared('hr_access'), 'the access cookie is cleared');
+    assert.ok(cleared('hr_refresh'), 'the refresh cookie is cleared');
+
+    // Clearing only works when every attribute matches the cookie that was set.
+    const refreshClear = res.setCookies.find((c) => c.startsWith('hr_refresh='));
+    assert.ok(/Path=\/api\/auth/i.test(refreshClear), 'cleared with the same Path it was set with');
   });
 
   await testAsync('the cleared cookie no longer grants access', async () => {
-    const res = await request('GET', '/candidates', { cookie: 'hr_session=' });
+    const res = await request('GET', '/candidates', { cookie: 'hr_access=' });
     assert.strictEqual(res.status, 401);
   });
 

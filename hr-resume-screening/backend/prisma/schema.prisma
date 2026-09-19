@@ -23,6 +23,8 @@ model User {
   activities       CandidateActivity[]
   closedJobs       Job[]               @relation("JobClosedBy")
   selectedHires    Candidate[]         @relation("CandidateSelectedBy")
+  authSessions     AuthSession[]
+  memberships      WorkspaceMember[]
 }
 
 /// Persisted recruitment lifecycle of a vacancy. Deliberately minimal: a job is
@@ -36,6 +38,12 @@ enum JobStatus {
 
 model Job {
   id                 String          @id @default(uuid())
+
+  /// Owning workspace. This is the single authority for who may see a job and,
+  /// through it, every candidate, note, activity and import that hangs off it.
+  workspaceId        String
+  workspace          Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
   title              String
   jdFileName         String
   jdMimeType         String
@@ -76,6 +84,8 @@ model Job {
   /// Closed-job history is listed by recency, and the portal filters by status.
   @@index([status])
   @@index([status, closedAt])
+  @@index([workspaceId])
+  @@index([workspaceId, status])
 }
 
 model Candidate {
@@ -215,6 +225,12 @@ model CandidateActivity {
 
 model OutlookConnection {
   id              String    @id @default(uuid())
+
+  /// The mailbox connection belongs to one workspace. Without this, any signed-in
+  /// user could browse, search and import from another workspace's mailbox.
+  workspaceId     String
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
   microsoftUserId String    @unique
   email           String
   displayName     String?   @default("")
@@ -223,6 +239,8 @@ model OutlookConnection {
   expiresAt       DateTime?
   connectedAt     DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+
+  @@index([workspaceId])
 }
 
 model ImportSession {
@@ -236,4 +254,80 @@ model ImportSession {
   emailsFound  Int      @default(0)
   resumesFound Int      @default(0)
   createdAt    DateTime @default(now())
+}
+
+/// Server-side refresh session: one row per issued refresh token.
+///
+/// The refresh token itself is opaque and random; only its SHA-256 is stored, so
+/// a database disclosure does not hand anyone a usable session. Rows are kept
+/// after rotation rather than deleted — a revoked row is what lets a replayed
+/// token be recognised as reuse instead of simply being unknown.
+model AuthSession {
+  id           String       @id @default(uuid())
+  userId       String
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// SHA-256 (hex) of the opaque refresh token. The raw token is never stored.
+  refreshTokenHash String   @unique
+
+  /// Every token minted from one sign-in shares a familyId, so a detected reuse
+  /// can revoke the whole lineage rather than the single replayed token.
+  familyId     String
+  /// The session this one was rotated into, forming the lineage chain.
+  replacedById String?      @unique
+  replacedBy   AuthSession? @relation("SessionRotation", fields: [replacedById], references: [id], onDelete: SetNull)
+  replaces     AuthSession? @relation("SessionRotation")
+
+  createdAt     DateTime  @default(now())
+  expiresAt     DateTime
+  lastUsedAt    DateTime  @default(now())
+  revokedAt     DateTime?
+  /// ROTATED | LOGOUT | REUSE_DETECTED. Operational only — never a token value.
+  revokedReason String?
+
+  /// A coarse client hint for session review. Deliberately not fingerprinting:
+  /// a truncated user agent and nothing else.
+  userAgent String?
+
+  @@index([userId])
+  @@index([familyId])
+  @@index([expiresAt])
+}
+
+/// A tenant boundary: one hiring team's jobs, candidates and mailbox connection.
+///
+/// Created automatically when someone signs up, so a recruiter never has to
+/// understand tenancy to use the product. Everything a workspace owns hangs off
+/// `Job.workspaceId` — candidates, notes, activities and imports are reached
+/// through their job rather than carrying a copy of the owner, so there is one
+/// authority for who may see a record and no denormalised field to drift.
+model Workspace {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members            WorkspaceMember[]
+  jobs               Job[]
+  outlookConnections OutlookConnection[]
+}
+
+/// Which people may act inside a workspace, and in what capacity.
+///
+/// `role` is the workspace role (OWNER for whoever created it) and is separate
+/// from `User.role`, which stays the application-wide role. A person could
+/// belong to more than one workspace later; today signup creates exactly one.
+model WorkspaceMember {
+  id          String    @id @default(uuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// OWNER | MEMBER
+  role      String   @default("MEMBER")
+  createdAt DateTime @default(now())
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
 }

@@ -25,7 +25,8 @@ import {
   searchOutlookEmails,
   processCandidates,
   uploadBulkCandidates,
-  disconnectOutlook
+  disconnectOutlook,
+  getOutlookConnectUrl
 } from '../services/api';
 import { Card, EmptyState, InlineAlert, PageHeader, ProgressBar } from '../components/ui';
 import RouteSkeleton from '../components/ui/RouteSkeleton';
@@ -817,7 +818,7 @@ const ImportCandidates = () => {
               ) : (
                 <button
                   type="button"
-                  onClick={() => { window.location.href = `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/outlook/connect`; }}
+                  onClick={() => { window.location.href = getOutlookConnectUrl(); }}
                   className="btn btn-sm btn-primary shrink-0"
                 >
                   Connect Outlook

@@ -8,6 +8,10 @@ require('dotenv').config();
 const http = require('http');
 const { createSuite, assert } = require('./harness');
 const prisma = require('../config/prisma');
+const { ensureTestWorkspace, addWorkspaceMember, cleanupTestWorkspaces } = require('./workspaceFixture');
+
+// Jobs are workspace-owned, so fixtures need one before they can create any.
+let testWorkspaceId;
 const app = require('../server');
 const { hashPassword } = require('../services/authService');
 
@@ -83,6 +87,7 @@ const setup = async () => {
 
   const job = await prisma.job.create({
     data: {
+      workspaceId: testWorkspaceId,
       title: `${PREFIX} React Developer`,
       jdFileName: 'upload-pipeline-jd.txt',
       jdMimeType: 'text/plain',

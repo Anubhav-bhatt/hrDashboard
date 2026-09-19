@@ -37,7 +37,7 @@ const runAgent = async (req, res, next) => {
       { mode, message, context },
       // Identity comes from the verified session only. Nothing in the body can
       // influence who the request runs as.
-      { user: req.user || null }
+      { user: req.user || null, workspaceId: req.workspaceId || null }
     );
 
     return res.status(200).json({ success: true, data: result });

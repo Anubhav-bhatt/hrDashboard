@@ -1,5 +1,17 @@
 const express = require('express');
 const router = express.Router();
+
+const { requireJobInWorkspace } = require('../middleware/workspace');
+
+/*
+ * Ownership gate.
+ *
+ * Registered with router.param rather than repeated per route, so every
+ * current and future route that names a job id is covered by construction.
+ * It runs before the handler, so a job belonging to another workspace is
+ * refused before anything is read.
+ */
+router.param('jobId', (req, res, next) => requireJobInWorkspace(req, res, next));
 const candidateController = require('../controllers/candidateController');
 const upload = require('../middleware/upload');
 const { rejectClosedJob, buildRejectClosedJob } = require('../middleware/jobLifecycle');

@@ -210,11 +210,12 @@ const getJobRankingData = {
     };
   },
 
-  execute: async ({ jobId, limit }) => {
+  execute: async ({ jobId, limit }, { context } = {}) => {
+    const workspaceId = (context && context.workspaceId) || null;
     // `score_desc` is the application's own default candidate ordering: score
     // descending with unscored last. The rows are numbered in the order the
     // service returns them and are not re-sorted here.
-    const result = await listCandidatesForJob(jobId, { limit, page: 1, sort: 'score_desc' });
+    const result = await listCandidatesForJob(jobId, { limit, page: 1, sort: 'score_desc' }, { workspaceId });
     if (!result) throw resourceNotFound('Job');
 
     const ranked = result.candidates.map((candidate, index) => {

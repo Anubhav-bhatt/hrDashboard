@@ -56,9 +56,16 @@ const handleCallback = async (req, res, next) => {
       });
     }
 
+    // A mailbox belongs to the workspace that connected it. Without this the
+    // connection is global, and any signed-in user could browse, search and
+    // import from somebody else's mailbox.
     await prisma.outlookConnection.upsert({
       where: { microsoftUserId },
       update: {
+        // Reconnecting moves the mailbox to whichever workspace just authorised
+        // it, so a connection is never left readable by a workspace the account
+        // no longer belongs to.
+        workspaceId: req.workspaceId,
         email,
         displayName,
         accessToken: tokenResponse.accessToken,
@@ -66,6 +73,7 @@ const handleCallback = async (req, res, next) => {
         expiresAt: tokenResponse.expiresOn ? new Date(tokenResponse.expiresOn) : null
       },
       create: {
+        workspaceId: req.workspaceId,
         microsoftUserId,
         email,
         displayName,
@@ -90,6 +98,7 @@ const handleCallback = async (req, res, next) => {
 const getOutlookStatus = async (req, res, next) => {
   try {
     const connection = await prisma.outlookConnection.findFirst({
+      where: { workspaceId: req.workspaceId },
       orderBy: { connectedAt: 'desc' },
       select: {
         id: true,
@@ -128,6 +137,7 @@ const getOutlookStatus = async (req, res, next) => {
 const getFolders = async (req, res, next) => {
   try {
     const connection = await prisma.outlookConnection.findFirst({
+      where: { workspaceId: req.workspaceId },
       orderBy: { connectedAt: 'desc' }
     });
 
@@ -160,7 +170,8 @@ const getFolders = async (req, res, next) => {
  */
 const disconnectOutlook = async (req, res, next) => {
   try {
-    await prisma.outlookConnection.deleteMany({});
+    // Scoped: disconnecting must never reach another workspace's mailbox.
+    await prisma.outlookConnection.deleteMany({ where: { workspaceId: req.workspaceId } });
     return res.status(200).json({
       success: true,
       message: 'Outlook disconnected successfully.'

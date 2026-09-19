@@ -12,6 +12,7 @@ import { useRecruitmentContext } from '../context/RecruitmentContext';
 import { useWorkspaceMode } from '../context/WorkspaceModeContext';
 import WorkspacePage from '../components/layout/WorkspacePage';
 import MinimalHome from '../components/dashboard/MinimalHome';
+import FirstRunWelcome from '../components/dashboard/FirstRunWelcome';
 
 const greeting = () => {
   const hour = new Date().getHours();
@@ -76,6 +77,10 @@ const Dashboard = () => {
   const scoredTotal = overview?.scoreBands?.reduce((sum, band) => sum + band.count, 0) || 0;
   const firstLoad = (loading && !overview) || (jobsLoading && !jobsData);
   const noOpenRoles = Boolean(jobsData) && jobs.length === 0 && !selectedJobId;
+  // `totalJobs` counts the workspace's roles whatever their lifecycle, so this
+  // separates "you have not started" from "you have closed everything" — two
+  // situations that need different words and a different next step.
+  const neverHadAJob = noOpenRoles && (metrics?.totalJobs ?? 0) === 0;
   const ready = Boolean(overview) && Boolean(jobsData) && !noOpenRoles;
 
   const candidatesLink = (query) => (isJobScoped ? `/jobs/${scope.jobId}/candidates?${query}` : `/candidates?${query}`);
@@ -163,9 +168,15 @@ const Dashboard = () => {
         </div>
       )}
 
+      {/* A workspace that has never held a job gets an orientation rather than an
+          empty state: there is nothing to be empty of yet, and the recruiter's
+          question is "how do I start", not "where did everything go". Once a job
+          has existed, the ordinary empty state is the right answer again. */}
       {noOpenRoles && (
-        <EmptyState icon={Briefcase} title="No hiring activity yet" description="Create your first role to start reviewing candidates."
-          action={<Link to="/jobs/new" className="btn btn-lg btn-primary">Create Job</Link>} />
+        neverHadAJob
+          ? <FirstRunWelcome name={user?.name} />
+          : <EmptyState icon={Briefcase} title="No open roles" description="Every role has been closed. Create another to start reviewing candidates."
+              action={<Link to="/jobs/new" className="btn btn-lg btn-primary">Create Job</Link>} />
       )}
 
       {ready && <>

@@ -11,6 +11,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { ProfileSkeleton, Spinner } from './components/ui';
 import RouteSkeleton from './components/ui/RouteSkeleton';
 import Login from './pages/Login';
+import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
 import JobsList from './pages/JobsList';
 import ClosedJobs from './pages/ClosedJobs';
@@ -99,7 +100,11 @@ function App() {
                   colour it is, and the two must compose rather than override. */}
               <WorkspaceModeProvider>
               <Routes>
+              {/* The two public surfaces. Both redirect to the dashboard when a
+                  session already exists, so a bookmarked /signup does not ask a
+                  signed-in recruiter to make a second account. */}
               <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<Signup />} />
 
               <Route
                 path="/"

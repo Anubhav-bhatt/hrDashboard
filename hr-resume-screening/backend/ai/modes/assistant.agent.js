@@ -47,6 +47,11 @@ const delegateContext = (context, overrides) => ({
   requestId: context.requestId,
   userId: context.userId,
   userRole: context.userRole,
+  // Carried like the rest of the identity, and for the same reason: a specialist
+  // that lost the workspace would query with no tenant and — because the scoping
+  // fails closed — find nothing, which surfaces as the assistant being unable to
+  // see jobs that are plainly there.
+  workspaceId: context.workspaceId,
   ...overrides
 });
 

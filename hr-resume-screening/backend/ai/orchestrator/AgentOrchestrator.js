@@ -120,7 +120,7 @@ const normalizeProviderResult = (result, mode) => {
  * @returns {Promise<import('../types/ai.types').AIResponse>}
  * @throws {AiError} Always an AiError — never a raw provider or validation error.
  */
-const run = async ({ mode, message, context } = {}, { user = null, config, provider } = {}) => {
+const run = async ({ mode, message, context } = {}, { user = null, workspaceId = null, config, provider } = {}) => {
   const startedAt = Date.now();
   const requestId = crypto.randomUUID();
   const userId = user && user.id ? user.id : null;
@@ -167,7 +167,7 @@ const run = async ({ mode, message, context } = {}, { user = null, config, provi
   let agentContext;
   try {
     normalizedMessage = normalizeMessage(message);
-    agentContext = normalizeAgentContext(context, { user, requestId });
+    agentContext = normalizeAgentContext(context, { user, workspaceId, requestId });
   } catch (error) {
     if (error instanceof AiError) throw rejected(error);
     throw error;

@@ -39,8 +39,9 @@ const getDashboardMetrics = {
     return { jobId: requireId(raw.jobId, 'jobId', { required: false }) };
   },
 
-  execute: async ({ jobId }) => {
-    const overview = await getDashboardOverview({ jobId });
+  execute: async ({ jobId }, { context } = {}) => {
+    const workspaceId = (context && context.workspaceId) || null;
+    const overview = await getDashboardOverview({ jobId, workspaceId });
     if (!overview) throw resourceNotFound('Job');
 
     return {
@@ -75,8 +76,9 @@ const getJobMetrics = {
     return { jobId: requireId(raw.jobId, 'jobId') };
   },
 
-  execute: async ({ jobId }) => {
-    const summary = await getJobSummaryData(jobId);
+  execute: async ({ jobId }, { context } = {}) => {
+    const workspaceId = (context && context.workspaceId) || null;
+    const summary = await getJobSummaryData(jobId, { workspaceId });
     if (!summary) throw resourceNotFound('Job');
 
     return {
@@ -113,8 +115,9 @@ const getPipelineMetrics = {
     return { jobId: requireId(raw.jobId, 'jobId', { required: false }) };
   },
 
-  execute: async ({ jobId }) => {
-    const overview = await getDashboardOverview({ jobId });
+  execute: async ({ jobId }, { context } = {}) => {
+    const workspaceId = (context && context.workspaceId) || null;
+    const overview = await getDashboardOverview({ jobId, workspaceId });
     if (!overview) throw resourceNotFound('Job');
 
     return {

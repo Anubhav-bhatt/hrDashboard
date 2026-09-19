@@ -5,6 +5,7 @@
  * listing (GET /api/candidates) build their Prisma queries here so filtering,
  * sorting and pagination behave identically on every screen.
  */
+const { throughJobScope } = require('../services/workspaceService');
 
 /**
  * Every HR status a candidate row may hold.
@@ -184,15 +185,27 @@ const buildScopeWhere = (scope = DEFAULT_CANDIDATE_SCOPE, jobId = null) => {
  * anything, so it combines with jobId, status, score, experience, skill,
  * location, qualification and search exactly as another condition would.
  *
+ * The owning workspace is composed on the same way, through the candidate's job.
+ * A candidate has no workspace column of its own — `Job.workspaceId` is the only
+ * authority — so this is a relation filter, and it is *emitted* rather than
+ * merely validated for the same reason the archived scope is: a caller that
+ * forgot to pass one would otherwise list every candidate of every workspace.
+ * An absent workspace yields a clause that matches nothing.
+ *
  * @param {Object} query Request query string values
  * @param {Object} [job] Job record, used to resolve requirement-relative ranges
  * @param {Object} [options]
  * @param {'active'|'archived'} [options.scope='active'] Job lifecycle scope
  * @param {string|null} [options.jobId] Required when scope is 'archived'
+ * @param {string|null} [options.workspaceId] Owning workspace
  * @returns {Object} Prisma where clause
  */
-const buildCandidateWhere = (query = {}, job = null, { scope = DEFAULT_CANDIDATE_SCOPE, jobId = null } = {}) => {
-  const and = [buildScopeWhere(scope, jobId || query.jobId || null)];
+const buildCandidateWhere = (
+  query = {},
+  job = null,
+  { scope = DEFAULT_CANDIDATE_SCOPE, jobId = null, workspaceId = null } = {}
+) => {
+  const and = [throughJobScope(workspaceId), buildScopeWhere(scope, jobId || query.jobId || null)];
 
   const search = typeof query.search === 'string' ? query.search.trim() : '';
   if (search) {

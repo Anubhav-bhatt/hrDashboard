@@ -13,7 +13,7 @@ const { getDashboardOverview, getJobSummaryData, PIPELINE_STAGES } = require('..
  */
 const getOverview = async (req, res, next) => {
   try {
-    const data = await getDashboardOverview({ jobId: req.query.jobId });
+    const data = await getDashboardOverview({ jobId: req.query.jobId, workspaceId: req.workspaceId });
 
     if (!data) {
       return res.status(404).json({
@@ -37,7 +37,7 @@ const getOverview = async (req, res, next) => {
  */
 const getJobSummary = async (req, res, next) => {
   try {
-    const data = await getJobSummaryData(req.params.jobId);
+    const data = await getJobSummaryData(req.params.jobId, { workspaceId: req.workspaceId });
 
     if (!data) {
       return res.status(404).json({ success: false, code: 'JOB_NOT_FOUND', message: 'Job not found.' });

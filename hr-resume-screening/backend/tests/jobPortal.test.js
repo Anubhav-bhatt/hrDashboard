@@ -12,6 +12,10 @@ const http = require('http');
 const { createSuite, assert } = require('./harness');
 
 const prisma = require('../config/prisma');
+const { ensureTestWorkspace, addWorkspaceMember, cleanupTestWorkspaces } = require('./workspaceFixture');
+
+// Jobs are workspace-owned, so fixtures need one before they can create any.
+let testWorkspaceId;
 const app = require('../server');
 const { hashPassword } = require('../services/authService');
 const { STRONG_MATCH_MIN } = require('../utils/scoreThresholds');
@@ -88,6 +92,7 @@ const setup = async () => {
     create: { email: TEST_EMAIL, passwordHash: await hashPassword(TEST_PASSWORD), name: 'Portal Tester', role: 'ADMIN' }
   });
   created.userIds.push(user.id);
+  testWorkspaceId = await ensureTestWorkspace(user.id, { name: 'Portal Tester' });
 
   const login = await request('POST', '/auth/login', { body: { email: TEST_EMAIL, password: TEST_PASSWORD } });
   cookie = login.setCookie.split(';')[0];
@@ -95,6 +100,7 @@ const setup = async () => {
   const makeJob = async (title, requiredSkills) => {
     const job = await prisma.job.create({
       data: {
+        workspaceId: testWorkspaceId,
         title,
         jdFileName: `${title}.txt`,
         jdMimeType: 'text/plain',
@@ -145,6 +151,7 @@ const teardown = async () => {
   await prisma.candidateNote.deleteMany({ where: { candidateId: { in: created.candidateIds } } });
   await prisma.candidate.deleteMany({ where: { jobId: { in: created.jobIds } } });
   await prisma.job.deleteMany({ where: { id: { in: created.jobIds } } });
+  await cleanupTestWorkspaces(created.userIds);
   await prisma.user.deleteMany({ where: { id: { in: created.userIds } } });
   await new Promise((resolve) => server.close(resolve));
   await prisma.$disconnect();

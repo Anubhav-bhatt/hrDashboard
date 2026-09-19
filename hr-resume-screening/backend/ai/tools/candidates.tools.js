@@ -77,8 +77,9 @@ const getCandidate = {
     };
   },
 
-  execute: async ({ candidateId, jobId }) => {
-    const candidate = await getCandidateDetail(candidateId, { jobId, includeResumeText: false });
+  execute: async ({ candidateId, jobId }, { context } = {}) => {
+    const workspaceId = (context && context.workspaceId) || null;
+    const candidate = await getCandidateDetail(candidateId, { jobId, includeResumeText: false, workspaceId });
     if (!candidate) throw resourceNotFound('Candidate');
 
     return {
@@ -111,13 +112,14 @@ const getCandidates = {
     };
   },
 
-  execute: async ({ jobId, status, limit, offset }) => {
+  execute: async ({ jobId, status, limit, offset }, { context } = {}) => {
+    const workspaceId = (context && context.workspaceId) || null;
     const result = await listCandidatesForJob(jobId, {
       hrStatus: status || undefined,
       limit,
       page: Math.floor(offset / limit) + 1,
       sort: 'score_desc'
-    });
+    }, { workspaceId });
 
     if (!result) throw resourceNotFound('Job');
 
@@ -188,7 +190,8 @@ const searchCandidates = {
     };
   },
 
-  execute: async (input) => {
+  execute: async (input, { context } = {}) => {
+    const workspaceId = (context && context.workspaceId) || null;
     const { jobId, search, skills, minimumScore, maximumScore, experienceRange, location, qualification, limit, offset } =
       input;
 
@@ -213,7 +216,7 @@ const searchCandidates = {
       sort: 'score_desc'
     };
 
-    const result = await listCandidatesAcrossJobs(query);
+    const result = await listCandidatesAcrossJobs(query, { workspaceId });
 
     return {
       data: { candidates: result.candidates.map(toAICandidateSummary) },

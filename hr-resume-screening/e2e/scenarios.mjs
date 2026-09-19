@@ -380,9 +380,16 @@ try {
 
   /* --------------------------- quality gates ----------------------------- */
   section('Quality gates — console, exceptions, network');
-  // 401 on the initial /auth/me probe and the deliberate unknown-ID 404 are expected.
+  // Expected failures: the initial /auth/me probe before sign-in, the single
+  // /auth/refresh the client spends trying to renew that probe (an anonymous
+  // visitor has no refresh cookie, so one 401 there is the normal path), and the
+  // deliberate unknown-ID 404.
   const unexpectedRequests = failedRequests.filter(
-    (entry) => !entry.includes('/auth/me') && !entry.includes('11111111-1111') && !entry.includes('/auth/login')
+    (entry) =>
+      !entry.includes('/auth/me') &&
+      !entry.includes('/auth/refresh') &&
+      !entry.includes('/auth/login') &&
+      !entry.includes('11111111-1111')
   );
   const unexpectedConsole = consoleIssues.filter(
     (entry) => !entry.includes('401') && !entry.includes('404') && !entry.includes('Failed to load resource')

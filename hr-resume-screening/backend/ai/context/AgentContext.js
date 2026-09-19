@@ -35,7 +35,7 @@ const CLIENT_CONTEXT_KEYS = Object.freeze([
 ]);
 
 /** Keys the server owns. A client that sends one of these is refused. */
-const SERVER_OWNED_KEYS = Object.freeze(['userId', 'userRole', 'requestId']);
+const SERVER_OWNED_KEYS = Object.freeze(['userId', 'userRole', 'workspaceId', 'requestId']);
 
 /**
  * Identifier shape. The application's ids are UUIDs, which fit comfortably; the
@@ -189,7 +189,7 @@ const requireFilters = (value) => {
  * @returns {Readonly<import('../types/ai.types').AgentContext>}
  * @throws {AiError} AI_REQUEST_INVALID
  */
-const normalizeAgentContext = (raw, { user = null, requestId } = {}) => {
+const normalizeAgentContext = (raw, { user = null, workspaceId = null, requestId } = {}) => {
   if (raw !== undefined && raw !== null && (typeof raw !== 'object' || Array.isArray(raw))) {
     throw aiRequestInvalid('context must be an object.');
   }
@@ -212,6 +212,9 @@ const normalizeAgentContext = (raw, { user = null, requestId } = {}) => {
     // Identity comes from the verified session, never from the request body.
     userId: user && user.id ? user.id : null,
     userRole: user && user.role ? user.role : null,
+    // The tenant the agent may read, taken from the verified session. A tool
+    // that queries without it gets nothing rather than everything.
+    workspaceId: workspaceId || null,
     sessionId: requireId(source.sessionId, 'sessionId'),
     jobId: requireId(source.jobId || source.currentJobId, 'jobId'),
     candidateIds: Object.freeze(requireIdList(source.candidateIds)),

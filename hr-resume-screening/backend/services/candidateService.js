@@ -13,6 +13,7 @@
  * is exactly how the three would drift apart.
  */
 const prisma = require('../config/prisma');
+const { jobScope, throughJobScope } = require('./workspaceService');
 const { formatCandidateForApi, formatCandidateDetail } = require('../utils/candidateSerializer');
 const {
   LIST_SELECT,
@@ -48,8 +49,11 @@ const buildFacets = ({ statusGroups, strongMatchCount, tabTotal }) => ({
  *   hrStatus, experienceRange, sort, page, limit, ...).
  * @returns {Promise<Object|null>} Null when the job does not exist.
  */
-const listCandidatesForJob = async (jobId, query = {}) => {
-  const job = await prisma.job.findUnique({ where: { id: jobId } });
+const listCandidatesForJob = async (jobId, query = {}, { workspaceId = null } = {}) => {
+  // The route is already gated by requireJobInWorkspace; scoping the lookup as
+  // well means this function is safe to call from anywhere, not only from behind
+  // that gate.
+  const job = await prisma.job.findFirst({ where: { id: jobId, ...jobScope(workspaceId) } });
   if (!job) return null;
 
   const { page, limit, skip } = parsePagination(query);
@@ -64,7 +68,7 @@ const listCandidatesForJob = async (jobId, query = {}) => {
    * active", and the archived branch is unreachable for an open job.
    */
   const scope = job.status === 'CLOSED' ? 'archived' : 'active';
-  const scopeOptions = { scope, jobId };
+  const scopeOptions = { scope, jobId, workspaceId };
 
   const where = { AND: [{ jobId }, buildCandidateWhere(query, job, scopeOptions)] };
 
@@ -98,7 +102,7 @@ const listCandidatesForJob = async (jobId, query = {}) => {
  * @param {Object} [query] Same query vocabulary as the job-scoped listing, plus
  *   an optional `jobId` filter.
  */
-const listCandidatesAcrossJobs = async (query = {}) => {
+const listCandidatesAcrossJobs = async (query = {}, { workspaceId = null } = {}) => {
   const { page, limit, skip } = parsePagination(query);
   const orderBy = parseSort(query.sort);
 
@@ -108,8 +112,8 @@ const listCandidatesAcrossJobs = async (query = {}) => {
    * through that job. A `?jobId=` naming a closed job therefore returns nothing
    * here rather than quietly exposing an archived pool in the active talent list.
    */
-  const where = buildCandidateWhere(query, null, { scope: 'active' });
-  const tabWhere = buildCandidateWhere({ ...query, hrStatus: undefined }, null, { scope: 'active' });
+  const where = buildCandidateWhere(query, null, { scope: 'active', workspaceId });
+  const tabWhere = buildCandidateWhere({ ...query, hrStatus: undefined }, null, { scope: 'active', workspaceId });
 
   const [total, candidates, statusGroups, strongMatchCount, tabTotal] = await Promise.all([
     prisma.candidate.count({ where }),
@@ -149,10 +153,10 @@ const listCandidatesAcrossJobs = async (query = {}) => {
  *   text. Callers that must not see it (the AI tool layer) pass false.
  * @returns {Promise<Object|null>}
  */
-const getCandidateDetail = async (candidateId, { jobId = null, includeResumeText = true } = {}) => {
+const getCandidateDetail = async (candidateId, { jobId = null, includeResumeText = true, workspaceId = null } = {}) => {
   if (jobId) {
     const candidate = await prisma.candidate.findFirst({
-      where: { id: candidateId, jobId },
+      where: { id: candidateId, jobId, ...throughJobScope(workspaceId) },
       include: {
         job: { select: { id: true, title: true } },
         noteEntries: { orderBy: { createdAt: 'desc' }, take: 50 },
@@ -162,12 +166,15 @@ const getCandidateDetail = async (candidateId, { jobId = null, includeResumeText
 
     if (!candidate) return null;
 
-    const job = await prisma.job.findUnique({ where: { id: jobId } });
+    const job = await prisma.job.findFirst({ where: { id: jobId, ...jobScope(workspaceId) } });
     return formatCandidateDetail(candidate, job, { includeResumeText });
   }
 
-  const candidate = await prisma.candidate.findUnique({
-    where: { id: candidateId },
+  // findFirst, not findUnique: the workspace lives on the related job, and
+  // findUnique cannot take a relation filter. Guessing a candidate id from
+  // another workspace must read as "not found".
+  const candidate = await prisma.candidate.findFirst({
+    where: { id: candidateId, ...throughJobScope(workspaceId) },
     include: {
       job: true,
       noteEntries: { orderBy: { createdAt: 'desc' }, take: 50 },
@@ -184,7 +191,7 @@ const getCandidateDetail = async (candidateId, { jobId = null, includeResumeText
  * Distinct filter values present in the candidate pool, so filter controls only
  * offer real options.
  */
-const getCandidateFilterOptions = async ({ scope = 'active', jobId = null } = {}) => {
+const getCandidateFilterOptions = async ({ scope = 'active', jobId = null, workspaceId = null } = {}) => {
   /*
    * Facets must describe the same population the list is drawing from.
    *
@@ -195,7 +202,7 @@ const getCandidateFilterOptions = async ({ scope = 'active', jobId = null } = {}
    * endpoint usable for a closed job's historical facets.
    */
   const rows = await prisma.candidate.findMany({
-    where: { AND: [jobId ? { jobId } : {}, buildScopeWhere(scope, jobId)] },
+    where: { AND: [throughJobScope(workspaceId), jobId ? { jobId } : {}, buildScopeWhere(scope, jobId)] },
     select: { skills: true, currentLocation: true, qualification: true },
     take: 5000
   });

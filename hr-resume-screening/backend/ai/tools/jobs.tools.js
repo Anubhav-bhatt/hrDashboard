@@ -48,7 +48,8 @@ const getJobs = {
     };
   },
 
-  execute: async ({ status, search, limit }) => {
+  execute: async ({ status, search, limit }, { context } = {}) => {
+    const workspaceId = (context && context.workspaceId) || null;
     /*
      * Open roles unless the agent asks otherwise.
      *
@@ -65,7 +66,8 @@ const getJobs = {
       status: lifecycle,
       search: search || '',
       limit,
-      page: 1
+      page: 1,
+      workspaceId
     });
 
     return {
@@ -93,8 +95,9 @@ const getJob = {
     return { jobId: requireId(raw.jobId, 'jobId') };
   },
 
-  execute: async ({ jobId }) => {
-    const job = await getJobDetails(jobId, { backfillRequirements: false, includeJdText: true });
+  execute: async ({ jobId }, { context } = {}) => {
+    const workspaceId = (context && context.workspaceId) || null;
+    const job = await getJobDetails(jobId, { backfillRequirements: false, includeJdText: true, workspaceId });
     if (!job) throw resourceNotFound('Job');
 
     return {
@@ -118,8 +121,9 @@ const getJobRequirements = {
     return { jobId: requireId(raw.jobId, 'jobId') };
   },
 
-  execute: async ({ jobId }) => {
-    const job = await getJobDetails(jobId, { backfillRequirements: false, includeJdText: true });
+  execute: async ({ jobId }, { context } = {}) => {
+    const workspaceId = (context && context.workspaceId) || null;
+    const job = await getJobDetails(jobId, { backfillRequirements: false, includeJdText: true, workspaceId });
     if (!job) throw resourceNotFound('Job');
 
     const summary = toAIJobSummary(job);
