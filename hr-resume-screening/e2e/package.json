@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "test": "node scenarios.mjs",
+    "test:auth": "node auth-session.mjs",
     "test:dashboard": "node dashboard.mjs",
     "test:a11y": "node accessibility.mjs",
     "test:theme": "node theme-and-shell.mjs",

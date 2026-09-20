@@ -18,7 +18,16 @@ if (process.env.TRUST_PROXY === 'true') {
 }
 
 // Security Middlewares
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+        ...(process.env.NODE_ENV === 'production' ? {} : { 'upgrade-insecure-requests': null })
+      }
+    }
+  })
+);
 
 // CORS Configuration — the allow list is explicit. Arbitrary origins are never
 // reflected back, because the session cookie is sent with credentials.

@@ -1,11 +1,20 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const resolveApiBaseUrl = () => {
+  // If explicitly specified in environment (e.g. custom test setup), use it
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+  // Default to relative /api:
+  // - In production: routed by Vercel rewrite to Render backend
+  // - In development: routed by Vite proxy to localhost:5001 backend
+  return '/api';
+};
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: { 'Content-Type': 'application/json' },
-  // The session lives in an httpOnly cookie, so every request must send credentials.
+  // The session lives in httpOnly cookies, so every request must send credentials.
   withCredentials: true
 });
 
@@ -50,24 +59,84 @@ export const toApiError = (error) => {
   };
 };
 
+/* ---------------------------------------------------- refresh coordinator --- */
+let isRefreshing = false;
+let failedQueue = [];
+
+const processQueue = (error, data = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(data);
+    }
+  });
+  failedQueue = [];
+};
+
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const originalRequest = error?.config;
     const status = error?.response?.status;
-    const url = error?.config?.url || '';
+    const url = originalRequest?.url || '';
 
-    // A 401 anywhere other than the auth probe itself means the session ended.
-    if (status === 401 && !url.includes('/auth/login') && !url.includes('/auth/me')) {
+    // Only attempt recovery on 401 with an existing request configuration
+    if (status !== 401 || !originalRequest) {
+      return Promise.reject(error);
+    }
+
+    // Do NOT attempt refresh on login or logout
+    if (url.includes('/auth/login') || url.includes('/auth/logout')) {
+      return Promise.reject(error);
+    }
+
+    // If the refresh request itself failed or was rejected
+    if (url.includes('/auth/refresh')) {
+      processQueue(error, null);
+      isRefreshing = false;
       unauthorizedHandlers.forEach((handler) => {
         try {
           handler(toApiError(error));
         } catch {
-          /* a broken subscriber must not swallow the original error */
+          /* subscriber error must not swallow the rejection */
         }
       });
+      return Promise.reject(error);
     }
 
-    return Promise.reject(error);
+    // Avoid retry loops: if request was already retried once, do not loop
+    if (originalRequest._retry) {
+      return Promise.reject(error);
+    }
+
+    // If another refresh is already in flight, queue this request until it resolves
+    if (isRefreshing) {
+      return new Promise((resolve, reject) => {
+        failedQueue.push({ resolve, reject });
+      })
+        .then(() => api(originalRequest))
+        .catch((err) => Promise.reject(err));
+    }
+
+    originalRequest._retry = true;
+    isRefreshing = true;
+
+    try {
+      const refreshResult = await refreshSession();
+      processQueue(null, refreshResult);
+      return api(originalRequest);
+    } catch (refreshErr) {
+      processQueue(refreshErr, null);
+      unauthorizedHandlers.forEach((handler) => {
+        try {
+          handler(toApiError(refreshErr));
+        } catch {}
+      });
+      return Promise.reject(refreshErr);
+    } finally {
+      isRefreshing = false;
+    }
   }
 );
 
@@ -75,6 +144,11 @@ api.interceptors.response.use(
 
 export const login = async (email, password) => {
   const response = await api.post('/auth/login', { email, password });
+  return response.data;
+};
+
+export const refreshSession = async () => {
+  const response = await api.post('/auth/refresh');
   return response.data;
 };
 

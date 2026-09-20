@@ -1,7 +1,7 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 const router = express.Router();
-const { login, me, logout } = require('../controllers/authController');
+const { login, refresh, me, logout } = require('../controllers/authController');
 const { requireAuth } = require('../middleware/auth');
 
 // Throttle credential submissions to blunt password guessing.
@@ -18,6 +18,7 @@ const loginLimiter = rateLimit({
 });
 
 router.post('/login', loginLimiter, login);
+router.post('/refresh', refresh);
 router.get('/me', requireAuth, me);
 router.post('/logout', logout);
 

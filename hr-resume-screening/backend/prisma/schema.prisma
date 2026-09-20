@@ -23,6 +23,7 @@ model User {
   activities       CandidateActivity[]
   closedJobs       Job[]               @relation("JobClosedBy")
   selectedHires    Candidate[]         @relation("CandidateSelectedBy")
+  sessions         AuthSession[]
 }
 
 /// Persisted recruitment lifecycle of a vacancy. Deliberately minimal: a job is
@@ -236,4 +237,24 @@ model ImportSession {
   emailsFound  Int      @default(0)
   resumesFound Int      @default(0)
   createdAt    DateTime @default(now())
+}
+
+/// Server-side session tracking for refresh tokens.
+/// Allows rotation, revocation, and reuse detection.
+model AuthSession {
+  id               String       @id @default(uuid())
+  userId           String
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash        String       @unique
+  family           String
+  createdAt        DateTime     @default(now())
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  lastUsedAt       DateTime?
+  userAgent        String?
+  ipAddress        String?
+
+  @@index([userId])
+  @@index([family])
+  @@index([expiresAt])
 }

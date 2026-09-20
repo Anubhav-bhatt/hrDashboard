@@ -2,10 +2,15 @@ const prisma = require('../config/prisma');
 const {
   verifyPassword,
   spendVerificationCost,
-  issueToken,
-  setSessionCookie,
-  clearSessionCookie,
+  issueAccessToken,
+  createSession,
+  rotateSession,
+  revokeSession,
+  setAuthCookies,
+  clearAuthCookies,
+  readRefreshToken,
   toPublicUser,
+  getAccessTokenTtlMinutes,
   getSessionTtlHours
 } = require('../services/authService');
 
@@ -18,7 +23,7 @@ const maskEmail = (email = '') => {
 };
 
 /**
- * @desc    Sign in a recruiter and start a session
+ * @desc    Sign in a recruiter and issue access + rotating refresh session
  * @route   POST /api/auth/login
  * @access  Public
  */
@@ -38,8 +43,6 @@ const login = async (req, res, next) => {
       where: { email: email.trim().toLowerCase() }
     });
 
-    // Identical response for unknown email and wrong password so the endpoint
-    // cannot be used to enumerate valid recruiter accounts.
     const invalid = () =>
       res.status(401).json({
         success: false,
@@ -48,8 +51,6 @@ const login = async (req, res, next) => {
       });
 
     if (!user || !user.isActive) {
-      // Spend the same verification cost as a real attempt so response timing
-      // does not reveal whether the account exists.
       await spendVerificationCost();
       console.warn(`[Auth] Failed sign-in attempt for ${maskEmail(email)}`);
       return invalid();
@@ -66,14 +67,67 @@ const login = async (req, res, next) => {
       data: { lastLoginAt: new Date() }
     });
 
-    setSessionCookie(res, issueToken(updated));
+    const accessToken = issueAccessToken(updated);
+    const { rawRefreshToken } = await createSession(updated.id, {
+      userAgent: req.headers['user-agent'],
+      ipAddress: req.ip
+    });
+
+    setAuthCookies(res, accessToken, rawRefreshToken);
     console.log(`[Auth] Sign-in succeeded for user ${updated.id}`);
 
     return res.status(200).json({
       success: true,
-      data: { user: toPublicUser(updated), expiresInHours: getSessionTtlHours() }
+      data: {
+        user: toPublicUser(updated),
+        expiresInMinutes: getAccessTokenTtlMinutes(),
+        expiresInHours: getSessionTtlHours() // Legacy compatibility
+      }
     });
   } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Rotate refresh token and issue new access token
+ * @route   POST /api/auth/refresh
+ * @access  Public (credentials via HttpOnly cookie)
+ */
+const refresh = async (req, res, next) => {
+  try {
+    const rawRefreshToken = readRefreshToken(req);
+    if (!rawRefreshToken) {
+      return res.status(401).json({
+        success: false,
+        code: 'REFRESH_REQUIRED',
+        message: 'No refresh token provided. Please sign in again.'
+      });
+    }
+
+    const { user, accessToken, newRawRefreshToken } = await rotateSession(rawRefreshToken, {
+      userAgent: req.headers['user-agent'],
+      ipAddress: req.ip
+    });
+
+    setAuthCookies(res, accessToken, newRawRefreshToken);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        user: toPublicUser(user),
+        expiresInMinutes: getAccessTokenTtlMinutes()
+      }
+    });
+  } catch (error) {
+    clearAuthCookies(res);
+    if (error.status && error.code) {
+      return res.status(error.status).json({
+        success: false,
+        code: error.code,
+        message: error.message
+      });
+    }
     next(error);
   }
 };
@@ -87,13 +141,22 @@ const me = async (req, res) =>
   res.status(200).json({ success: true, data: { user: req.user } });
 
 /**
- * @desc    End the current session
+ * @desc    End the current session, revoking refresh token and clearing cookies
  * @route   POST /api/auth/logout
  * @access  Public (idempotent)
  */
 const logout = async (req, res) => {
-  clearSessionCookie(res);
+  try {
+    const rawRefreshToken = readRefreshToken(req);
+    if (rawRefreshToken) {
+      await revokeSession(rawRefreshToken);
+    }
+  } catch (err) {
+    console.warn('[Auth] Error revoking session during logout:', err.message);
+  } finally {
+    clearAuthCookies(res);
+  }
   return res.status(200).json({ success: true, message: 'Signed out successfully.' });
 };
 
-module.exports = { login, me, logout };
+module.exports = { login, refresh, me, logout };
