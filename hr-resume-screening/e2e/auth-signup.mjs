@@ -155,8 +155,22 @@ try {
   group('An address that already has an account');
 
   await fillSignup({ name: NEW_NAME, email: EXISTING_EMAIL, password: NEW_PASSWORD });
-  await page.click('button[type=submit]');
-  await page.waitForTimeout(1500);
+
+  // Wait for the answer, not for a clock. A fixed delay raced the 409 whenever
+  // the backend was busy — three engines plus a bcrypt hash on the same box —
+  // and produced a failure that said "the link is missing" when the truth was
+  // "the response had not arrived yet".
+  const [duplicateResponse] = await Promise.all([
+    page.waitForResponse(
+      (r) => r.url().includes('/auth/signup') && r.request().method() === 'POST',
+      { timeout: 30000 }
+    ),
+    page.click('button[type=submit]')
+  ]);
+  check(duplicateResponse.status() === 409, 'the server refuses the duplicate', `status ${duplicateResponse.status()}`);
+
+  // Then wait for the render that response causes, rather than assuming it.
+  await page.getByRole('link', { name: /sign in instead/i }).waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
 
   check(onSignupScreen(), 'stays on the form');
   const dupText = await bodyText();
