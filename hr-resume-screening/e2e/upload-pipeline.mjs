@@ -41,9 +41,23 @@ const check = (condition, message, detail = '') => {
 };
 
 try {
+  // The mailbox is workspace-owned since the tenancy change, and the import
+  // routes scope by req.workspaceId. A connection with no workspace is both
+  // rejected by the schema and invisible to the routes under test, so the
+  // fixture attaches it to the signed-in recruiter's own workspace.
+  const fixtureUser = await prisma.user.findUnique({ where: { email: EMAIL } });
+  const fixtureMembership = await prisma.workspaceMember.findFirst({
+    where: { userId: fixtureUser?.id }
+  });
+  if (!fixtureMembership) {
+    console.error(`No workspace found for ${EMAIL}; cannot seed the mailbox fixture.`);
+    process.exit(1);
+  }
+
   await prisma.outlookConnection.deleteMany({});
   await prisma.outlookConnection.create({
     data: {
+      workspaceId: fixtureMembership.workspaceId,
       microsoftUserId: 'upload-pipeline-e2e-mock',
       email: 'upload-pipeline@example.invalid',
       displayName: 'Upload Pipeline Fixture',

@@ -77,6 +77,7 @@ const setup = async () => {
     }
   });
   userId = user.id;
+  testWorkspaceId = await ensureTestWorkspace(user.id, { name: 'Upload Pipeline Tester' });
 
   const login = await request('/auth/login', {
     method: 'POST',
@@ -104,6 +105,7 @@ const setup = async () => {
 
 const teardown = async () => {
   if (jobId) await prisma.job.delete({ where: { id: jobId } }).catch(() => {});
+  if (userId) await cleanupTestWorkspaces([userId]).catch(() => {});
   if (userId) await prisma.user.delete({ where: { id: userId } }).catch(() => {});
   if (server) await new Promise((resolve) => server.close(resolve));
   await prisma.$disconnect();
