@@ -31,6 +31,7 @@ import NotFound from './pages/NotFound';
  */
 const CandidateProfile = lazy(() => import('./pages/CandidateProfile'));
 const ImportCandidates = lazy(() => import('./pages/ImportCandidates'));
+const ResumeExtractor = lazy(() => import('./pages/ResumeExtractor'));
 
 /**
  * The AI section is code-split as a group.
@@ -130,6 +131,14 @@ function App() {
                 element={
                   <RequireAuth>
                     <CandidatesList />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/tools/resume-extractor"
+                element={
+                  <RequireAuth fallback={<RouteSkeleton variant="upload" label="Loading Resume Extractor..." />}>
+                    <ResumeExtractor />
                   </RequireAuth>
                 }
               />

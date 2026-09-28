@@ -27,7 +27,8 @@
     "test:regression": "node run-regression.mjs",
     "test:auth": "node auth-session.mjs",
     "test:auth:matrix": "node run-auth-matrix.mjs",
-    "test:signup": "node auth-signup.mjs"
+    "test:signup": "node auth-signup.mjs",
+    "test:extractor": "node test-resume-extractor.mjs"
   },
   "dependencies": {
     "playwright": "^1.62.1"

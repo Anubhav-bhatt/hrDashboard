@@ -13,7 +13,8 @@ import {
   Sparkles,
   Users,
   Bot,
-  Search
+  Search,
+  FolderDown
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useAiConfig } from '../context/AiConfigContext';
@@ -55,6 +56,7 @@ const WORKSPACE_NAV_ITEMS = [
 const HIRING_NAV_ITEMS = [
   { to: '/jobs', label: 'Jobs', icon: Briefcase, matchPrefix: '/jobs', excludePaths: ['/jobs/closed'] },
   { to: '/candidates', label: 'Candidates', icon: Users, matchPrefix: '/candidates' },
+  { to: '/tools/resume-extractor', label: 'Resume Extractor', icon: FolderDown, matchPrefix: '/tools/resume-extractor' },
   { to: '/jobs/closed', label: 'Closed Jobs', icon: Archive, end: true }
 ];
 
@@ -102,6 +104,7 @@ const MINIMAL_MAIN_NAV = [
 const MINIMAL_HIRING_NAV = [
   { to: '/jobs', label: 'Active Jobs', icon: Briefcase, matchPrefix: '/jobs', excludePaths: ['/jobs/closed'] },
   { to: '/candidates', label: 'Candidates', icon: Users, matchPrefix: '/candidates' },
+  { to: '/tools/resume-extractor', label: 'Resume Extractor', icon: FolderDown, matchPrefix: '/tools/resume-extractor' },
   { to: '/jobs/closed', label: 'Closed Jobs', icon: Archive, end: true }
 ];
 
@@ -475,6 +478,7 @@ const AppShell = ({ children }) => {
     if (path === '/jobs') return [{ label: 'Jobs', to: '/jobs' }];
     if (path.startsWith('/candidates/')) return [{ label: 'Candidates', to: '/candidates' }, { label: 'Profile' }];
     if (path === '/candidates') return [{ label: 'Candidates', to: '/candidates' }];
+    if (path.startsWith('/tools/resume-extractor')) return [{ label: 'Candidates', to: '/candidates' }, { label: 'Resume Extractor' }];
     if (/^\/jobs\/[^/]+\/import$/.test(path)) {
       return [{ label: 'Jobs', to: '/jobs' }, { label: 'Add candidates' }];
     }

@@ -15,7 +15,8 @@ import {
   Plus,
   ArrowRight,
   Command,
-  X
+  X,
+  FolderDown
 } from 'lucide-react';
 import { getJobsSummary } from '../services/api';
 import { buildAgentPath, SOURCE_WORKFLOWS, useRecruitmentContext } from '../context/RecruitmentContext';
@@ -37,6 +38,14 @@ const STATIC_ACTIONS = [
   // id of "create" — a job lookup that could only 404.
   { id: 'nav-create-job', label: 'Create New Job', category: 'Jobs', icon: Plus, path: '/jobs/new' },
   { id: 'nav-candidates', label: 'Candidates Directory', category: 'Navigation', icon: Users, path: '/candidates' },
+  {
+    id: 'nav-resume-extractor',
+    label: 'Resume Extractor',
+    subtitle: 'Extract resume attachments from bulk Outlook emails locally',
+    category: 'Actions',
+    icon: FolderDown,
+    path: '/tools/resume-extractor'
+  },
   // Importing is always into a specific job — there is no job-less import screen,
   // which is why the old bare `/import` fell through to Not Found. Instead of a
   // dead path, this asks which job and then goes straight there.

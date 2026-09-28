@@ -31,6 +31,15 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    resolve: {
+      alias: {
+        buffer: 'buffer',
+        stream: 'stream-browserify'
+      }
+    },
+    define: {
+      global: 'globalThis'
+    },
     server: {
       port: 5173,
       host: true,
