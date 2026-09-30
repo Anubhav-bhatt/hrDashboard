@@ -95,6 +95,86 @@ const createJob = async (req, res, next) => {
 };
 
 /**
+ * @desc    Parse JD file or text and return extracted requirements without creating the job
+ * @route   POST /api/jobs/parse-jd
+ * @access  Private
+ */
+const parseJobDescription = async (req, res, next) => {
+  try {
+    const file = req.file;
+    const bodyText = req.body?.text;
+
+    if (!file && (!bodyText || typeof bodyText !== 'string' || !bodyText.trim())) {
+      return res.status(400).json({
+        success: false,
+        message: 'A job description file or text is required.'
+      });
+    }
+
+    let extractedText = '';
+    let fileName = '';
+
+    if (file) {
+      fileName = file.originalname;
+      extractedText = await extractJDText(file);
+    } else {
+      fileName = 'pasted-job-description.txt';
+      const { normalizeText } = require('../services/jdParser');
+      extractedText = normalizeText(bodyText);
+    }
+
+    if (!extractedText || !extractedText.trim()) {
+      return res.status(422).json({
+        success: false,
+        message: 'Job description text is empty or could not be extracted.'
+      });
+    }
+
+    // Attempt to infer job title
+    let suggestedTitle = '';
+    if (fileName && fileName !== 'pasted-job-description.txt') {
+      suggestedTitle = fileName
+        .replace(/\.(pdf|docx|txt)$/i, '')
+        .replace(/[-_]/g, ' ')
+        .replace(/\b(jd|job\s*description|job\s*desc)\b/gi, '')
+        .trim();
+    }
+    const titleMatch = extractedText.match(/(?:job\s*title|position|role|title)\s*[:\-]\s*([^\n\r]+)/i);
+    if (titleMatch && titleMatch[1] && titleMatch[1].trim().length < 80) {
+      const candidateTitle = titleMatch[1].trim().replace(/^["']|["']$/g, '');
+      if (candidateTitle.length > 2) suggestedTitle = candidateTitle;
+    }
+
+    const reqs = extractJDRequirements(extractedText, suggestedTitle);
+
+    const knownLocations = ['Gurugram', 'Noida', 'Delhi', 'Bengaluru', 'Hyderabad', 'Pune', 'Mumbai', 'Chennai', 'Remote'];
+    const detectedLocations = knownLocations.filter((loc) =>
+      new RegExp(`\\b${loc}\\b`, 'i').test(extractedText)
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        extractedText,
+        fileName,
+        suggestedTitle: suggestedTitle || '',
+        requiredSkills: reqs.requiredSkills || [],
+        preferredSkills: reqs.preferredSkills || [],
+        minimumExperience: reqs.minimumExperience || 0,
+        preferredEducation: reqs.preferredEducation || [],
+        preferredLocations: detectedLocations,
+        roleKeywords: reqs.roleKeywords || []
+      }
+    });
+  } catch (error) {
+    return res.status(422).json({
+      success: false,
+      message: error.message || 'Could not parse job description.'
+    });
+  }
+};
+
+/**
  * @desc    Get all recruitment jobs with aggregated candidate statistics
  * @route   GET /api/jobs
  * @access  Private
@@ -575,6 +655,7 @@ const getJobDeletionPreview = async (req, res, next) => {
 
 module.exports = {
   createJob,
+  parseJobDescription,
   getAllJobs,
   getJobsSummary,
   getJobById,

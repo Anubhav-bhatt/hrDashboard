@@ -439,6 +439,17 @@ export const createJob = async (formData) => {
   return response.data;
 };
 
+export const parseJobDescription = async (payload) => {
+  if (payload instanceof FormData) {
+    const response = await api.post('/jobs/parse-jd', payload, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return response.data;
+  }
+  const response = await api.post('/jobs/parse-jd', payload);
+  return response.data;
+};
+
 /* ---------------------------------------------------------------- closure -- */
 
 /** Shortlisted candidates eligible to be chosen as the hire. */

@@ -1,262 +1,272 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus } from 'lucide-react';
-import { SkillChip, cx } from './index';
+import { Plus, X } from 'lucide-react';
+import { cx } from './index';
 
 /**
- * Token list with an inline add-popover.
+ * Flexible Inline Token / Tag Input.
  *
- * Used for skills, keywords, locations and qualifications so all four behave
- * identically. A popover rather than a modal: adding one short value should not
- * take over the screen.
- *
- * Keyboard contract:
- *   Enter        add the typed value, or the highlighted suggestion
- *   ArrowDown/Up move through suggestions
- *   Escape       close and return focus to the Add button
- *   Tab          leaves the popover, which closes it
- *
- * Free text is always allowed — suggestions are a shortcut, not a whitelist.
- * Duplicates are rejected case-insensitively with visible feedback.
+ * Designed for effortless skills, keywords, locations and qualifications entry:
+ *   - Type value and press Enter
+ *   - Type comma (,) to immediately create tag
+ *   - Paste comma- or newline-separated text (e.g. "React, JavaScript, TypeScript") to create multiple tags
+ *   - Lightweight autocomplete suggestions dropdown
+ *   - Backspace on empty field removes previous tag
+ *   - No separate "None added yet" message (clean placeholder-driven empty state)
+ *   - Compact, neutral tag design
  *
  * @param {Object} props
- * @param {string} props.id Unique id, used to associate the input and listbox
- * @param {string} props.label
- * @param {string} [props.description]
- * @param {string[]} props.values
- * @param {Function} props.onChange Receives the next array
- * @param {string[]} [props.suggestions]
- * @param {string} [props.placeholder]
- * @param {string} [props.addLabel]
+ * @param {string} props.id Unique id, used to associate input and listbox
+ * @param {string} [props.label] Field label
+ * @param {string} [props.badge] Optional badge (e.g. "Optional")
+ * @param {string} [props.description] Help / supporting text
+ * @param {string[]} props.values Array of tag strings
+ * @param {Function} props.onChange Callback receiving updated array
+ * @param {string[]} [props.suggestions] Autocomplete suggestions list
+ * @param {string} [props.placeholder] Input placeholder when empty
  * @param {'default'|'keyword'} [props.tone]
- * @param {boolean} [props.matchedHighlight] Render chips in the matched style
- * @param {boolean} [props.disabled]
+ * @param {boolean} [props.disabled] Disabled state
+ * @param {string} [props.className] Additional class names
  */
 const TokenInput = ({
   id,
   label,
+  badge,
   description,
   values = [],
   onChange,
   suggestions = [],
-  placeholder = 'Type a value…',
-  addLabel = 'Add',
-  tone = 'default',
+  placeholder = 'Add a value...',
   disabled = false,
   className
 }) => {
-  const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState('');
-  const [error, setError] = useState('');
   const [highlighted, setHighlighted] = useState(-1);
+  const [isFocused, setIsFocused] = useState(false);
 
   const containerRef = useRef(null);
   const inputRef = useRef(null);
-  const addButtonRef = useRef(null);
 
-  // Suggestions not already chosen, filtered by what has been typed.
+  // Suggestions not already chosen, filtered by typed draft
   const filtered = useMemo(() => {
-    const chosen = new Set(values.map((v) => v.toLowerCase()));
+    const chosen = new Set(values.map((v) => v.toLowerCase().trim()));
     const query = draft.trim().toLowerCase();
+    if (!query) return [];
     return suggestions
       .filter((s) => !chosen.has(s.toLowerCase()))
-      .filter((s) => (query ? s.toLowerCase().includes(query) : true))
+      .filter((s) => s.toLowerCase().includes(query))
       .slice(0, 6);
   }, [suggestions, values, draft]);
 
+  // Close suggestions if clicked outside
   useEffect(() => {
-    if (open) inputRef.current?.focus();
-  }, [open]);
-
-  // Close when focus or a click leaves the control.
-  useEffect(() => {
-    if (!open) return undefined;
-
-    const onPointerDown = (event) => {
-      if (containerRef.current && !containerRef.current.contains(event.target)) close();
+    const onMouseDown = (event) => {
+      if (containerRef.current && !containerRef.current.contains(event.target)) {
+        setIsFocused(false);
+        setHighlighted(-1);
+      }
     };
-    document.addEventListener('mousedown', onPointerDown);
-    return () => document.removeEventListener('mousedown', onPointerDown);
-  });
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, []);
 
-  const close = ({ returnFocus = false } = {}) => {
-    setOpen(false);
+  const addValues = (rawItems) => {
+    const existingSet = new Set(values.map((v) => v.toLowerCase().trim()));
+    const newToAdd = [];
+
+    for (const raw of rawItems) {
+      const val = String(raw || '').trim();
+      if (!val) continue;
+      const lower = val.toLowerCase();
+      if (!existingSet.has(lower)) {
+        existingSet.add(lower);
+        newToAdd.push(val);
+      }
+    }
+
+    if (newToAdd.length > 0) {
+      onChange([...values, ...newToAdd]);
+    }
     setDraft('');
-    setError('');
     setHighlighted(-1);
-    if (returnFocus) addButtonRef.current?.focus();
   };
 
-  const add = (raw) => {
-    const value = String(raw ?? draft).trim();
-    if (!value) {
-      setError('Enter a value first.');
-      return;
-    }
-
-    // Case-insensitive duplicate check, so React / react / REACT cannot all be
-    // added separately.
-    const existing = values.find((v) => v.toLowerCase() === value.toLowerCase());
-    if (existing) {
-      setError(`${existing} is already included.`);
-      return;
-    }
-
-    onChange([...values, value]);
-    setDraft('');
-    setError('');
-    setHighlighted(-1);
-    // Stay open so several values can be added in a row.
-    inputRef.current?.focus();
+  const remove = (index) => {
+    onChange(values.filter((_, i) => i !== index));
   };
 
-  const remove = (index) => onChange(values.filter((_, i) => i !== index));
+  const handleInputChange = (e) => {
+    const val = e.target.value;
+    // Comma trigger: commit text before comma
+    if (val.includes(',')) {
+      const parts = val.split(',').map((s) => s.trim()).filter(Boolean);
+      if (parts.length > 0) {
+        addValues(parts);
+      } else {
+        setDraft('');
+      }
+      return;
+    }
+    setDraft(val);
+    setHighlighted(-1);
+  };
 
-  const onKeyDown = (event) => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      add(highlighted >= 0 && filtered[highlighted] ? filtered[highlighted] : draft);
+  const handlePaste = (e) => {
+    const pasted = e.clipboardData?.getData('text');
+    if (pasted && (pasted.includes(',') || pasted.includes('\n'))) {
+      e.preventDefault();
+      const parts = pasted.split(/[,\n]+/).map((s) => s.trim()).filter(Boolean);
+      if (parts.length > 0) {
+        addValues(parts);
+      }
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (highlighted >= 0 && filtered[highlighted]) {
+        addValues([filtered[highlighted]]);
+      } else if (draft.trim()) {
+        addValues([draft.trim()]);
+      }
       return;
     }
 
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      event.stopPropagation();
-      close({ returnFocus: true });
+    if (e.key === 'Backspace' && !draft && values.length > 0) {
+      remove(values.length - 1);
       return;
     }
 
-    if (event.key === 'ArrowDown') {
-      event.preventDefault();
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
       setHighlighted((i) => (filtered.length ? (i + 1) % filtered.length : -1));
       return;
     }
 
-    if (event.key === 'ArrowUp') {
-      event.preventDefault();
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
       setHighlighted((i) => (filtered.length ? (i - 1 + filtered.length) % filtered.length : -1));
       return;
     }
 
-    // Backspace on an empty field removes the last token, as token inputs do.
-    if (event.key === 'Backspace' && !draft && values.length) {
-      remove(values.length - 1);
+    if (e.key === 'Escape') {
+      setHighlighted(-1);
+      setIsFocused(false);
+      inputRef.current?.blur();
     }
   };
 
   return (
-    <div className={className} ref={containerRef}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-meta font-semibold text-slate-900">
+    <div className={cx('space-y-1.5', className)} ref={containerRef}>
+      {label && (
+        <div className="flex items-center justify-between gap-2">
+          <label htmlFor={`${id}-input`} className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
             {label}
-            {values.length > 0 && <span className="text-slate-400 font-normal"> ({values.length})</span>}
-          </p>
-          {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
+            {badge && (
+              <span className="text-[11px] font-normal text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                {badge}
+              </span>
+            )}
+          </label>
+          {values.length > 0 && (
+            <span className="text-[11px] text-slate-400 font-normal">
+              {values.length} {values.length === 1 ? 'skill' : 'skills'}
+            </span>
+          )}
         </div>
-      </div>
+      )}
 
-      <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
-        {values.map((value, index) => (
-          <SkillChip
-            key={`${value}-${index}`}
-            keyword={tone === 'keyword'}
-            onRemove={disabled ? undefined : () => remove(index)}
+      {description && <p className="text-xs text-slate-500">{description}</p>}
+
+      {/* Unified Tag Input Box */}
+      <div
+        onClick={() => inputRef.current?.focus()}
+        className={cx(
+          'min-h-[40px] w-full rounded-lg border bg-white px-2.5 py-1.5 flex flex-wrap items-center gap-1.5 transition-colors cursor-text',
+          isFocused ? 'border-brand-500 ring-2 ring-brand-100' : 'border-slate-200 hover:border-slate-300',
+          disabled && 'opacity-60 cursor-not-allowed bg-slate-50'
+        )}
+      >
+        {/* Render compact tags */}
+        {values.map((val, idx) => (
+          <span
+            key={`${val}-${idx}`}
+            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-medium bg-slate-100 text-slate-800 border border-slate-200/80 select-none animate-scale-in"
           >
-            {value}
-          </SkillChip>
+            <span>{val}</span>
+            {!disabled && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  remove(idx);
+                }}
+                className="text-slate-400 hover:text-slate-700 hover:bg-slate-200/80 rounded p-0.5 transition-colors ml-0.5"
+                aria-label={`Remove ${val}`}
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </span>
         ))}
 
-        <div className="relative">
-          <button
-            ref={addButtonRef}
-            type="button"
-            onClick={() => (open ? close({ returnFocus: true }) : setOpen(true))}
+        {/* Integrated inline input */}
+        <div className="relative flex-1 min-w-[130px]">
+          <input
+            ref={inputRef}
+            id={`${id}-input`}
+            type="text"
             disabled={disabled}
-            aria-expanded={open}
-            aria-haspopup="dialog"
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-pill border border-dashed border-slate-300
-                       text-xs font-semibold text-slate-500 hover:text-brand-700 hover:border-brand-300
-                       hover:bg-brand-50 transition-colors duration-fast disabled:opacity-50"
-          >
-            <Plus className="w-3 h-3" aria-hidden="true" />
-            {addLabel}
-          </button>
+            value={draft}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => {
+              // Auto-commit draft on blur if text is present
+              if (draft.trim()) {
+                addValues([draft.trim()]);
+              }
+            }}
+            placeholder={values.length === 0 ? placeholder : 'Add another...'}
+            className="w-full bg-transparent text-xs text-slate-800 placeholder-slate-400 focus:outline-none h-6"
+            autoComplete="off"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={isFocused && filtered.length > 0}
+            aria-controls={`${id}-listbox`}
+          />
 
-          {open && (
-            <div
-              role="dialog"
-              aria-label={`Add ${label.toLowerCase()}`}
-              className="absolute left-0 top-full mt-2 z-40 w-64 card p-3 animate-scale-in"
-              style={{ boxShadow: 'var(--shadow-overlay)' }}
+          {/* Autocomplete Suggestions Menu */}
+          {isFocused && filtered.length > 0 && (
+            <ul
+              id={`${id}-listbox`}
+              role="listbox"
+              className="absolute left-0 top-full mt-1.5 z-50 min-w-[190px] max-w-[260px] max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-lg scroll-slim animate-scale-in"
             >
-              <label htmlFor={`${id}-input`} className="field-label">
-                {addLabel}
-              </label>
-
-              <input
-                ref={inputRef}
-                id={`${id}-input`}
-                type="text"
-                className={cx('input h-9', error && 'input-error')}
-                placeholder={placeholder}
-                value={draft}
-                onChange={(e) => {
-                  setDraft(e.target.value);
-                  setError('');
-                  setHighlighted(-1);
-                }}
-                onKeyDown={onKeyDown}
-                role="combobox"
-                aria-expanded={filtered.length > 0}
-                aria-controls={`${id}-listbox`}
-                aria-activedescendant={highlighted >= 0 ? `${id}-option-${highlighted}` : undefined}
-                aria-autocomplete="list"
-              />
-
-              {error && (
-                <p className="text-xs text-rose-600 mt-1.5 font-medium" role="alert">
-                  {error}
-                </p>
-              )}
-
-              {filtered.length > 0 && (
-                <>
-                  <p className="text-label uppercase text-slate-400 mt-3 mb-1">Suggestions</p>
-                  <ul id={`${id}-listbox`} role="listbox" className="max-h-40 overflow-y-auto scroll-slim -mx-1">
-                    {filtered.map((suggestion, index) => (
-                      <li key={suggestion} role="none">
-                        <button
-                          type="button"
-                          id={`${id}-option-${index}`}
-                          role="option"
-                          aria-selected={index === highlighted}
-                          onClick={() => add(suggestion)}
-                          onMouseEnter={() => setHighlighted(index)}
-                          className={cx(
-                            'w-full text-left px-2 py-1.5 rounded text-meta transition-colors duration-fast',
-                            index === highlighted
-                              ? 'bg-brand-50 text-brand-800'
-                              : 'text-slate-700 hover:bg-slate-100'
-                          )}
-                        >
-                          {suggestion}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
-
-              <p className="text-[11px] text-slate-400 mt-3 pt-2 border-t border-slate-100">
-                <kbd className="font-sans font-semibold text-slate-500">Enter</kbd> to add ·{' '}
-                <kbd className="font-sans font-semibold text-slate-500">Esc</kbd> to close
-              </p>
-            </div>
+              {filtered.map((suggestion, index) => (
+                <li
+                  key={suggestion}
+                  role="option"
+                  aria-selected={index === highlighted}
+                  onMouseDown={(e) => {
+                    e.preventDefault(); // prevent input blur before committing
+                    addValues([suggestion]);
+                  }}
+                  onMouseEnter={() => setHighlighted(index)}
+                  className={cx(
+                    'cursor-pointer px-2.5 py-1.5 text-xs rounded-md transition-colors flex items-center justify-between',
+                    index === highlighted ? 'bg-brand-50 text-brand-800 font-medium' : 'text-slate-700 hover:bg-slate-50'
+                  )}
+                >
+                  <span>{suggestion}</span>
+                  <Plus className="w-3 h-3 text-slate-400" />
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       </div>
-
-      {values.length === 0 && !open && <p className="text-xs text-slate-400 italic mt-1.5">None added yet.</p>}
     </div>
   );
 };

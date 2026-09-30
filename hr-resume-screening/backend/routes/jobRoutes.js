@@ -16,6 +16,7 @@ router.param('id', (req, res, next) => requireJobInWorkspace(req, res, next));
 const upload = require('../middleware/upload');
 const {
   createJob,
+  parseJobDescription,
   getAllJobs,
   getJobsSummary,
   getJobById,
@@ -28,6 +29,9 @@ const {
 } = require('../controllers/jobController');
 const { getJobSummary } = require('../controllers/analyticsController');
 const { requireRole } = require('../middleware/auth');
+
+// Route for parsing a job description before creation
+router.post('/parse-jd', upload.single('jdFile'), parseJobDescription);
 
 // Route for creating a job with multipart file upload
 router.post('/', upload.single('jdFile'), createJob);
