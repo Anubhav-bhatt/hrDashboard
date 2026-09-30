@@ -19,12 +19,14 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  notes         CandidateNote[]
-  activities    CandidateActivity[]
-  closedJobs    Job[]               @relation("JobClosedBy")
-  selectedHires Candidate[]         @relation("CandidateSelectedBy")
-  authSessions  AuthSession[]
-  memberships   WorkspaceMember[]
+  notes              CandidateNote[]
+  activities         CandidateActivity[]
+  closedJobs         Job[]               @relation("JobClosedBy")
+  createdJobs        Job[]               @relation("JobCreatedBy")
+  selectedHires      Candidate[]         @relation("CandidateSelectedBy")
+  authSessions       AuthSession[]
+  memberships        WorkspaceMember[]
+  platformActivities PlatformActivity[]
 }
 
 /// Persisted recruitment lifecycle of a vacancy. Deliberately minimal: a job is
@@ -77,6 +79,10 @@ model Job {
   /// email so the reference survives an address change.
   closedByUserId String?
   closedBy       User?     @relation("JobClosedBy", fields: [closedByUserId], references: [id], onDelete: SetNull)
+
+  /// Recruiter who created the job
+  createdByUserId String?
+  createdBy       User?   @relation("JobCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   candidates     Candidate[]     @relation("JobCandidates")
   importSessions ImportSession[]
@@ -330,4 +336,24 @@ model WorkspaceMember {
 
   @@unique([workspaceId, userId])
   @@index([userId])
+}
+
+/// Platform-wide audit trail for authentication, user management, and key recruitment actions.
+model PlatformActivity {
+  id          String   @id @default(uuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userName    String   @default("System")
+  userEmail   String?
+  action      String // LOGIN | LOGOUT | ACCOUNT_CREATED | PROFILE_UPDATED | PASSWORD_CHANGED | USER_STATUS_CHANGED | JOB_CREATED | JOB_UPDATED | JOB_CLOSED | CANDIDATE_IMPORTED | CANDIDATE_SHORTLISTED | CANDIDATE_NOT_SUITABLE | CANDIDATE_STATUS_CHANGED | SCREENING_RUN | RANKING_RUN | COMPARISON_RUN
+  entityType  String? // USER | JOB | CANDIDATE | WORKSPACE | SYSTEM
+  entityId    String?
+  entityName  String?
+  description String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+  @@index([createdAt])
 }

@@ -32,6 +32,9 @@ import NotFound from './pages/NotFound';
 const CandidateProfile = lazy(() => import('./pages/CandidateProfile'));
 const ImportCandidates = lazy(() => import('./pages/ImportCandidates'));
 const ResumeExtractor = lazy(() => import('./pages/ResumeExtractor'));
+const Profile = lazy(() => import('./pages/Profile'));
+const AdminUsers = lazy(() => import('./pages/AdminUsers'));
+const AdminActivities = lazy(() => import('./pages/AdminActivities'));
 
 /**
  * The AI section is code-split as a group.
@@ -70,6 +73,27 @@ const RequireAuth = ({ children, fallback }) => {
       {/* Lazily-loaded routes show their own shaped skeleton while the chunk
           arrives, so a code-split screen does not flash an empty page. */}
       <Suspense fallback={fallback || <Spinner label="Loading…" />}>{children}</Suspense>
+    </AppShell>
+  );
+};
+
+/**
+ * Gate for administrative tools (User Management, Platform Activity).
+ *
+ * Checks both authentication and the user's role on the server-authenticated session.
+ * Unauthorized access attempts redirect gracefully to /dashboard.
+ */
+const RequireAdmin = ({ children, fallback }) => {
+  const { isAuthenticated, isLoading, user } = useAuth();
+  const location = useLocation();
+
+  if (isLoading) return <Spinner label="Checking permissions…" className="min-h-screen" />;
+  if (!isAuthenticated) return <Navigate to="/login" state={{ from: location }} replace />;
+  if (user?.role !== 'ADMIN') return <Navigate to="/dashboard" replace />;
+
+  return (
+    <AppShell>
+      <Suspense fallback={fallback || <Spinner label="Loading administration…" />}>{children}</Suspense>
     </AppShell>
   );
 };
@@ -148,6 +172,30 @@ function App() {
                   <RequireAuth>
                     <Settings />
                   </RequireAuth>
+                }
+              />
+              <Route
+                path="/profile"
+                element={
+                  <RequireAuth fallback={<RouteSkeleton variant="upload" label="Loading profile..." />}>
+                    <Profile />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/admin/users"
+                element={
+                  <RequireAdmin fallback={<RouteSkeleton label="Loading users..." />}>
+                    <AdminUsers />
+                  </RequireAdmin>
+                }
+              />
+              <Route
+                path="/admin/activity"
+                element={
+                  <RequireAdmin fallback={<RouteSkeleton label="Loading activity..." />}>
+                    <AdminActivities />
+                  </RequireAdmin>
                 }
               />
               <Route

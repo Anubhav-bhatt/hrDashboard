@@ -14,7 +14,11 @@ import {
   Users,
   Bot,
   Search,
-  FolderDown
+  FolderDown,
+  User,
+  KeyRound,
+  ShieldCheck,
+  Activity
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useAiConfig } from '../context/AiConfigContext';
@@ -62,6 +66,11 @@ const HIRING_NAV_ITEMS = [
 
 const SYSTEM_NAV_ITEMS = [
   { to: '/settings', label: 'Settings', icon: Settings, matchPrefix: '/settings' }
+];
+
+const ADMIN_NAV_ITEMS = [
+  { to: '/admin/users', label: 'User Management', icon: ShieldCheck, matchPrefix: '/admin/users' },
+  { to: '/admin/activity', label: 'Activity Audit', icon: Activity, matchPrefix: '/admin/activity' }
 ];
 
 /*
@@ -489,6 +498,9 @@ const AppShell = ({ children }) => {
     if (path === '/ai/ranking') return [{ label: 'AI', to: '/ai' }, { label: getAgentTaskLabel('ranking') }];
     if (path === '/ai/comparison') return [{ label: 'AI', to: '/ai' }, { label: getAgentTaskLabel('comparison') }];
     if (path === '/ai/insights') return [{ label: 'AI', to: '/ai' }, { label: getAgentTaskLabel('insights') }];
+    if (path === '/profile') return [{ label: 'Account', to: '/profile' }, { label: 'My Profile' }];
+    if (path.startsWith('/admin/users')) return [{ label: 'Admin', to: '/admin/users' }, { label: 'User Management' }];
+    if (path.startsWith('/admin/activity')) return [{ label: 'Admin', to: '/admin/activity' }, { label: 'Activity Audit' }];
     if (path === '/settings') return [{ label: 'Settings', to: '/settings' }];
     return [{ label: 'Overview', to: '/' }];
   };
@@ -548,6 +560,15 @@ const AppShell = ({ children }) => {
               isCollapsed={isCollapsed}
               isActive={isSectionActive}
             />
+            {user?.role === 'ADMIN' && (
+              <NavGroup
+                title="ADMIN"
+                ariaLabel="Admin navigation"
+                items={ADMIN_NAV_ITEMS}
+                isCollapsed={isCollapsed}
+                isActive={isSectionActive}
+              />
+            )}
           </div>
 
           <RailFooter collapsed={collapsed} onToggle={toggleCollapsed} />
@@ -684,6 +705,16 @@ const AppShell = ({ children }) => {
             isCollapsed={isCollapsed}
             isActive={isSectionActive}
           />
+
+          {user?.role === 'ADMIN' && (
+            <NavGroup
+              title="ADMIN"
+              ariaLabel="Admin navigation"
+              items={ADMIN_NAV_ITEMS}
+              isCollapsed={isCollapsed}
+              isActive={isSectionActive}
+            />
+          )}
         </div>
 
         <RailFooter collapsed={collapsed} onToggle={toggleCollapsed} />
@@ -860,6 +891,26 @@ const AppShell = ({ children }) => {
                   </div>
 
                   <Link
+                    to="/profile"
+                    role="menuitem"
+                    className="flex items-center gap-2 px-3 py-2 text-slate-700 hover:bg-slate-50"
+                    onClick={() => setAccountOpen(false)}
+                  >
+                    <User className="w-3.5 h-3.5 text-slate-400" />
+                    <span>My Profile</span>
+                  </Link>
+
+                  <Link
+                    to="/profile#password"
+                    role="menuitem"
+                    className="flex items-center gap-2 px-3 py-2 text-slate-700 hover:bg-slate-50"
+                    onClick={() => setAccountOpen(false)}
+                  >
+                    <KeyRound className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Change Password</span>
+                  </Link>
+
+                  <Link
                     to="/settings"
                     role="menuitem"
                     className="flex items-center gap-2 px-3 py-2 text-slate-700 hover:bg-slate-50"
@@ -868,6 +919,30 @@ const AppShell = ({ children }) => {
                     <Settings className="w-3.5 h-3.5 text-slate-400" />
                     <span>Settings & Sourcing</span>
                   </Link>
+
+                  {user?.role === 'ADMIN' && (
+                    <>
+                      <div className="my-1 border-t border-slate-100" />
+                      <Link
+                        to="/admin/users"
+                        role="menuitem"
+                        className="flex items-center gap-2 px-3 py-2 text-slate-700 hover:bg-slate-50"
+                        onClick={() => setAccountOpen(false)}
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5 text-brand-600" />
+                        <span>User Management</span>
+                      </Link>
+                      <Link
+                        to="/admin/activity"
+                        role="menuitem"
+                        className="flex items-center gap-2 px-3 py-2 text-slate-700 hover:bg-slate-50"
+                        onClick={() => setAccountOpen(false)}
+                      >
+                        <Activity className="w-3.5 h-3.5 text-brand-600" />
+                        <span>Activity Audit</span>
+                      </Link>
+                    </>
+                  )}
 
                   <button
                     type="button"

@@ -625,5 +625,7 @@ export const Spinner = ({ label = 'Loading…', className }) => (
 export { default as WorkspacePage } from '../layout/WorkspacePage';
 export { default as RecommendedNextStep } from '../workspace/RecommendedNextStep';
 export { default as ProgressJourney } from '../workspace/ProgressJourney';
+export { default as Modal } from './Modal';
+export { default as Drawer } from './Drawer';
 
 

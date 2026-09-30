@@ -7,6 +7,7 @@ const { matchCandidateToJob } = require('../services/candidateMatcher');
 const { generateCandidateInsights } = require('../services/candidateInsightService');
 const { processCandidateResume } = require('../services/candidateProcessingService');
 const { recordActivity } = require('../services/activityService');
+const { recordPlatformActivity } = require('../services/platformActivityService');
 const { listCandidatesForJob, getCandidateDetail } = require('../services/candidateService');
 const { formatCandidateForApi } = require('../utils/candidateSerializer');
 const { ASSIGNABLE_HR_STATUSES, LIST_SELECT } = require('../utils/candidateQuery');
@@ -205,6 +206,20 @@ const processApplications = async (req, res, next) => {
       );
     }
 
+    if (processedCount > 0) {
+      recordPlatformActivity({
+        userId: req.user?.id || null,
+        userName: req.user?.name || 'Recruiter',
+        userEmail: req.user?.email || null,
+        action: 'CANDIDATE_IMPORTED',
+        entityType: 'JOB',
+        entityId: jobId,
+        entityName: job.title,
+        description: `${req.user?.name || 'Recruiter'} imported ${processedCount} candidate(s) for "${job.title}"`,
+        metadata: { jobId, count: processedCount, duplicates: duplicatesCount }
+      });
+    }
+
     return res.status(200).json({
       success: true,
       data: { total: applications.length, processed: processedCount, duplicates: duplicatesCount, failed: failedCount, items: itemResults }
@@ -398,6 +413,22 @@ const updateCandidateStatus = async (req, res, next) => {
       type: 'STATUS_CHANGED',
       description: `Status changed from ${existing.hrStatus} to ${status}.`,
       metadata: { from: existing.hrStatus, to: status }
+    });
+
+    const platformAction = status === 'SHORTLISTED'
+      ? 'CANDIDATE_SHORTLISTED'
+      : (status === 'NOT_SUITABLE' ? 'CANDIDATE_NOT_SUITABLE' : 'CANDIDATE_STATUS_CHANGED');
+
+    recordPlatformActivity({
+      userId: req.user?.id || null,
+      userName: req.user?.name || 'Recruiter',
+      userEmail: req.user?.email || null,
+      action: platformAction,
+      entityType: 'CANDIDATE',
+      entityId: candidate.id,
+      entityName: candidate.name || 'Candidate',
+      description: `${req.user?.name || 'Recruiter'} marked ${candidate.name || 'Candidate'} as ${status}`,
+      metadata: { jobId, candidateId: candidate.id, from: existing.hrStatus, to: status }
     });
 
     return res.status(200).json({ success: true, data: formatCandidateForApi(candidate) });

@@ -9,6 +9,8 @@ const {
   createRefreshSession,
   revokeFamily,
   revokeSession,
+  revokeAllUserSessions,
+  revokeOtherUserSessions,
   summarizeUserAgent,
   setAccessCookie,
   setAuthCookies,
@@ -20,6 +22,10 @@ const {
   getAccessTtlMinutes
 } = require('../services/authService');
 const { createWorkspaceForUser } = require('../services/workspaceService');
+const {
+  recordPlatformActivity,
+  recordPlatformActivityWithin
+} = require('../services/platformActivityService');
 
 /** Masks an email for logs: r***l@example.com */
 const maskEmail = (email = '') => {
@@ -187,6 +193,28 @@ const signup = async (req, res, next) => {
         client: tx
       });
 
+      await recordPlatformActivityWithin(tx, {
+        userId: created.id,
+        userName: displayName,
+        userEmail: normalizedEmail,
+        action: 'ACCOUNT_CREATED',
+        entityType: 'USER',
+        entityId: created.id,
+        entityName: displayName,
+        description: `Account created for ${displayName} (${normalizedEmail})`
+      });
+
+      await recordPlatformActivityWithin(tx, {
+        userId: created.id,
+        userName: displayName,
+        userEmail: normalizedEmail,
+        action: 'LOGIN',
+        entityType: 'USER',
+        entityId: created.id,
+        entityName: displayName,
+        description: `${displayName} signed in automatically after registration`
+      });
+
       return { user: created, refreshToken: token };
     });
 
@@ -274,6 +302,17 @@ const login = async (req, res, next) => {
     const session = await issuePair({ res, user: updated, familyId: crypto.randomUUID(), req });
 
     console.log(`[Auth] Sign-in succeeded for user ${updated.id} (session ${session.id})`);
+
+    recordPlatformActivity({
+      userId: updated.id,
+      userName: updated.name,
+      userEmail: updated.email,
+      action: 'LOGIN',
+      entityType: 'USER',
+      entityId: updated.id,
+      entityName: updated.name,
+      description: `${updated.name} signed in successfully`
+    });
 
     return res.status(200).json({
       success: true,
@@ -518,6 +557,18 @@ const logout = async (req, res) => {
       if (session) {
         await revokeFamily(session.familyId, 'LOGOUT');
         console.log(`[Auth] Signed out user ${session.userId} (family ${session.familyId}).`);
+
+        const user = await prisma.user.findUnique({ where: { id: session.userId } });
+        recordPlatformActivity({
+          userId: session.userId,
+          userName: user?.name || 'Recruiter',
+          userEmail: user?.email || null,
+          action: 'LOGOUT',
+          entityType: 'USER',
+          entityId: session.userId,
+          entityName: user?.name || 'Recruiter',
+          description: `${user?.name || 'User'} signed out`
+        });
       }
     } catch (error) {
       // Signing out must always succeed from the recruiter's point of view; the
@@ -530,4 +581,181 @@ const logout = async (req, res) => {
   return res.status(200).json({ success: true, message: 'Signed out successfully.' });
 };
 
-module.exports = { signup, login, me, refresh, logout };
+/**
+ * @desc    Update signed-in user's profile
+ * @route   PUT /api/auth/profile
+ * @access  Private
+ */
+const updateProfile = async (req, res, next) => {
+  try {
+    const { name } = req.body || {};
+
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({
+        success: false,
+        code: 'VALIDATION_ERROR',
+        message: 'Name is required.',
+        errors: { name: 'Enter your full name.' }
+      });
+    }
+
+    const trimmedName = name.trim();
+    if (trimmedName.length > 120) {
+      return res.status(400).json({
+        success: false,
+        code: 'VALIDATION_ERROR',
+        message: 'That name is too long.',
+        errors: { name: 'Name must be 120 characters or fewer.' }
+      });
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: req.user.id },
+      data: { name: trimmedName }
+    });
+
+    recordPlatformActivity({
+      userId: req.user.id,
+      userName: trimmedName,
+      userEmail: req.user.email,
+      action: 'PROFILE_UPDATED',
+      entityType: 'USER',
+      entityId: req.user.id,
+      entityName: trimmedName,
+      description: `${trimmedName} updated their profile name`
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Profile updated successfully.',
+      data: { user: toPublicUser(updated) }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Change password for the signed-in user
+ * @route   POST /api/auth/change-password
+ * @access  Private
+ */
+const changePassword = async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword } = req.body || {};
+
+    if (!currentPassword || typeof currentPassword !== 'string') {
+      return res.status(400).json({
+        success: false,
+        code: 'VALIDATION_ERROR',
+        message: 'Current password is required.',
+        errors: { currentPassword: 'Enter your current password.' }
+      });
+    }
+
+    if (!newPassword || typeof newPassword !== 'string') {
+      return res.status(400).json({
+        success: false,
+        code: 'VALIDATION_ERROR',
+        message: 'New password is required.',
+        errors: { newPassword: 'Enter a new password.' }
+      });
+    }
+
+    if (newPassword.length < MIN_PASSWORD_LENGTH) {
+      return res.status(400).json({
+        success: false,
+        code: 'VALIDATION_ERROR',
+        message: `New password must be at least ${MIN_PASSWORD_LENGTH} characters.`,
+        errors: { newPassword: `Use at least ${MIN_PASSWORD_LENGTH} characters.` }
+      });
+    }
+
+    if (OBVIOUS_PASSWORDS.has(newPassword.toLowerCase())) {
+      return res.status(400).json({
+        success: false,
+        code: 'VALIDATION_ERROR',
+        message: 'That password is too easy to guess. Try something less common.',
+        errors: { newPassword: 'That password is too easy to guess. Try something less common.' }
+      });
+    }
+
+    if (new Set(newPassword).size < 4) {
+      return res.status(400).json({
+        success: false,
+        code: 'VALIDATION_ERROR',
+        message: 'That password is too repetitive. Try something less predictable.',
+        errors: { newPassword: 'That password is too repetitive. Try something less predictable.' }
+      });
+    }
+
+    if (currentPassword === newPassword) {
+      return res.status(400).json({
+        success: false,
+        code: 'VALIDATION_ERROR',
+        message: 'New password must be different from your current password.',
+        errors: { newPassword: 'New password must be different from your current password.' }
+      });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id }
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        code: 'USER_NOT_FOUND',
+        message: 'User account not found.'
+      });
+    }
+
+    const isValidCurrent = await verifyPassword(currentPassword, user.passwordHash);
+    if (!isValidCurrent) {
+      await spendVerificationCost();
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_PASSWORD',
+        message: 'Current password is incorrect.',
+        errors: { currentPassword: 'The current password you entered is incorrect.' }
+      });
+    }
+
+    const newHash = await hashPassword(newPassword);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: newHash }
+    });
+
+    // Session policy: keep the current session family active, revoke all other families
+    const presented = readRefreshToken(req);
+    if (presented) {
+      const presentedHash = hashRefreshToken(presented);
+      const session = await prisma.authSession.findUnique({ where: { refreshTokenHash: presentedHash } });
+      if (session) {
+        await revokeOtherUserSessions(user.id, session.familyId, 'PASSWORD_CHANGED');
+      }
+    }
+
+    recordPlatformActivity({
+      userId: user.id,
+      userName: user.name,
+      userEmail: user.email,
+      action: 'PASSWORD_CHANGED',
+      entityType: 'USER',
+      entityId: user.id,
+      entityName: user.name,
+      description: `${user.name} changed their account password`
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Password changed successfully.'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = { signup, login, me, refresh, logout, updateProfile, changePassword };

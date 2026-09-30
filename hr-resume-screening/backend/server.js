@@ -201,6 +201,9 @@ app.use('/api/jobs', requireAuth, require('./routes/candidateRoutes'));
 // AI_ENABLED=false this route answers AI_DISABLED and nothing else changes.
 app.use('/api/ai', requireAuth, require('./routes/aiRoutes'));
 
+// Admin Management & Activity Audit Routes (protected internally by requireAuth + requireRole('ADMIN'))
+app.use('/api/admin', require('./routes/adminRoutes'));
+
 // Error Middlewares
 const { notFound, errorHandler } = require('./middleware/errorHandler');
 app.use(notFound);

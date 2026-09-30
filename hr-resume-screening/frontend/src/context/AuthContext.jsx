@@ -4,6 +4,8 @@ import {
   login as loginRequest,
   signup as signupRequest,
   logout as logoutRequest,
+  updateProfile as updateProfileRequest,
+  changePassword as changePasswordRequest,
   onUnauthorized,
   toApiError
 } from '../services/api';
@@ -100,6 +102,17 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
+  const updateUserProfile = useCallback(async ({ name }) => {
+    const response = await updateProfileRequest({ name });
+    setUser(response.data.user);
+    return response.data.user;
+  }, []);
+
+  const changeUserPassword = useCallback(async ({ currentPassword, newPassword }) => {
+    const response = await changePasswordRequest({ currentPassword, newPassword });
+    return response;
+  }, []);
+
   const value = useMemo(
     () => ({
       user,
@@ -112,9 +125,22 @@ export const AuthProvider = ({ children }) => {
       signIn,
       signUp,
       signOut,
+      updateUserProfile,
+      changeUserPassword,
       refresh: loadSession
     }),
-    [user, workspace, status, sessionMessage, signIn, signUp, signOut, loadSession]
+    [
+      user,
+      workspace,
+      status,
+      sessionMessage,
+      signIn,
+      signUp,
+      signOut,
+      updateUserProfile,
+      changeUserPassword,
+      loadSession
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

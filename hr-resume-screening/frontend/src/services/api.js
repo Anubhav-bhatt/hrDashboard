@@ -247,6 +247,38 @@ export const logout = async () => {
   return response.data;
 };
 
+export const updateProfile = async ({ name }) => {
+  const response = await api.put('/auth/profile', { name });
+  return response.data;
+};
+
+export const changePassword = async ({ currentPassword, newPassword }) => {
+  const response = await api.post('/auth/change-password', { currentPassword, newPassword });
+  return response.data;
+};
+
+/* ------------------------------------------------------------------ admin --- */
+
+export const getAdminUsers = async (params = {}) => {
+  const response = await api.get('/admin/users', { params });
+  return response.data;
+};
+
+export const getAdminUser = async (id) => {
+  const response = await api.get(`/admin/users/${id}`);
+  return response.data;
+};
+
+export const updateAdminUserStatus = async (id, isActive) => {
+  const response = await api.patch(`/admin/users/${id}/status`, { isActive });
+  return response.data;
+};
+
+export const getAdminActivities = async (params = {}) => {
+  const response = await api.get('/admin/activities', { params });
+  return response.data;
+};
+
 /* -------------------------------------------------------------- analytics --- */
 
 /**

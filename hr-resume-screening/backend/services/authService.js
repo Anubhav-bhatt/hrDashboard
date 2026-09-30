@@ -217,6 +217,20 @@ const revokeSession = (id, reason, client = prisma) =>
     data: { revokedAt: new Date(), revokedReason: reason }
   });
 
+/** Revokes every live session for a user. Used when an account is disabled. */
+const revokeAllUserSessions = (userId, reason = 'REVOKED', client = prisma) =>
+  client.authSession.updateMany({
+    where: { userId, revokedAt: null },
+    data: { revokedAt: new Date(), revokedReason: reason }
+  });
+
+/** Revokes other sessions for a user, keeping the current family active. Used on password change. */
+const revokeOtherUserSessions = (userId, currentFamilyId, reason = 'PASSWORD_CHANGED', client = prisma) =>
+  client.authSession.updateMany({
+    where: { userId, familyId: { not: currentFamilyId }, revokedAt: null },
+    data: { revokedAt: new Date(), revokedReason: reason }
+  });
+
 /* ---------------------------------------------------------------- cookies --- */
 
 /**
@@ -308,6 +322,7 @@ const toPublicUser = (user) => ({
   email: user.email,
   name: user.name,
   role: user.role,
+  isActive: user.isActive !== undefined ? Boolean(user.isActive) : true,
   lastLoginAt: user.lastLoginAt || null
 });
 
@@ -369,6 +384,8 @@ module.exports = {
   createRefreshSession,
   revokeFamily,
   revokeSession,
+  revokeAllUserSessions,
+  revokeOtherUserSessions,
   summarizeUserAgent,
 
   accessCookieOptions,
