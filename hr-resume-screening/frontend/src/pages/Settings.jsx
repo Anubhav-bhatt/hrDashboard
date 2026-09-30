@@ -1,11 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { LogOut, Mail, Monitor, ShieldCheck, User } from 'lucide-react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  Eye,
+  EyeOff,
+  KeyRound,
+  LogOut,
+  Mail,
+  Monitor,
+  Shield,
+  ShieldCheck,
+  User
+} from 'lucide-react';
 import { disconnectOutlook, getOutlookConnectUrl, getOutlookStatus, toApiError } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ToastProvider';
 import ThemeSelector from '../components/ThemeSelector';
-import { Avatar, Badge, Button, Card, CardHeader, PageHeader, Skeleton } from '../components/ui';
+import { Avatar, Badge, Button, Card, CardHeader, InlineAlert, PageHeader, Skeleton } from '../components/ui';
 
 /**
  * Settings — account, appearance and integrations.
@@ -17,12 +27,33 @@ import { Avatar, Badge, Button, Card, CardHeader, PageHeader, Skeleton } from '.
  * somebody actually looks at it.
  */
 const Settings = () => {
-  const { user, signOut } = useAuth();
+  const { user, signOut, changeUserPassword } = useAuth();
   const toast = useToast();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
 
   const [outlook, setOutlook] = useState({ loading: true, connected: false, email: '', displayName: '' });
   const [disconnecting, setDisconnecting] = useState(false);
+
+  // Password change state
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+
+  // Scroll to security section if hash is #security
+  useEffect(() => {
+    if (location.hash === '#security') {
+      const el = document.getElementById('security');
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [location.hash]);
 
   // Re-read after the OAuth redirect returns with ?outlook_connected.
   const outlookRedirect = searchParams.get('outlook_connected');
@@ -70,6 +101,57 @@ const Settings = () => {
     toast.info('You have been signed out.');
   };
 
+  const handlePasswordSubmit = async (e) => {
+    e.preventDefault();
+    setPasswordSuccess('');
+    setPasswordError('');
+
+    if (!currentPassword) {
+      setPasswordError('Please enter your current password.');
+      return;
+    }
+
+    if (!newPassword || newPassword.length < 10) {
+      setPasswordError('New password must be at least 10 characters.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError('New password and confirm password do not match.');
+      return;
+    }
+
+    if (currentPassword === newPassword) {
+      setPasswordError('New password must be different from your current password.');
+      return;
+    }
+
+    setPasswordSaving(true);
+    try {
+      await changeUserPassword({ currentPassword, newPassword });
+      setPasswordSuccess(
+        "Password changed successfully. For security, you've been signed out of existing sessions. Redirecting to sign in..."
+      );
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setTimeout(() => {
+        navigate('/login', {
+          replace: true,
+          state: {
+            message:
+              "Password changed successfully. For security, you've been signed out of existing sessions. Please sign in again with your new password."
+          }
+        });
+      }, 1500);
+    } catch (err) {
+      const apiErr = toApiError(err);
+      setPasswordError(apiErr.message);
+    } finally {
+      setPasswordSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-5">
       <PageHeader eyebrow="Workspace" title="Settings" description="Your account, how the app looks, and connected services." />
@@ -85,6 +167,7 @@ const Settings = () => {
           <ul className="flex lg:flex-col gap-1 overflow-x-auto scroll-slim -mx-1 px-1 lg:mx-0 lg:px-0">
             {[
               { href: '#account', label: 'Account', icon: User },
+              { href: '#security', label: 'Security', icon: Shield },
               { href: '#appearance', label: 'Appearance', icon: Monitor },
               { href: '#integrations', label: 'Integrations', icon: Mail }
             ].map((item) => (
@@ -128,6 +211,146 @@ const Settings = () => {
                 Sign out
               </Button>
             </div>
+          </Card>
+
+          {/* ----------------------------------------------------- Security --- */}
+          <Card id="security" className="scroll-mt-20">
+            <CardHeader
+              title="Security"
+              description="Change your password and manage credentials."
+              icon={Shield}
+            />
+
+            <form onSubmit={handlePasswordSubmit} className="mt-5 space-y-4 max-w-xl" noValidate>
+              {passwordSuccess && (
+                <InlineAlert
+                  tone="success"
+                  message={passwordSuccess}
+                  className="mb-4"
+                />
+              )}
+              {passwordError && (
+                <InlineAlert
+                  tone="error"
+                  message={passwordError}
+                  className="mb-4"
+                />
+              )}
+
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="settings-current-password"
+                  className="block text-body font-medium text-slate-700"
+                >
+                  Current password
+                </label>
+                <div className="relative">
+                  <input
+                    id="settings-current-password"
+                    type={showCurrent ? 'text' : 'password'}
+                    value={currentPassword}
+                    onChange={(e) => {
+                      setCurrentPassword(e.target.value);
+                      if (passwordError) setPasswordError('');
+                    }}
+                    placeholder="Enter your current password"
+                    className="input w-full pr-10"
+                    autoComplete="current-password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrent(!showCurrent)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
+                    aria-label={showCurrent ? 'Hide current password' : 'Show current password'}
+                  >
+                    {showCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="settings-new-password"
+                  className="block text-body font-medium text-slate-700"
+                >
+                  New password
+                </label>
+                <div className="relative">
+                  <input
+                    id="settings-new-password"
+                    type={showNew ? 'text' : 'password'}
+                    value={newPassword}
+                    onChange={(e) => {
+                      setNewPassword(e.target.value);
+                      if (passwordError) setPasswordError('');
+                    }}
+                    placeholder="Enter new password (min. 10 characters)"
+                    className="input w-full pr-10"
+                    autoComplete="new-password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNew(!showNew)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
+                    aria-label={showNew ? 'Hide new password' : 'Show new password'}
+                  >
+                    {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <p className="text-xs text-slate-500">
+                  Must be at least 10 characters. After updating, all existing sessions on other devices will be invalidated.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="settings-confirm-password"
+                  className="block text-body font-medium text-slate-700"
+                >
+                  Confirm new password
+                </label>
+                <div className="relative">
+                  <input
+                    id="settings-confirm-password"
+                    type={showConfirm ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={(e) => {
+                      setConfirmPassword(e.target.value);
+                      if (passwordError) setPasswordError('');
+                    }}
+                    placeholder="Confirm your new password"
+                    className="input w-full pr-10"
+                    autoComplete="new-password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirm(!showConfirm)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
+                    aria-label={showConfirm ? 'Hide confirmation password' : 'Show confirmation password'}
+                  >
+                    {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-2 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs text-slate-500">
+                  For security, changing password invalidates all sessions and requires fresh login.
+                </p>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  icon={KeyRound}
+                  loading={passwordSaving}
+                  disabled={passwordSaving || !currentPassword || !newPassword}
+                >
+                  Change password
+                </Button>
+              </div>
+            </form>
           </Card>
 
           {/* -------------------------------------------------- Integrations --- */}

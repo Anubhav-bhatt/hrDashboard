@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   User,
   Mail,
@@ -21,6 +21,7 @@ import { Avatar, Button, Card, InlineAlert, cx } from '../components/ui';
 const Profile = () => {
   const { user, workspace, updateUserProfile, changeUserPassword } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
 
   // Profile edit state
   const [name, setName] = useState(user?.name || '');
@@ -95,10 +96,21 @@ const Profile = () => {
     setPasswordSaving(true);
     try {
       await changeUserPassword({ currentPassword, newPassword });
-      setPasswordSuccess('Password changed successfully. Your account is secured.');
+      setPasswordSuccess(
+        "Password changed successfully. For security, you've been signed out of existing sessions. Redirecting to sign in..."
+      );
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
+      setTimeout(() => {
+        navigate('/login', {
+          replace: true,
+          state: {
+            message:
+              "Password changed successfully. For security, you've been signed out of existing sessions. Please sign in again with your new password."
+          }
+        });
+      }, 1500);
     } catch (err) {
       const apiErr = toApiError(err);
       setPasswordError(apiErr.message);

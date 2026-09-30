@@ -725,18 +725,17 @@ const changePassword = async (req, res, next) => {
 
     await prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash: newHash }
+      data: {
+        passwordHash: newHash,
+        tokenVersion: { increment: 1 }
+      }
     });
 
-    // Session policy: keep the current session family active, revoke all other families
-    const presented = readRefreshToken(req);
-    if (presented) {
-      const presentedHash = hashRefreshToken(presented);
-      const session = await prisma.authSession.findUnique({ where: { refreshTokenHash: presentedHash } });
-      if (session) {
-        await revokeOtherUserSessions(user.id, session.familyId, 'PASSWORD_CHANGED');
-      }
-    }
+    // Security invariant: revoke ALL existing refresh sessions across all browsers and devices
+    await revokeAllUserSessions(user.id, 'PASSWORD_CHANGED');
+
+    // Clear authentication cookies for current browser to require re-login with new credentials
+    clearAuthCookies(res);
 
     recordPlatformActivity({
       userId: user.id,
@@ -746,12 +745,12 @@ const changePassword = async (req, res, next) => {
       entityType: 'USER',
       entityId: user.id,
       entityName: user.name,
-      description: `${user.name} changed their account password`
+      description: `${user.name} changed their account password; all active sessions revoked.`
     });
 
     return res.status(200).json({
       success: true,
-      message: 'Password changed successfully.'
+      message: "Password changed successfully. For security, you've been signed out of existing sessions. Please sign in again with your new password."
     });
   } catch (error) {
     next(error);

@@ -37,6 +37,7 @@ const { testAsync } = suite;
 const TEST_TIMESTAMP = Date.now();
 const USER_A_EMAIL = `test.user.a.${TEST_TIMESTAMP}@example.invalid`;
 const USER_B_EMAIL = `test.user.b.${TEST_TIMESTAMP}@example.invalid`;
+const TEST_ADMIN_EMAIL = `test.admin.${TEST_TIMESTAMP}@example.invalid`;
 const PASSWORD_ORIGINAL = 'CorrectHorse123!';
 const PASSWORD_NEW = 'BatteryStaple456!';
 const TRUSTED_ORIGIN = 'http://127.0.0.1:5173';
@@ -48,6 +49,7 @@ let userACookieJar = {};
 let userBCookieJar = {};
 let userAId;
 let userBId;
+let testAdminId;
 let adminUserId;
 
 const parseCookies = (setCookies = []) => {
@@ -233,7 +235,7 @@ const run = async () => {
       assert.strictEqual(shortRes.status, 400);
     });
 
-    await testAsync('9. User A can successfully change their password', async () => {
+    await testAsync('9. User A can successfully change their password and current cookies are cleared', async () => {
       const res = await request('POST', '/auth/change-password', {
         body: {
           currentPassword: PASSWORD_ORIGINAL,
@@ -244,6 +246,10 @@ const run = async () => {
 
       assert.strictEqual(res.status, 200);
       assert.strictEqual(res.body.success, true);
+      assert.ok(res.body.message.includes("signed out"));
+      assert.strictEqual(userACookieJar.hr_access, undefined, 'Current browser cookies must be cleared on password rotation');
+      assert.strictEqual(res.body.password, undefined);
+      assert.strictEqual(res.body.passwordHash, undefined);
     });
 
     await testAsync('10. User A old password no longer works, new password logs in', async () => {
@@ -259,6 +265,87 @@ const run = async () => {
       });
       assert.strictEqual(newLogin.status, 200, 'New password must succeed');
       assert.ok(newJar.hr_access);
+      userACookieJar = newJar;
+    });
+
+    await testAsync('10b. Dedicated test admin password rotation invalidates all existing sessions across other browsers', async () => {
+      // 1. Create a dedicated test admin account (so genuine admin is never mutated during automated tests)
+      const testAdminJar1 = {};
+      const testAdminJar2 = {};
+      const adminPassOriginal = 'AdminSecPass10Chars!';
+      const adminPassNew = 'AdminNewPass987Secure!';
+
+      const signupRes = await request('POST', '/auth/signup', {
+        body: {
+          name: 'Dedicated Test Admin',
+          email: TEST_ADMIN_EMAIL,
+          password: adminPassOriginal
+        },
+        jar: testAdminJar1
+      });
+      assert.strictEqual(signupRes.status, 201, 'Dedicated test admin created');
+      testAdminId = signupRes.body.data.user.id;
+
+      // Promote to ADMIN role
+      await prisma.user.update({
+        where: { id: testAdminId },
+        data: { role: 'ADMIN' }
+      });
+
+      // Sign in from Browser 2 as well
+      const login2 = await request('POST', '/auth/login', {
+        body: { email: TEST_ADMIN_EMAIL, password: adminPassOriginal },
+        jar: testAdminJar2
+      });
+      assert.strictEqual(login2.status, 200, 'Browser 2 login succeeds');
+
+      // Verify both sessions work
+      const me1 = await request('GET', '/auth/me', { jar: testAdminJar1 });
+      assert.strictEqual(me1.status, 200);
+      assert.strictEqual(me1.body.data.user.role, 'ADMIN');
+      const me2 = await request('GET', '/auth/me', { jar: testAdminJar2 });
+      assert.strictEqual(me2.status, 200);
+
+      // 2. Change password from Browser 1
+      const changeRes = await request('POST', '/auth/change-password', {
+        body: {
+          currentPassword: adminPassOriginal,
+          newPassword: adminPassNew
+        },
+        jar: testAdminJar1
+      });
+      assert.strictEqual(changeRes.status, 200);
+      assert.strictEqual(changeRes.body.data, undefined);
+      assert.strictEqual(changeRes.body.password, undefined);
+      assert.strictEqual(changeRes.body.passwordHash, undefined);
+
+      // Browser 1 cookies were cleared
+      assert.strictEqual(testAdminJar1.hr_access, undefined);
+
+      // 3. Browser 2 attempts to use its old access token -> immediately rejected (tokenVersion mismatch)
+      const staleReq = await request('GET', '/auth/me', { jar: testAdminJar2 });
+      assert.strictEqual(staleReq.status, 401, 'Browser 2 old session must be rejected with 401');
+      assert.strictEqual(staleReq.body.code, 'INVALID_SESSION');
+
+      // 4. Browser 2 attempts to refresh using its old refresh token -> rejected (AuthSession revoked)
+      const refreshReq = await request('POST', '/auth/refresh', { jar: testAdminJar2 });
+      assert.strictEqual(refreshReq.status, 401, 'Browser 2 refresh attempt must be rejected');
+
+      // 5. Old password fails
+      const oldLogin = await request('POST', '/auth/login', {
+        body: { email: TEST_ADMIN_EMAIL, password: adminPassOriginal }
+      });
+      assert.strictEqual(oldLogin.status, 401, 'Old password for test admin must fail');
+
+      // 6. New password succeeds
+      const testAdminJarNew = {};
+      const newLogin = await request('POST', '/auth/login', {
+        body: { email: TEST_ADMIN_EMAIL, password: adminPassNew },
+        jar: testAdminJarNew
+      });
+      assert.strictEqual(newLogin.status, 200, 'New password for test admin must succeed');
+      assert.ok(testAdminJarNew.hr_access);
+      assert.strictEqual(newLogin.body.data.user.role, 'ADMIN');
     });
 
     // -------------------------------------------------------------
@@ -383,19 +470,19 @@ const run = async () => {
   } finally {
     // Cleanup created test users
     await prisma.platformActivity.deleteMany({
-      where: { userId: { in: [userAId, userBId].filter(Boolean) } }
+      where: { userId: { in: [userAId, userBId, testAdminId].filter(Boolean) } }
     }).catch(() => {});
 
     await prisma.workspaceMember.deleteMany({
-      where: { userId: { in: [userAId, userBId].filter(Boolean) } }
+      where: { userId: { in: [userAId, userBId, testAdminId].filter(Boolean) } }
     }).catch(() => {});
 
     await prisma.authSession.deleteMany({
-      where: { userId: { in: [userAId, userBId].filter(Boolean) } }
+      where: { userId: { in: [userAId, userBId, testAdminId].filter(Boolean) } }
     }).catch(() => {});
 
     await prisma.user.deleteMany({
-      where: { id: { in: [userAId, userBId].filter(Boolean) } }
+      where: { id: { in: [userAId, userBId, testAdminId].filter(Boolean) } }
     }).catch(() => {});
 
     if (server) {

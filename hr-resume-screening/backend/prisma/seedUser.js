@@ -32,6 +32,24 @@ const run = async () => {
     process.exit(1);
   }
 
+  const isExplicitPassword = Boolean(passwordArg);
+  const existingUser = await prisma.user.findUnique({ where: { email } });
+
+  if (existingUser && !isExplicitPassword) {
+    console.log(`[Seed] User ${email} already exists. Preserving existing password.`);
+    const { user, workspaceId } = await prisma.$transaction(async (tx) => {
+      const updated = await tx.user.update({
+        where: { email },
+        data: { name, role, isActive: true }
+      });
+      const ws = await ensureWorkspaceForUser(tx, { userId: updated.id, userName: name, email });
+      return { user: updated, workspaceId: ws };
+    });
+    console.log(`[Seed] Recruiter account preserved: ${user.email} (role ${user.role}, id ${user.id})`);
+    console.log(`[Seed] Workspace: ${workspaceId}`);
+    return;
+  }
+
   const passwordHash = await hashPassword(password);
 
   // The account and its workspace are created together. Without a workspace the

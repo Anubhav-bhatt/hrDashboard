@@ -15,6 +15,7 @@ model User {
   name         String    @default("Recruiter")
   role         String    @default("RECRUITER") // RECRUITER | ADMIN
   isActive     Boolean   @default(true)
+  tokenVersion Int       @default(1)
   lastLoginAt  DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt

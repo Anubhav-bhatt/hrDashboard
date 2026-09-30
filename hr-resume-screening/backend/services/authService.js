@@ -137,7 +137,13 @@ const spendVerificationCost = () => bcrypt.compare('password-that-never-matches'
  */
 const issueAccessToken = (user) =>
   jwt.sign(
-    { sub: user.id, email: user.email, role: user.role, typ: TOKEN_PURPOSE_ACCESS },
+    {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+      tokenVersion: user.tokenVersion || 1,
+      typ: TOKEN_PURPOSE_ACCESS
+    },
     getAccessSecret(),
     { expiresIn: `${getAccessTtlMinutes()}m` }
   );
@@ -344,6 +350,10 @@ const ensureSeedUser = async () => {
         'No recruiter accounts exist. Set SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD (min 8 chars) and restart, or run: npm run seed:user'
     };
   }
+
+  // Safety invariant: never overwrite an existing user account if one already exists with this email
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) return { created: false };
 
   const name = process.env.SEED_ADMIN_NAME || 'HR Administrator';
 

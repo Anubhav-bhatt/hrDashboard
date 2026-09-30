@@ -61,6 +61,14 @@ const requireAuth = async (req, res, next) => {
       });
     }
 
+    if (payload.tokenVersion && user.tokenVersion && payload.tokenVersion !== user.tokenVersion) {
+      return res.status(401).json({
+        success: false,
+        code: 'INVALID_SESSION',
+        message: 'Your session is no longer valid. Please sign in again.'
+      });
+    }
+
     const membership = user.memberships && user.memberships[0];
 
     // No workspace means no records — never every record. An account can only

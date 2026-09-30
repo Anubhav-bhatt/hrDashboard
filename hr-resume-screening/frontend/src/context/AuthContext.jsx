@@ -110,6 +110,12 @@ export const AuthProvider = ({ children }) => {
 
   const changeUserPassword = useCallback(async ({ currentPassword, newPassword }) => {
     const response = await changePasswordRequest({ currentPassword, newPassword });
+    setUser(null);
+    setWorkspace(null);
+    setStatus('anonymous');
+    setSessionMessage(
+      "Password changed successfully. For security, you've been signed out of existing sessions. Please sign in again with your new password."
+    );
     return response;
   }, []);
 
