@@ -2,6 +2,7 @@
   "name": "hr-resume-screening-frontend",
   "private": true,
   "version": "1.0.0",
+  "packageManager": "npm@10.8.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
