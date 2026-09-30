@@ -1,12 +1,14 @@
 import React, { useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
+  AlertCircle,
   ArrowLeft,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
   FileText,
   IndianRupee,
+  Info,
   Loader2,
   Sparkles,
   UploadCloud
@@ -76,8 +78,8 @@ const CreateJob = () => {
   const [salaryMax, setSalaryMax] = useState('');
   const [searchKeywords, setSearchKeywords] = useState([]);
 
-  // Form states & validation
   const [submitting, setSubmitting] = useState(false);
+  const [missingFields, setMissingFields] = useState([]);
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState('');
   const [dragActive, setDragActive] = useState(false);
@@ -114,8 +116,9 @@ const CreateJob = () => {
       }
 
       const data = response?.data;
-      if (data) {
+      if (data && data.status !== 'failed') {
         setExtractedText(data.extractedText || textToRead || '');
+        setMissingFields(data.missingFields || []);
 
         // Auto-fill title if empty or suggested
         if (data.suggestedTitle && (!title || !title.trim())) {
@@ -140,20 +143,27 @@ const CreateJob = () => {
         // Auto-fill minimum experience
         if (data.minimumExperience !== undefined && data.minimumExperience !== null && data.minimumExperience > 0) {
           if (!minExp) setMinExp(String(data.minimumExperience));
+          setShowPreferences(true);
         }
 
         // Auto-fill locations
         if (Array.isArray(data.preferredLocations) && data.preferredLocations.length > 0) {
           setPreferredLocations((prev) => Array.from(new Set([...prev, ...data.preferredLocations])));
+          setShowPreferences(true);
         }
 
-        setExtractionStatus('success');
+        setExtractionStatus(data.status || 'complete');
       } else {
-        setExtractionStatus('partial');
+        setMissingFields(data?.missingFields || []);
+        setExtractionStatus('failed');
       }
-    } catch {
-      // Do not block manual creation if parsing fails
-      setExtractionStatus('partial');
+    } catch (err) {
+      setMissingFields([]);
+      setExtractionStatus('failed');
+      const msg = err.response?.data?.error || err.response?.data?.message || err.message;
+      if (msg && !msg.includes('status code')) {
+        setErrors((prev) => ({ ...prev, file: msg }));
+      }
     } finally {
       setIsReadingJd(false);
     }
@@ -165,6 +175,10 @@ const CreateJob = () => {
     setFormError('');
 
     const ext = `.${selectedFile.name.split('.').pop().toLowerCase()}`;
+    if (ext === '.doc') {
+      setErrors((prev) => ({ ...prev, file: 'Unsupported legacy Word format (.doc). Please save as .docx or .pdf.' }));
+      return;
+    }
     if (!ALLOWED_EXTENSIONS.includes(ext)) {
       setErrors((prev) => ({ ...prev, file: 'Unsupported file type. Please upload a PDF, DOCX or TXT file.' }));
       return;
@@ -183,6 +197,7 @@ const CreateJob = () => {
     setFile(null);
     setExtractedText('');
     setExtractionStatus(null);
+    setMissingFields([]);
     setErrors((prev) => ({ ...prev, file: undefined }));
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -383,7 +398,7 @@ const CreateJob = () => {
                     </span>
                     <p className="text-sm font-semibold text-slate-800">Upload job description</p>
                     <p id="jdFile-hint" className="text-xs text-slate-500 mt-0.5">
-                      PDF, DOC, DOCX or TXT · up to 5 MB
+                      PDF, DOCX or TXT · up to 5 MB
                     </p>
                     <label
                       htmlFor="jdFileInput"
@@ -473,22 +488,39 @@ const CreateJob = () => {
           )}
 
           {/* Post-Extraction Notification */}
-          {!isReadingJd && extractionStatus === 'success' && (
-            <div className="mt-3 rounded-lg bg-emerald-50 border border-emerald-200/80 px-3.5 py-2.5 flex items-start gap-2.5">
+          {!isReadingJd && extractionStatus === 'complete' && (
+            <div className="mt-3 rounded-lg bg-emerald-50 border border-emerald-200/80 px-3.5 py-2.5 flex items-start gap-2.5 animate-scale-in">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" aria-hidden="true" />
               <div>
-                <p className="text-xs font-semibold text-emerald-950">We found these in the job description.</p>
+                <p className="text-xs font-semibold text-emerald-950">Job details extracted</p>
                 <p className="text-xs text-emerald-800 mt-0.5">
-                  Review or edit them before creating the role.
+                  Review the information below.
                 </p>
               </div>
             </div>
           )}
 
           {!isReadingJd && extractionStatus === 'partial' && (
-            <div className="mt-3 rounded-lg bg-amber-50 border border-amber-200/80 px-3.5 py-2.5 text-xs text-amber-900">
-              <p className="font-semibold text-amber-950">We couldn't extract all details automatically.</p>
-              <p className="mt-0.5 text-amber-800">You can complete them manually below.</p>
+            <div className="mt-3 rounded-lg bg-slate-50 border border-slate-200 px-3.5 py-2.5 flex items-start gap-2.5 animate-scale-in">
+              <Info className="w-4 h-4 text-brand-600 shrink-0 mt-0.5" aria-hidden="true" />
+              <div>
+                <p className="text-xs font-semibold text-slate-900">Most job details were extracted</p>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  Review the highlighted fields and add anything missing.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {!isReadingJd && extractionStatus === 'failed' && (
+            <div className="mt-3 rounded-lg bg-slate-50 border border-slate-200 px-3.5 py-2.5 flex items-start gap-2.5 animate-scale-in">
+              <AlertCircle className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" aria-hidden="true" />
+              <div>
+                <p className="text-xs font-semibold text-slate-800">We couldn't read enough information from this file.</p>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  You can still complete the job details manually.
+                </p>
+              </div>
             </div>
           )}
 
@@ -550,9 +582,16 @@ const CreateJob = () => {
 
           {/* Job Title */}
           <div>
-            <label htmlFor="jobTitleInput" className="field-label text-slate-900">
-              Job Title <span className="text-rose-500" aria-hidden="true">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label htmlFor="jobTitleInput" className="field-label text-slate-900 mb-0">
+                Job Title <span className="text-rose-500" aria-hidden="true">*</span>
+              </label>
+              {extractionStatus === 'partial' && missingFields.includes('title') && (
+                <span className="text-[11px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200/60">
+                  Please confirm
+                </span>
+              )}
+            </div>
             <input
               ref={titleInputRef}
               id="jobTitleInput"
@@ -624,7 +663,11 @@ const CreateJob = () => {
               id="qualificationsInput"
               label="Education"
               badge="Optional"
-              description="Add any qualification requirement, if needed."
+              description={
+                extractionStatus === 'partial' && missingFields.includes('education')
+                  ? 'Optional · Not found in the JD. Add any qualification requirement if needed.'
+                  : 'Add any qualification requirement, if needed.'
+              }
               values={qualifications}
               onChange={setQualifications}
               suggestions={QUALIFICATION_SUGGESTIONS}
@@ -664,9 +707,16 @@ const CreateJob = () => {
             <div className="mt-4 pt-4 border-t border-slate-100 space-y-4 animate-scale-in">
               {/* Experience Range */}
               <div>
-                <span className="text-xs font-semibold text-slate-800 block mb-1">
-                  Minimum experience
-                </span>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-semibold text-slate-800 block">
+                    Minimum experience
+                  </span>
+                  {extractionStatus === 'partial' && missingFields.includes('experience') && (
+                    <span className="text-[11px] font-medium text-slate-500">
+                      Please confirm
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-slate-500 mb-2">
                   Expected years of industry experience.
                 </p>

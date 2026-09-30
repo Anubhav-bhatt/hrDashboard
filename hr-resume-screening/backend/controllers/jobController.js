@@ -1,6 +1,7 @@
 const prisma = require('../config/prisma');
 const { extractJDText } = require('../services/jdParser');
 const { extractJDRequirements } = require('../services/jdRequirementExtractor');
+const { extractJobProfile, extractJobTitle } = require('../services/jdProfileService');
 const outlookService = require('../services/outlookService');
 const { getJobSummaries, getJobStatusCounts } = require('../services/jobSummaryService');
 const { getJobDetails } = require('../services/jobService');
@@ -114,62 +115,145 @@ const parseJobDescription = async (req, res, next) => {
     let extractedText = '';
     let fileName = '';
 
-    if (file) {
-      fileName = file.originalname;
-      extractedText = await extractJDText(file);
-    } else {
-      fileName = 'pasted-job-description.txt';
-      const { normalizeText } = require('../services/jdParser');
-      extractedText = normalizeText(bodyText);
-    }
-
-    if (!extractedText || !extractedText.trim()) {
-      return res.status(422).json({
-        success: false,
-        message: 'Job description text is empty or could not be extracted.'
+    try {
+      if (file) {
+        fileName = file.originalname || '';
+        extractedText = await extractJDText(file);
+      } else {
+        fileName = 'pasted-job-description.txt';
+        const { normalizeText } = require('../services/jdParser');
+        extractedText = normalizeText(bodyText);
+      }
+    } catch (parseErr) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('\n[JD Parse]');
+        console.log('text extracted: NO');
+        console.log(`characters: 0`);
+        console.log(`status: failed (${parseErr.message})\n`);
+      }
+      return res.status(200).json({
+        success: true,
+        data: {
+          status: 'failed',
+          failureReason: parseErr.message || 'Could not extract text from document.',
+          extractedText: '',
+          fileName,
+          suggestedTitle: '',
+          requiredSkills: [],
+          preferredSkills: [],
+          minimumExperience: 0,
+          preferredEducation: [],
+          responsibilities: [],
+          preferredLocations: [],
+          roleKeywords: [],
+          extractedFields: [],
+          missingFields: ['title', 'requiredSkills', 'experience', 'responsibilities']
+        }
       });
     }
 
-    // Attempt to infer job title
-    let suggestedTitle = '';
-    if (fileName && fileName !== 'pasted-job-description.txt') {
-      suggestedTitle = fileName
-        .replace(/\.(pdf|docx|txt)$/i, '')
-        .replace(/[-_]/g, ' ')
-        .replace(/\b(jd|job\s*description|job\s*desc)\b/gi, '')
-        .trim();
-    }
-    const titleMatch = extractedText.match(/(?:job\s*title|position|role|title)\s*[:\-]\s*([^\n\r]+)/i);
-    if (titleMatch && titleMatch[1] && titleMatch[1].trim().length < 80) {
-      const candidateTitle = titleMatch[1].trim().replace(/^["']|["']$/g, '');
-      if (candidateTitle.length > 2) suggestedTitle = candidateTitle;
+    if (!extractedText || !extractedText.trim() || extractedText.trim().length < 20) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('\n[JD Parse]');
+        console.log('text extracted: NO');
+        console.log(`characters: ${extractedText ? extractedText.length : 0}`);
+        console.log('status: failed (empty or unreadable text)\n');
+      }
+      return res.status(200).json({
+        success: true,
+        data: {
+          status: 'failed',
+          failureReason: 'Job description text is empty or contains no readable characters.',
+          extractedText: extractedText || '',
+          fileName,
+          suggestedTitle: '',
+          requiredSkills: [],
+          preferredSkills: [],
+          minimumExperience: 0,
+          preferredEducation: [],
+          responsibilities: [],
+          preferredLocations: [],
+          roleKeywords: [],
+          extractedFields: [],
+          missingFields: ['title', 'requiredSkills', 'experience', 'responsibilities']
+        }
+      });
     }
 
-    const reqs = extractJDRequirements(extractedText, suggestedTitle);
+    // Infer job title using multi-strategy heuristics
+    const suggestedTitle = extractJobTitle(extractedText, fileName);
+
+    // Deep JD Profile extraction
+    const profile = extractJobProfile({
+      title: suggestedTitle,
+      description: extractedText,
+      fileName
+    });
 
     const knownLocations = ['Gurugram', 'Noida', 'Delhi', 'Bengaluru', 'Hyderabad', 'Pune', 'Mumbai', 'Chennai', 'Remote'];
     const detectedLocations = knownLocations.filter((loc) =>
       new RegExp(`\\b${loc}\\b`, 'i').test(extractedText)
     );
 
+    // Development structured diagnostics
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('\n[JD Parse]');
+      console.log('text extracted: YES');
+      console.log(`characters: ${extractedText.length}`);
+      console.log(`title: ${suggestedTitle ? `FOUND (${suggestedTitle})` : 'NOT FOUND'}`);
+      console.log(`required skills: ${profile.requiredSkills.length > 0 ? `FOUND ${profile.requiredSkills.length}` : 'NOT FOUND'}`);
+      console.log(`preferred skills: ${profile.preferredSkills.length > 0 ? `FOUND ${profile.preferredSkills.length}` : 'NOT FOUND'}`);
+      console.log(`experience: ${profile.minimumExperience > 0 ? `FOUND (${profile.minimumExperience} years)` : 'NOT FOUND'}`);
+      console.log(`education: ${profile.preferredEducation.length > 0 ? `FOUND (${profile.preferredEducation.join(', ')})` : 'NOT FOUND'}`);
+      console.log(`responsibilities: ${profile.responsibilities.length > 0 ? `FOUND ${profile.responsibilities.length}` : 'NOT FOUND'}`);
+      console.log(`status: ${profile.status}\n`);
+    }
+
     return res.status(200).json({
       success: true,
       data: {
+        status: profile.status,
         extractedText,
         fileName,
         suggestedTitle: suggestedTitle || '',
-        requiredSkills: reqs.requiredSkills || [],
-        preferredSkills: reqs.preferredSkills || [],
-        minimumExperience: reqs.minimumExperience || 0,
-        preferredEducation: reqs.preferredEducation || [],
+        requiredSkills: profile.requiredSkills || [],
+        preferredSkills: profile.preferredSkills || [],
+        minimumExperience: profile.minimumExperience || 0,
+        preferredEducation: profile.preferredEducation || [],
+        responsibilities: profile.responsibilities || [],
         preferredLocations: detectedLocations,
-        roleKeywords: reqs.roleKeywords || []
+        roleKeywords: [
+          ...(suggestedTitle ? [suggestedTitle] : []),
+          ...(profile.requiredSkills || [])
+        ],
+        extractedFields: profile.extractedFields || [],
+        missingFields: profile.missingFields || []
       }
     });
   } catch (error) {
-    return res.status(422).json({
-      success: false,
-      message: error.message || 'Could not parse job description.'
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('\n[JD Parse]');
+      console.log('text extracted: NO');
+      console.log(`status: failed (${error.message})\n`);
+    }
+    return res.status(200).json({
+      success: true,
+      data: {
+        status: 'failed',
+        failureReason: error.message || 'Could not parse job description.',
+        extractedText: '',
+        fileName: req.file ? req.file.originalname : '',
+        suggestedTitle: '',
+        requiredSkills: [],
+        preferredSkills: [],
+        minimumExperience: 0,
+        preferredEducation: [],
+        responsibilities: [],
+        preferredLocations: [],
+        roleKeywords: [],
+        extractedFields: [],
+        missingFields: ['title', 'requiredSkills', 'experience', 'responsibilities']
+      }
     });
   }
 };

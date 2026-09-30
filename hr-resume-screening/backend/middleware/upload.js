@@ -10,15 +10,27 @@ const ALLOWED_MIME_TYPES = [
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/docx',
-  'text/plain'
+  'text/plain',
+  'application/octet-stream',
+  'application/x-zip-compressed'
 ];
 
 const fileFilter = (req, file, cb) => {
   const ext = path.extname(file.originalname || '').toLowerCase();
-  const mimeType = file.mimetype || '';
+  const mimeType = (file.mimetype || '').toLowerCase();
+
+  // If user uploaded legacy .doc, give specific informative error
+  if (ext === '.doc') {
+    const error = new Error('Unsupported legacy Word format (.doc). Please save as .docx or .pdf.');
+    error.code = 'UNSUPPORTED_LEGACY_DOC';
+    return cb(error, false);
+  }
 
   const isExtensionValid = ALLOWED_EXTENSIONS.includes(ext);
-  const isMimeValid = ALLOWED_MIME_TYPES.includes(mimeType) || mimeType.startsWith('text/');
+  const isMimeValid =
+    ALLOWED_MIME_TYPES.includes(mimeType) ||
+    mimeType.startsWith('text/') ||
+    (isExtensionValid && (!mimeType || mimeType === 'application/octet-stream' || mimeType === 'application/x-zip-compressed'));
 
   if (isExtensionValid && isMimeValid) {
     return cb(null, true);

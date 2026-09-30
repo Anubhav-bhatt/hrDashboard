@@ -184,6 +184,9 @@ const extractEducation = (text) => {
     /Bachelor of Computer Applications/i,
     /Bachelor(?:'s)?(?:\s+degree)?(?:\s+in\s+[\w\s]+)?/i,
     /Master(?:'s)?(?:\s+degree)?(?:\s+in\s+[\w\s]+)?/i,
+    /Computer\s+Science\s+degree/i,
+    /Engineering\s+degree/i,
+    /equivalent\s+(?:practical\s+)?experience/i,
     /Diploma(?:\s+in\s+[\w\s]+)?/i
   ];
 

@@ -96,6 +96,86 @@ const detectRoleFamily = (title = '', skills = []) => {
   return 'general';
 };
 
+const ACTION_VERBS_REGEX = /^(?:build|develop|design|implement|lead|architect|maintain|collaborate|create|deliver|work|participate|optimize|manage|ensure|write|review|deploy|scale|integrate|test|troubleshoot|analyze|coordinate|support|refactor)\b/i;
+
+const BOILERPLATE_TITLE_REGEX = /^(?:about\s+us|company\s+overview|job\s+description|job\s+summary|overview|who\s+we\s+are|the\s+opportunity|join\s+our\s+team|about\s+the\s+role|role\s+overview|position\s+summary|we\s+are\s+hiring|career\s+opportunity|introduction|summary|requirements|qualifications|responsibilities|skills)$/i;
+
+const ROLE_INDICATOR_REGEX = /\b(developer|engineer|architect|lead|designer|analyst|specialist|manager|administrator|consultant|scientist|programmer|intern|tester|qa|sdet|devops|sre|fullstack|frontend|backend)\b/i;
+
+/**
+ * Extracts the most confident job title from JD text or file name.
+ * Avoids taking boilerplate headings like "Company Overview" or "About Us".
+ *
+ * @param {string} text
+ * @param {string} fileName
+ * @returns {string} Clean job title
+ */
+const extractJobTitle = (text = '', fileName = '') => {
+  if (!text && !fileName) return '';
+
+  // 1. Explicit labelled match (highest confidence)
+  // e.g. "Job Title: React Developer", "Role: Senior Backend Engineer", "Position: Data Analyst"
+  const labelMatch = text.match(/(?:job\s*title|position(?:\s*title)?|role(?:\s*title)?|designation|title)\s*[:\-–]\s*([^\n\r]+)/i);
+  if (labelMatch && labelMatch[1]) {
+    const candidate = labelMatch[1].trim().replace(/^["']|["']$/g, '');
+    if (candidate.length >= 3 && candidate.length <= 80 && !BOILERPLATE_TITLE_REGEX.test(candidate)) {
+      return candidate;
+    }
+  }
+
+  // 2. Explicit "Hiring for <Role>" or "Looking for <Role>"
+  const hiringMatch = text.match(/(?:hiring\s+for|we\s+are\s+looking\s+for\s+(?:a|an)?)\s+([A-Za-z0-9+#.\s]{3,60}?)(?:\s+(?:with|who|to|in)\b|\.|\n|$)/i);
+  if (hiringMatch && hiringMatch[1]) {
+    const candidate = hiringMatch[1].trim().replace(/^["']|["']$/g, '');
+    if (candidate.length >= 3 && candidate.length <= 80 && ROLE_INDICATOR_REGEX.test(candidate)) {
+      return candidate;
+    }
+  }
+
+  // 3. Markdown Heading 1 or Heading 2 (e.g. "# React Developer" or "## Senior DevOps Engineer")
+  const headingMatch = text.match(/^#{1,3}\s*([^\n\r]+)/m);
+  if (headingMatch && headingMatch[1]) {
+    const candidate = headingMatch[1].trim().replace(/^["']|["']$/g, '');
+    if (candidate.length >= 3 && candidate.length <= 80 && !BOILERPLATE_TITLE_REGEX.test(candidate)) {
+      return candidate;
+    }
+  }
+
+  // 4. First 5 meaningful lines of text
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  for (let i = 0; i < Math.min(5, lines.length); i++) {
+    const line = lines[i].replace(/^["']|["']$/g, '').trim();
+    if (line.length < 3 || line.length > 80) continue;
+    if (BOILERPLATE_TITLE_REGEX.test(line)) continue;
+    // If it mentions a known role indicator, e.g. "React Developer", "Data Analyst", "DevOps Engineer"
+    if (ROLE_INDICATOR_REGEX.test(line)) {
+      return line;
+    }
+  }
+
+  // If first line doesn't have role indicator but is short and clean (e.g. "React Developer")
+  if (lines.length > 0) {
+    const firstLine = lines[0].replace(/^["']|["']$/g, '').trim();
+    if (firstLine.length >= 3 && firstLine.length <= 50 && !BOILERPLATE_TITLE_REGEX.test(firstLine) && !firstLine.includes('.')) {
+      return firstLine;
+    }
+  }
+
+  // 5. Fallback to clean fileName if valid
+  if (fileName && fileName !== 'pasted-job-description.txt') {
+    const candidate = fileName
+      .replace(/\.(pdf|docx|txt)$/i, '')
+      .replace(/[-_]/g, ' ')
+      .replace(/\b(jd|job\s*description|job\s*desc|spec|specification)\b/gi, '')
+      .trim();
+    if (candidate.length >= 3) {
+      return candidate;
+    }
+  }
+
+  return '';
+};
+
 /**
  * Extracts key responsibilities and deliverables from the JD text
  * @param {string} text
@@ -105,23 +185,40 @@ const extractResponsibilities = (text) => {
   if (!text || typeof text !== 'string') return [];
 
   const respSectionMatch = text.match(
-    /(?:responsibilities|what\s*(?:you'll|you\s*will)\s*do|role\s*overview|day\s*to\s*day|key\s*duties|you\s*will)[\s\S]*?(?=(?:requirements|qualifications|about\s*us|what\s*we\s*offer|skills|$))/i
+    /(?:responsibilities|what\s*(?:you'll|you\s*will)\s*do|role\s*(?:responsibilities|overview)|key\s*responsibilities|your\s*role|day\s*to\s*day|key\s*duties|deliverables)[\s\S]*?(?=(?:requirements|qualifications|about\s*us|what\s*we\s*offer|skills|$))/i
   );
-
-  const sectionText = respSectionMatch ? respSectionMatch[0] : text;
-  const lines = sectionText.split(/\r?\n/).map((l) => l.trim());
 
   const responsibilities = [];
   const bulletRegex = /^[\s*•▪◦●·‣∙+\-–—\d.)]+\s*(.*)$/;
 
-  for (const line of lines) {
-    const match = line.match(bulletRegex);
-    const content = match ? match[1].trim() : line;
-    if (content.length >= 15 && content.length <= 200) {
-      // Must start with an action verb or gerund (Building, Developing, Design, Implement, Collaborate, etc.)
-      if (/^(build|develop|design|implement|lead|architect|maintain|collaborate|create|deliver|work|participate|optimize|manage|ensure|write|review|deploy|scale)\b/i.test(content)) {
-        responsibilities.push(content);
-        if (responsibilities.length >= 8) break;
+  if (respSectionMatch) {
+    const lines = respSectionMatch[0].split(/\r?\n/).map((l) => l.trim());
+    for (const line of lines) {
+      const match = line.match(bulletRegex);
+      const content = match ? match[1].trim() : line;
+      if (content.length >= 15 && content.length <= 250) {
+        if (ACTION_VERBS_REGEX.test(content)) {
+          responsibilities.push(content);
+          if (responsibilities.length >= 8) break;
+        }
+      }
+    }
+  }
+
+  // If no bulleted responsibilities found from section, extract action clauses from sentences
+  // e.g. "The developer will build reusable frontend components, integrate backend APIs and optimize web application performance."
+  if (responsibilities.length === 0) {
+    const actionSentenceMatch = text.match(/(?:(?:the\s+)?(?:developer|candidate|engineer|role|hire|person)\s+will\s+|responsibilities\s+include\s+|you\s+will\s+)([\s\S]+?)(?:\.\s*|\n\s*\n|$)/i);
+    if (actionSentenceMatch && actionSentenceMatch[1]) {
+      const unwrappedText = actionSentenceMatch[1].replace(/\r?\n+/g, ' ');
+      const clauses = unwrappedText.split(/,\s*|\s+and\s+/).map((c) => c.trim()).filter(Boolean);
+      for (const clause of clauses) {
+        const cleanClause = clause.replace(/^to\s+/i, '').trim();
+        if (cleanClause.length >= 10 && cleanClause.length <= 150) {
+          if (ACTION_VERBS_REGEX.test(cleanClause)) {
+            responsibilities.push(cleanClause);
+          }
+        }
       }
     }
   }
@@ -155,29 +252,6 @@ const extractSpecificExperience = (text) => {
 };
 
 /**
- * Derives a normalized JobProfile from JD text and job record
- *
- * @param {Object} job - Raw job record or object
- * @returns {Object} Normalized JobProfile
- */
-const extractJobProfile = (job = {}) => {
-  const title = (job.title || '').trim();
-  const rawText = (job.description || job.rawText || '').trim();
-  const fullText = `${title}\n${rawText}`.trim();
-
-  // 1. Minimum general experience
-  const rawMinExp = extractMinimumExperience(fullText);
-  const minimumExperience = job.minimumExperience !== undefined && job.minimumExperience !== null && job.minimumExperience > 0
-    ? job.minimumExperience
-    : rawMinExp;
-
-  // 2. Specific tech experience
-  const specificExperience = extractSpecificExperience(fullText);
-
-  // 3. Negated skills
-  const negatedSkills = extractNegatedSkills(fullText);
-
-/**
  * Partitions JD into logical sections (Required, Preferred, Responsibilities, Other)
  * @param {string} text
  * @returns {{ required: string[], preferred: string[], responsibilities: string[], header: string[] }}
@@ -188,19 +262,19 @@ const partitionJdSections = (text = '') => {
   const sections = { header: [], required: [], preferred: [], responsibilities: [], other: [] };
 
   const isPreferredHeading = (line) =>
-    /^\s*#*\s*(?:preferred(?:\s+qualifications|\s+skills|\s+requirements)?|nice\s*to\s*have|good\s*to\s*have|bonus|plus|advantage|desired|additional\s*qualifications)\b[:\s-]*$/i.test(line) ||
-    /^\s*(?:preferred\s*qualifications|preferred\s*skills|nice\s*to\s*have|good\s*to\s*have)\s*[:]/i.test(line);
+    /^\s*#*\s*(?:preferred(?:\s+(?:qualifications|skills|requirements|experience))?|nice\s*to\s*have|good\s*to\s*have|bonus|plus|advantage|desired|desirable|additional\s*qualifications)\b[:\s-]*$/i.test(line) ||
+    /^\s*(?:preferred(?:\s+(?:qualifications|skills|requirements|experience))?|nice\s*to\s*have|good\s*to\s*have)\s*[:\-–]/i.test(line);
 
   const isRequiredHeading = (line) =>
-    /^\s*#*\s*(?:key\s*requirements|requirements|required(?:\s+skills|\s+qualifications)?|must\s*have|mandatory(?:\s+skills)?|core\s*requirements|basic\s*qualifications|minimum\s*qualifications|technical\s*requirements|what\s*(?:you'll|you\s*will)\s*need)\b[:\s-]*$/i.test(line) ||
-    /^\s*(?:key\s*requirements|requirements|required\s*skills|must\s*have)\s*[:]/i.test(line);
+    /^\s*#*\s*(?:key\s*requirements|requirements|required(?:\s+(?:skills|qualifications|experience))?|must\s*have(?:\s*skills)?|mandatory(?:\s*skills)?|core\s*requirements|basic\s*qualifications|minimum\s*qualifications|technical\s*requirements|technical\s*skills|key\s*skills|skills(?:\s*required)?|qualifications|what\s*(?:you'll|you\s*will)\s*need|(?:qualifications|skills|requirements)\s*(?:&|and)\s*(?:qualifications|skills|requirements))\b[:\s-]*$/i.test(line) ||
+    /^\s*(?:key\s*requirements|requirements|required\s*skills|must\s*have|technical\s*skills|key\s*skills|qualifications|skills|(?:qualifications|skills|requirements)\s*(?:&|and)\s*(?:qualifications|skills|requirements))\s*[:\-–]/i.test(line);
 
   const isRespHeading = (line) =>
-    /^\s*#*\s*(?:responsibilities|what\s*(?:you'll|you\s*will)\s*do|role\s*overview|day\s*to\s*day|key\s*duties)\b[:\s-]*$/i.test(line) ||
-    /^\s*(?:responsibilities|key\s*duties)\s*[:]/i.test(line);
+    /^\s*#*\s*(?:responsibilities|what\s*(?:you'll|you\s*will)\s*do|role\s*(?:responsibilities|overview)|key\s*responsibilities|your\s*role|day\s*to\s*day|key\s*duties|deliverables)\b[:\s-]*$/i.test(line) ||
+    /^\s*(?:responsibilities|role\s*responsibilities|key\s*responsibilities|your\s*role|key\s*duties)\s*[:\-–]/i.test(line);
 
   const isOtherHeading = (line) =>
-    /^\s*#*\s*(?:about\s*us|what\s*we\s*offer|benefits|perks|company\s*overview)\b[:\s-]*$/i.test(line);
+    /^\s*#*\s*(?:about\s*us|what\s*we\s*offer|benefits|perks|company\s*overview|who\s*we\s*are)\b[:\s-]*$/i.test(line);
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -221,26 +295,137 @@ const partitionJdSections = (text = '') => {
   return sections;
 };
 
-// 4. Section parsing for required vs preferred
+/**
+ * Evaluates extraction completeness and determines status: 'complete', 'partial', or 'failed'
+ */
+const evaluateExtractionStatus = ({ text, title, requiredSkills, preferredSkills, minimumExperience, preferredEducation, responsibilities }) => {
+  const extractedFields = [];
+  const missingFields = [];
+
+  const hasTitle = Boolean(title && title.trim());
+  if (hasTitle) extractedFields.push('title');
+  else missingFields.push('title');
+
+  const hasRequiredSkills = Array.isArray(requiredSkills) && requiredSkills.length > 0;
+  if (hasRequiredSkills) extractedFields.push('requiredSkills');
+  else missingFields.push('requiredSkills');
+
+  const hasExperience = minimumExperience !== undefined && minimumExperience !== null && minimumExperience > 0;
+  if (hasExperience) extractedFields.push('experience');
+  else missingFields.push('experience');
+
+  const hasResponsibilities = Array.isArray(responsibilities) && responsibilities.length > 0;
+  if (hasResponsibilities) extractedFields.push('responsibilities');
+  else missingFields.push('responsibilities');
+
+  const hasPreferredSkills = Array.isArray(preferredSkills) && preferredSkills.length > 0;
+  if (hasPreferredSkills) extractedFields.push('preferredSkills');
+  else missingFields.push('preferredSkills');
+
+  const hasEducation = Array.isArray(preferredEducation) && preferredEducation.length > 0;
+  if (hasEducation) extractedFields.push('education');
+  else missingFields.push('education');
+
+  // FAILED: Empty, almost empty, or completely unrecognizable
+  if (!text || text.trim().length < 30 || (!hasTitle && !hasRequiredSkills)) {
+    return {
+      status: 'failed',
+      extractedFields,
+      missingFields
+    };
+  }
+
+  // COMPLETE: Core fields confidently extracted (title and at least 1 required skill)
+  // Missing education or preferred skills is normal / optional and MUST NOT downgrade to failed or partial!
+  if (hasTitle && hasRequiredSkills) {
+    return {
+      status: 'complete',
+      extractedFields,
+      missingFields
+    };
+  }
+
+  // PARTIAL: Usable content extracted, but either title or required skills need confirmation
+  return {
+    status: 'partial',
+    extractedFields,
+    missingFields
+  };
+};
+
+/**
+ * Derives a normalized JobProfile from JD text and job record
+ *
+ * @param {Object} job - Raw job record or object
+ * @returns {Object} Normalized JobProfile
+ */
+const extractJobProfile = (job = {}) => {
+  const rawText = (job.description || job.rawText || '').trim();
+  const title = (job.title || extractJobTitle(rawText, job.fileName) || '').trim();
+  const fullText = `${title}\n${rawText}`.trim();
+
+  // 1. Minimum general experience
+  const rawMinExp = extractMinimumExperience(fullText);
+  const minimumExperience = job.minimumExperience !== undefined && job.minimumExperience !== null && job.minimumExperience > 0
+    ? job.minimumExperience
+    : rawMinExp;
+
+  // 2. Specific tech experience
+  const specificExperience = extractSpecificExperience(fullText);
+
+  // 3. Negated skills
+  const negatedSkills = extractNegatedSkills(fullText);
+
+  // 4. Section parsing for required vs preferred
   const sections = partitionJdSections(fullText);
   let rawReqSkills = [];
   let rawPrefSkills = [];
 
+  const isPrefLine = (line) => /(?:preferred|nice\s*to\s*have|good\s*to\s*have|plus|advantage|bonus|desired|desirable|optional)/i.test(line);
+  const isReqLine = (line) => /(?:must|required|mandatory|essential|strong\s*proficiency|strong\s*knowledge(?:\s*of)?|proficiency\s*in|key\s*requirements|experience\s*with)/i.test(line);
+
   if (sections.required.length > 0 || sections.preferred.length > 0) {
-    if (sections.required.length > 0) {
-      rawReqSkills = findSkillsInText(sections.required.join('\n'));
+    // Process required section lines
+    for (const line of sections.required) {
+      const skills = findSkillsInText(line);
+      if (isPrefLine(line)) {
+        rawPrefSkills.push(...skills);
+      } else {
+        rawReqSkills.push(...skills);
+      }
     }
-    if (sections.preferred.length > 0) {
-      rawPrefSkills = findSkillsInText(sections.preferred.join('\n'));
+
+    // Process preferred section lines
+    for (const line of sections.preferred) {
+      const skills = findSkillsInText(line);
+      if (/\b(?:must\s*have|mandatory|strictly\s*required)\b/i.test(line) && !isPrefLine(line)) {
+        rawReqSkills.push(...skills);
+      } else {
+        rawPrefSkills.push(...skills);
+      }
     }
   } else {
-    // If no explicit section headings, parse sentence by sentence
-    const sentences = fullText.split(/(?:\r?\n|[.!?]\s+)/).map((s) => s.trim()).filter(Boolean);
+    // If no explicit section headings, parse paragraph by paragraph and sentence by sentence
+    const paragraphs = fullText.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+    const sentences = [];
+    for (const p of paragraphs) {
+      if (/^[\s*•▪◦●·‣∙+\-–\d.)]/m.test(p)) {
+        p.split(/\r?\n/).forEach((l) => {
+          const trimmed = l.trim();
+          if (trimmed) sentences.push(trimmed);
+        });
+      } else {
+        const unwrapped = p.replace(/\r?\n+/g, ' ');
+        const sList = unwrapped.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean);
+        sentences.push(...sList);
+      }
+    }
+
     for (const s of sentences) {
       const skills = findSkillsInText(s);
-      if (/(?:preferred|nice\s*to\s*have|good\s*to\s*have|plus|advantage|bonus|desired)/i.test(s)) {
+      if (isPrefLine(s)) {
         rawPrefSkills.push(...skills);
-      } else if (/(?:must|required|mandatory|essential|strong\s*proficiency|key\s*requirements)/i.test(s)) {
+      } else if (isReqLine(s)) {
         rawReqSkills.push(...skills);
       }
     }
@@ -312,6 +497,16 @@ const partitionJdSections = (text = '') => {
     }
   }
 
+  const statusInfo = evaluateExtractionStatus({
+    text: rawText || fullText,
+    title,
+    requiredSkills,
+    preferredSkills,
+    minimumExperience,
+    preferredEducation,
+    responsibilities
+  });
+
   return {
     title,
     roleFamily,
@@ -324,15 +519,21 @@ const partitionJdSections = (text = '') => {
     negatedSkills,
     preferredEducation,
     categories,
-    rawText
+    rawText,
+    status: statusInfo.status,
+    extractedFields: statusInfo.extractedFields,
+    missingFields: statusInfo.missingFields
   };
 };
 
 module.exports = {
   extractJobProfile,
+  extractJobTitle,
+  partitionJdSections,
   detectSeniority,
   detectRoleFamily,
   extractNegatedSkills,
   extractResponsibilities,
-  extractSpecificExperience
+  extractSpecificExperience,
+  evaluateExtractionStatus
 };

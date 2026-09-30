@@ -34,31 +34,37 @@ const extractJDText = async (file) => {
     throw new Error('No file buffer provided for JD text extraction.');
   }
 
-  const mimeType = file.mimetype || '';
+  const mimeType = (file.mimetype || '').toLowerCase();
   const ext = path.extname(file.originalname || '').toLowerCase();
   let rawText = '';
 
   try {
-    if (mimeType === 'application/pdf' || ext === '.pdf') {
+    if (ext === '.pdf' || mimeType === 'application/pdf') {
       const pdfData = await pdfParse(file.buffer);
       rawText = pdfData.text || '';
     } else if (
+      ext === '.docx' ||
       mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-      mimeType === 'application/docx' ||
-      ext === '.docx'
+      mimeType === 'application/docx'
     ) {
       const result = await mammoth.extractRawText({ buffer: file.buffer });
       rawText = result.value || '';
     } else if (
+      ext === '.txt' ||
       mimeType === 'text/plain' ||
-      ext === '.txt'
+      mimeType.startsWith('text/')
     ) {
       rawText = file.buffer.toString('utf-8');
+    } else if (ext === '.doc') {
+      throw new Error('Unsupported legacy Word format (.doc). Please save as .docx or .pdf.');
     } else {
-      throw new Error(`Unsupported JD file type: ${file.originalname}`);
+      throw new Error(`Unsupported JD file type: ${file.originalname || 'file'}. Only PDF, DOCX, and TXT are supported.`);
     }
   } catch (err) {
-    if (err.message.startsWith('Unsupported JD file type')) {
+    if (
+      err.message.includes('Unsupported legacy Word format') ||
+      err.message.startsWith('Unsupported JD file type')
+    ) {
       throw err;
     }
     throw new Error(`Failed to parse file "${file.originalname}": ${err.message}`);

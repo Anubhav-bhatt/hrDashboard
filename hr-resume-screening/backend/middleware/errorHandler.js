@@ -30,8 +30,10 @@ const errorHandler = (err, req, res, next) => {
         : `File upload error: ${err.message}`;
   }
 
-  if (err.code === 'UNSUPPORTED_FILE_TYPE') {
+  if (err.code === 'UNSUPPORTED_FILE_TYPE' || err.code === 'UNSUPPORTED_LEGACY_DOC') {
     statusCode = 400;
+    errorCode = err.code;
+    message = err.message;
   }
 
   // Known Prisma failures
