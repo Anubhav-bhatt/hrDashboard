@@ -47,86 +47,27 @@ const normalizePhone = (phone) => {
   return null;
 };
 
+const {
+  canonicalizeSkill,
+  normalizeSkillList,
+  ALIAS_TO_CANONICAL
+} = require('./skillTaxonomy');
+
 /**
- * Map of common skill synonym variations to canonical skill names
+ * Map of common skill synonym variations to canonical skill names (backward-compatible)
  */
-const SKILL_MAP = {
-  'reactjs': 'React',
-  'react.js': 'React',
-  'react': 'React',
-  'nodejs': 'Node.js',
-  'node.js': 'Node.js',
-  'node': 'Node.js',
-  'expressjs': 'Express',
-  'express.js': 'Express',
-  'express': 'Express',
-  'mongodb': 'MongoDB',
-  'mongo': 'MongoDB',
-  'typescript': 'TypeScript',
-  'ts': 'TypeScript',
-  'javascript': 'JavaScript',
-  'js': 'JavaScript',
-  'html5': 'HTML',
-  'html': 'HTML',
-  'css3': 'CSS',
-  'css': 'CSS',
-  'tailwindcss': 'Tailwind CSS',
-  'tailwind': 'Tailwind CSS',
-  'nextjs': 'Next.js',
-  'next.js': 'Next.js',
-  'vuejs': 'Vue',
-  'vue.js': 'Vue',
-  'vue': 'Vue',
-  'angularjs': 'Angular',
-  'angular': 'Angular',
-  'python': 'Python',
-  'java': 'Java',
-  'springboot': 'Spring Boot',
-  'spring boot': 'Spring Boot',
-  'postgresql': 'PostgreSQL',
-  'postgres': 'PostgreSQL',
-  'mysql': 'MySQL',
-  'redis': 'Redis',
-  'aws': 'AWS',
-  'amazon web services': 'AWS',
-  'docker': 'Docker',
-  'kubernetes': 'Kubernetes',
-  'git': 'Git',
-  'github': 'GitHub',
-  'rest api': 'REST API',
-  'restful apis': 'REST API',
-  'restful api': 'REST API',
-  'graphql': 'GraphQL',
-  'ci/cd': 'CI/CD'
-};
+const SKILL_MAP = Object.fromEntries(ALIAS_TO_CANONICAL.entries());
 
 /**
  * Normalizes and deduplicates an array of skills
  */
-const normalizeSkills = (skills) => {
-  if (!Array.isArray(skills)) return [];
-
-  const uniqueSkills = new Set();
-
-  skills.forEach(skill => {
-    if (!skill || typeof skill !== 'string') return;
-    const lower = skill.trim().toLowerCase();
-
-    if (SKILL_MAP[lower]) {
-      uniqueSkills.add(SKILL_MAP[lower]);
-    } else if (skill.trim().length > 1) {
-      // Capitalize first letter
-      const formatted = skill.trim().charAt(0).toUpperCase() + skill.trim().slice(1);
-      uniqueSkills.add(formatted);
-    }
-  });
-
-  return Array.from(uniqueSkills);
-};
+const normalizeSkills = (skills) => normalizeSkillList(skills);
 
 module.exports = {
   normalizeName,
   normalizeEmail,
   normalizePhone,
-  normalizeSkills
+  normalizeSkills,
+  SKILL_MAP
 };
+

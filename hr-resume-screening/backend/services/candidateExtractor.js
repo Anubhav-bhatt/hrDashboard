@@ -181,7 +181,10 @@ const extractEducation = (text) => {
     /M\.?Sc\b/i,
     /Bachelor of Technology/i,
     /Master of Computer Applications/i,
-    /Bachelor of Computer Applications/i
+    /Bachelor of Computer Applications/i,
+    /Bachelor(?:'s)?(?:\s+degree)?(?:\s+in\s+[\w\s]+)?/i,
+    /Master(?:'s)?(?:\s+degree)?(?:\s+in\s+[\w\s]+)?/i,
+    /Diploma(?:\s+in\s+[\w\s]+)?/i
   ];
 
   const degrees = new Set();

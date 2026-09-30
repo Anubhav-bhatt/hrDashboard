@@ -157,8 +157,13 @@ const processCandidateResume = async ({
       roleKeywords: job.roleKeywords || []
     };
 
-    const matchResult = matchCandidateToJob({ ...job, requirements: jobReqs }, profile);
-    const insights = await generateCandidateInsights(profile, matchResult, jobReqs);
+    const candidateInput = {
+      ...profile,
+      resumeText: parsedText,
+      parsedProfile: profile.parsedProfile
+    };
+    const matchResult = matchCandidateToJob({ ...job, requirements: jobReqs }, candidateInput);
+    const insights = await generateCandidateInsights(candidateInput, matchResult, jobReqs);
 
     // 11. Persist Candidate Record to PostgreSQL
     const uniqueMessageId = sourceMessageId || `manual_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -168,6 +173,10 @@ const processCandidateResume = async ({
     // document later. Outlook-sourced resumes are re-fetched live from Graph
     // instead, so they are not duplicated here.
     const storeBlob = process.env.STORE_RESUME_BLOB !== 'false' && sourceType !== 'OUTLOOK';
+
+    const parsedWithMatch = profile.parsedProfile
+      ? { ...profile.parsedProfile, matchResult }
+      : { matchResult };
 
     const candidate = await prisma.candidate.create({
       data: {
@@ -194,7 +203,7 @@ const processCandidateResume = async ({
         education: profile.education || [],
         projects: profile.projects || [],
         resumeText: parsedText,
-        parsedProfile: profile.parsedProfile || null,
+        parsedProfile: parsedWithMatch,
         source: sourceType,
         sourceRelativePath: relativePath || null,
         outlookMessageId: uniqueMessageId,

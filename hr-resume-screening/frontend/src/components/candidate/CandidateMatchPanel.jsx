@@ -1,5 +1,16 @@
 import React, { useState } from 'react';
-import { Check, CheckCircle2, ChevronDown, HelpCircle, Sparkles, XCircle } from 'lucide-react';
+import {
+  AlertCircle,
+  Briefcase,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  Code2,
+  HelpCircle,
+  Layers,
+  Sparkles,
+  XCircle
+} from 'lucide-react';
 import { Badge, Button, Card, CardHeader, Meter, cx } from '../ui';
 import { getScoreMeta } from '../../utils/format';
 
@@ -47,7 +58,7 @@ const CompatibilityFlag = ({ label, value }) => {
 
 /**
  * Explainable relevance score: the total, the weighted breakdown that produced
- * it, requirement compatibility, and the recorded strengths and gaps.
+ * it, requirement compatibility, matched/missing skills with evidence, and recorded strengths.
  */
 const CandidateMatchPanel = ({ candidate, onReanalyze, analyzing }) => {
   const analysis = candidate.matchAnalysis;
@@ -72,6 +83,32 @@ const CandidateMatchPanel = ({ candidate, onReanalyze, analyzing }) => {
   const meta = getScoreMeta(analysis.overallScore);
   const flags = analysis.compatibilityFlags || candidate.compatibilityFlags || {};
 
+  // Extract experience comparison details
+  const expDetails = analysis.experienceDetails;
+  const reqExp = expDetails?.requiredYears ?? candidate.job?.minimumExperience ?? 0;
+  const relExp = expDetails?.relevantYears ?? candidate.totalExperience ?? 0;
+
+  // Extract role relevance label
+  const roleScore = analysis.roleScore ?? 0;
+  const roleRelevanceLabel = roleScore >= 12 ? 'Strong' : roleScore >= 8 ? 'Good' : roleScore >= 4 ? 'Partial' : 'Low';
+
+  // Matched and missing skills
+  const matchedReqList = analysis.requiredSkillMatches?.length
+    ? analysis.requiredSkillMatches.filter((m) => m.status === 'MATCHED')
+    : (analysis.matchedSkills || []).map((s) => ({ matchedSkill: s, matchType: 'MATCHED' }));
+
+  const missingReqList = analysis.missingRequiredSkills || [];
+
+  // Key evidence bullets
+  const keyEvidenceList = (analysis.keyEvidence && analysis.keyEvidence.length > 0)
+    ? analysis.keyEvidence
+    : (analysis.strengths && analysis.strengths.length > 0)
+      ? analysis.strengths
+      : [];
+
+  // Additional candidate skills
+  const additionalSkillsList = analysis.additionalSkills || [];
+
   return (
     <Card padding="p-0">
       <div className="px-5 py-4 border-b border-slate-100">
@@ -86,70 +123,147 @@ const CandidateMatchPanel = ({ candidate, onReanalyze, analyzing }) => {
         />
       </div>
 
-      <div className="px-5 py-4">
+      <div className="px-5 py-4 space-y-5">
         {/* Headline score */}
-        <div className="flex items-end gap-3">
-          <span className="text-[2.5rem] leading-none font-bold text-slate-900 tabular-nums">
-            {analysis.overallScore}
-            <span className="text-xl text-slate-400">%</span>
-          </span>
-          <Badge variant={meta.badge.replace('badge-', '')} className="mb-1.5">
-            {analysis.alignmentLabel || meta.label}
-          </Badge>
+        <div>
+          <div className="flex items-end gap-3">
+            <span className="text-[2.5rem] leading-none font-bold text-slate-900 tabular-nums">
+              {analysis.overallScore}
+              <span className="text-xl text-slate-400">%</span>
+            </span>
+            <Badge variant={meta.badge.replace('badge-', '')} className="mb-1.5">
+              {analysis.alignmentLabel || meta.label}
+            </Badge>
+          </div>
+
+          <Meter
+            value={analysis.overallScore}
+            barClass={meta.bar}
+            label={`Overall relevance score: ${analysis.overallScore} out of 100`}
+            className="mt-3 h-2"
+          />
         </div>
 
-        <Meter
-          value={analysis.overallScore}
-          barClass={meta.bar}
-          label={`Overall relevance score: ${analysis.overallScore} out of 100`}
-          className="mt-3 h-2"
-        />
+        {/* Experience & Role Relevance Overview */}
+        <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
+          <div>
+            <div className="text-xs text-slate-500 flex items-center gap-1 font-medium">
+              <Briefcase className="w-3.5 h-3.5 text-slate-400" />
+              Experience
+            </div>
+            <div className="text-sm font-semibold text-slate-800 mt-0.5">
+              {relExp} yrs relevant <span className="text-xs font-normal text-slate-500">/ {reqExp} req</span>
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-slate-500 flex items-center gap-1 font-medium">
+              <Layers className="w-3.5 h-3.5 text-slate-400" />
+              Role relevance
+            </div>
+            <div className="text-sm font-semibold text-slate-800 mt-0.5">
+              {roleRelevanceLabel}
+            </div>
+          </div>
+        </div>
 
-        {/* Why this candidate matches — the first thing a recruiter should read,
-            ahead of the arithmetic that produced the number. */}
-        {(analysis.strengths?.length > 0 || analysis.gaps?.length > 0) && (
-          <div className="mt-5 pt-4 divider space-y-4">
-            {analysis.strengths?.length > 0 && (
-              <div>
-                <h3 className="text-card-title text-slate-900 mb-2">Why this candidate matches</h3>
-                <ul className="space-y-1.5">
-                  {analysis.strengths.map((item, index) => (
-                    <li key={index} className="text-meta text-slate-700 flex gap-2">
-                      <Check className="w-3.5 h-3.5 text-emerald-600 mt-1 shrink-0" aria-hidden="true" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
+        {/* Matched & Missing Skills */}
+        <div className="pt-3 border-t border-slate-100">
+          <h3 className="text-label uppercase text-slate-500 mb-2">Requirement Coverage</h3>
+          
+          {/* Matched */}
+          {matchedReqList.length > 0 && (
+            <div className="mb-3">
+              <span className="text-xs font-semibold text-emerald-700 block mb-1.5">Matched</span>
+              <div className="flex flex-wrap gap-1.5">
+                {matchedReqList.map((item, idx) => (
+                  <span
+                    key={idx}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-emerald-50 text-emerald-800 border border-emerald-200"
+                  >
+                    <Check className="w-3 h-3 text-emerald-600" />
+                    {item.matchedSkill || item.requirement}
+                    {item.matchType && item.matchType !== 'EXACT' && item.matchType !== 'MATCHED' && (
+                      <span className="text-[10px] uppercase font-mono px-1 py-0.2 bg-emerald-100 rounded text-emerald-700">
+                        {item.matchType}
+                      </span>
+                    )}
+                  </span>
+                ))}
               </div>
-            )}
+            </div>
+          )}
 
-            {analysis.gaps?.length > 0 && (
-              <div>
-                <h3 className="text-card-title text-slate-900 mb-2">Potential gaps</h3>
-                <ul className="space-y-1.5">
-                  {analysis.gaps.map((item, index) => (
-                    <li key={index} className="text-meta text-slate-700 flex gap-2">
-                      <span className="text-slate-400 mt-0.5 shrink-0" aria-hidden="true">•</span>
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-                <p className="text-xs text-slate-400 mt-2">
-                  Based on what the resume states. A gap is something the document did not evidence, not a judgement.
-                </p>
+          {/* Missing */}
+          {missingReqList.length > 0 && (
+            <div>
+              <span className="text-xs font-semibold text-rose-700 block mb-1.5">Missing</span>
+              <div className="flex flex-wrap gap-1.5">
+                {missingReqList.map((skill, idx) => (
+                  <span
+                    key={idx}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-rose-50 text-rose-800 border border-rose-200"
+                  >
+                    <XCircle className="w-3 h-3 text-rose-500" />
+                    {skill}
+                  </span>
+                ))}
               </div>
-            )}
+            </div>
+          )}
+        </div>
+
+        {/* Key Evidence */}
+        {keyEvidenceList.length > 0 && (
+          <div className="pt-3 border-t border-slate-100">
+            <h3 className="text-label uppercase text-slate-500 mb-2">Key Evidence</h3>
+            <ul className="space-y-1.5">
+              {keyEvidenceList.map((bullet, idx) => (
+                <li key={idx} className="text-meta text-slate-700 flex gap-2">
+                  <Check className="w-3.5 h-3.5 text-emerald-600 mt-1 shrink-0" aria-hidden="true" />
+                  <span>{bullet}</span>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 
+        {/* Additional Skills */}
+        {additionalSkillsList.length > 0 && (
+          <div className="pt-3 border-t border-slate-100">
+            <h3 className="text-label uppercase text-slate-500 mb-2">Additional Candidate Skills</h3>
+            <div className="flex flex-wrap gap-1.5">
+              {additionalSkillsList.slice(0, 10).map((skill, idx) => (
+                <span
+                  key={idx}
+                  className="px-2 py-0.5 rounded text-xs bg-slate-100 text-slate-700 border border-slate-200"
+                >
+                  {skill}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
-        {/*
-          The weighted arithmetic is available but not the first thing a recruiter
-          reads. Most of the time "94%" plus the matched skills and gaps below is
-          the whole answer; the component-by-component maths is for the times it
-          is questioned.
-        */}
-        <div className="mt-5">
+        {/* Potential Gaps (if distinct from missing skills) */}
+        {analysis.gaps?.length > 0 && (
+          <div className="pt-3 border-t border-slate-100">
+            <h3 className="text-label uppercase text-slate-500 mb-2">Potential Gaps</h3>
+            <ul className="space-y-1.5">
+              {analysis.gaps.map((item, index) => (
+                <li key={index} className="text-meta text-slate-700 flex gap-2">
+                  <span className="text-slate-400 mt-0.5 shrink-0" aria-hidden="true">•</span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-slate-400 mt-2">
+              Based on what the resume states. A gap is something the document did not evidence, not a judgement.
+            </p>
+          </div>
+        )}
+
+        {/* Why this score? Expandable Dimension Breakdown */}
+        <div className="pt-3 border-t border-slate-100">
           <button
             type="button"
             onClick={() => setBreakdownOpen((open) => !open)}
@@ -192,7 +306,7 @@ const CandidateMatchPanel = ({ candidate, onReanalyze, analyzing }) => {
         </div>
 
         {/* Requirement compatibility */}
-        <div className="mt-5 pt-4 divider">
+        <div className="pt-3 border-t border-slate-100">
           <h3 className="text-label uppercase text-slate-500 mb-1">Requirement compatibility</h3>
           <ul className="divide-y divide-slate-100">
             {Object.entries(FLAG_LABELS).map(([key, label]) => (
@@ -202,7 +316,7 @@ const CandidateMatchPanel = ({ candidate, onReanalyze, analyzing }) => {
         </div>
 
         {analysis.summary && (
-          <div className="mt-5 pt-4 divider">
+          <div className="pt-3 border-t border-slate-100">
             <h3 className="text-label uppercase text-slate-500 mb-2">Summary</h3>
             <p className="text-meta text-slate-600 leading-relaxed">{analysis.summary}</p>
           </div>

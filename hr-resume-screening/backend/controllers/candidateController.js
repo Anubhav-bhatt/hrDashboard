@@ -246,9 +246,15 @@ const analyzeCandidate = async (req, res, next) => {
 
     const jobReqs = buildJobRequirements(job);
     const candProfile = formatCandidateForApi(candidate, job);
-    const matchResult = matchCandidateToJob({ ...job, requirements: jobReqs }, candProfile);
-    const insights = await generateCandidateInsights(candProfile, matchResult, jobReqs);
+    const matchInput = {
+      ...candProfile,
+      resumeText: candidate.resumeText,
+      parsedProfile: candidate.parsedProfile
+    };
+    const matchResult = matchCandidateToJob({ ...job, requirements: jobReqs }, matchInput);
+    const insights = await generateCandidateInsights(matchInput, matchResult, jobReqs);
 
+    const existingParsed = candidate.parsedProfile && typeof candidate.parsedProfile === 'object' ? candidate.parsedProfile : {};
     const updated = await prisma.candidate.update({
       where: { id: candidate.id },
       data: {
@@ -267,6 +273,7 @@ const analyzeCandidate = async (req, res, next) => {
         strengths: insights.strengths || [],
         gaps: insights.gaps || [],
         analysisSummary: insights.summary || '',
+        parsedProfile: { ...existingParsed, matchResult },
         analyzedAt: new Date()
       }
     });
@@ -317,8 +324,14 @@ const analyzeAllCandidates = async (req, res, next) => {
         batch.map(async (cand) => {
           try {
             const candProfile = formatCandidateForApi(cand, job);
-            const matchResult = matchCandidateToJob({ ...job, requirements: jobReqs }, candProfile);
-            const insights = await generateCandidateInsights(candProfile, matchResult, jobReqs);
+            const matchInput = {
+              ...candProfile,
+              resumeText: cand.resumeText,
+              parsedProfile: cand.parsedProfile
+            };
+            const matchResult = matchCandidateToJob({ ...job, requirements: jobReqs }, matchInput);
+            const insights = await generateCandidateInsights(matchInput, matchResult, jobReqs);
+            const existingParsed = cand.parsedProfile && typeof cand.parsedProfile === 'object' ? cand.parsedProfile : {};
 
             await prisma.candidate.update({
               where: { id: cand.id },
@@ -338,6 +351,7 @@ const analyzeAllCandidates = async (req, res, next) => {
                 strengths: insights.strengths || [],
                 gaps: insights.gaps || [],
                 analysisSummary: insights.summary || '',
+                parsedProfile: { ...existingParsed, matchResult },
                 analyzedAt: new Date()
               }
             });

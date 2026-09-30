@@ -140,7 +140,13 @@ const formatCandidateForApi = (cand, job = null) => {
           strengths: asArray(cand.strengths),
           gaps: asArray(cand.gaps),
           summary: cand.analysisSummary,
-          analyzedAt: cand.analyzedAt
+          analyzedAt: cand.analyzedAt,
+          requiredSkillMatches: cand.parsedProfile?.matchResult?.requiredSkillMatches || cand.requiredSkillMatches || [],
+          preferredSkillMatches: cand.parsedProfile?.matchResult?.preferredSkillMatches || cand.preferredSkillMatches || [],
+          additionalSkills: cand.parsedProfile?.matchResult?.additionalSkills || cand.additionalSkills || [],
+          keyEvidence: cand.parsedProfile?.matchResult?.keyEvidence || cand.keyEvidence || [],
+          experienceDetails: cand.parsedProfile?.matchResult?.experienceDetails || cand.experienceDetails || null,
+          roleRelevanceDetails: cand.parsedProfile?.matchResult?.roleRelevanceDetails || cand.roleRelevanceDetails || null
         }
       : null
   };
