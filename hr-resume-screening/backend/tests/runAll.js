@@ -22,6 +22,8 @@ const SUITES = [
   { name: 'Workspace isolation between accounts', file: 'workspaceIsolation.test.js', requiresDatabase: true },
   { name: 'Jobs portal & job-wise dashboard', file: 'jobPortal.test.js', requiresDatabase: true },
   { name: 'Job closure & candidate selection', file: 'jobClosure.test.js', requiresDatabase: true },
+  { name: 'Closed job permanent deletion', file: 'jobDeletion.test.js', requiresDatabase: true },
+  { name: 'Multi-user account & admin activity audit', file: 'multiUserAccount.test.js', requiresDatabase: true },
   { name: 'AI API (POST /api/ai/run)', file: 'aiApi.test.js', requiresDatabase: true },
   { name: 'AI tool layer', file: 'aiTools.test.js', requiresDatabase: true },
   { name: 'Screening Agent (mode=screening)', file: 'screeningAgent.test.js', requiresDatabase: false },

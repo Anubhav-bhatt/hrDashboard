@@ -166,6 +166,14 @@ const teardown = async () => {
   await prisma.candidateNote.deleteMany({ where: { candidateId: { in: created.candidateIds } } }).catch(() => {});
   await prisma.candidate.deleteMany({ where: { id: { in: created.candidateIds } } }).catch(() => {});
   await prisma.importSession.deleteMany({ where: { jobId: { in: created.jobIds } } }).catch(() => {});
+  await prisma.platformActivity.deleteMany({
+    where: {
+      OR: [
+        { userId: { in: created.userIds } },
+        { entityId: { in: created.jobIds } }
+      ]
+    }
+  }).catch(() => {});
   await prisma.job.deleteMany({ where: { id: { in: created.jobIds } } }).catch(() => {});
   await cleanupTestWorkspaces(created.userIds).catch(() => {});
   await prisma.user.deleteMany({ where: { id: { in: created.userIds } } }).catch(() => {});
@@ -282,6 +290,42 @@ const run = async () => {
     assert.ok(!/prisma|sql|constraint/i.test(JSON.stringify(response.body)), 'no internals leak');
   });
 
+  await testAsync('cross-workspace deletion is refused with 404', async () => {
+    const jobA = await makeJob(`${PREFIX} Workspace A Role`);
+    const hireA = await makeCandidate(jobA.id, { name: 'Workspace A Person', status: 'SHORTLISTED' });
+    await closeThroughTheRealWorkflow(jobA.id, hireA.id);
+
+    // Create Admin User B in a separate Workspace B
+    const userBEmail = `${PREFIX}.admin_b@example.invalid`.toLowerCase();
+    const userB = await prisma.user.upsert({
+      where: { email: userBEmail },
+      update: { passwordHash: await hashPassword(PASSWORD), isActive: true, role: 'ADMIN' },
+      create: { email: userBEmail, passwordHash: await hashPassword(PASSWORD), name: 'Admin B', role: 'ADMIN' }
+    });
+    created.userIds.push(userB.id);
+    await ensureTestWorkspace(userB.id, { name: 'Workspace B Deletion' });
+
+    const loginB = await request('POST', '/auth/login', {
+      body: { email: userBEmail, password: PASSWORD },
+      cookie: ''
+    });
+    const cookieB = loginB.setCookie.split(';')[0];
+
+    const response = await request('DELETE', `/jobs/${jobA.id}`, {
+      body: { confirmation: jobA.title },
+      cookie: cookieB
+    });
+
+    assert.strictEqual(response.status, 404, 'cross-workspace attempt must return 404');
+    assert.strictEqual(response.body.code, 'JOB_NOT_FOUND');
+
+    // Confirm job A and candidate A in Workspace A remain completely untouched
+    const untouchedJob = await prisma.job.findUnique({ where: { id: jobA.id } });
+    assert.ok(untouchedJob, 'job in Workspace A is untouched');
+    assert.strictEqual(untouchedJob.status, 'CLOSED');
+    assert.strictEqual(await prisma.candidate.count({ where: { jobId: jobA.id } }), 1);
+  });
+
   /* --------------------------------------------------- the real deletion */
 
   suite.group('Deleting a closed job for real');
@@ -383,6 +427,33 @@ const run = async () => {
       closed.body.data.some((j) => j.id === survivingClosedJob.id),
       'the other closed job is still listed'
     );
+  });
+
+  await testAsync('a minimal deletion audit record is created in PlatformActivity', async () => {
+    const activity = await prisma.platformActivity.findFirst({
+      where: { action: 'JOB_PERMANENTLY_DELETED', entityId: deletedJobId },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    assert.ok(activity, 'PlatformActivity row created for JOB_PERMANENTLY_DELETED');
+    assert.strictEqual(activity.action, 'JOB_PERMANENTLY_DELETED');
+    assert.strictEqual(activity.entityType, 'JOB');
+    assert.strictEqual(activity.entityName, `${PREFIX} Full Cycle Role`);
+    assert.strictEqual(activity.userName, 'Delete Admin');
+    assert.strictEqual(activity.userEmail, ADMIN_EMAIL);
+    assert.ok(activity.description.includes('permanently deleted closed job'));
+
+    // Verify metadata has operational counts and ZERO candidate PII
+    assert.ok(activity.metadata, 'has metadata');
+    assert.strictEqual(activity.metadata.deletedJobId, deletedJobId);
+    assert.strictEqual(activity.metadata.deletedCandidatesCount, 8);
+    assert.strictEqual(activity.metadata.storedResumesRemoved, 7);
+
+    // Verify no PII or sensitive data
+    const metaStr = JSON.stringify(activity.metadata);
+    assert.ok(!metaStr.includes('Cycle Person'), 'no candidate names in audit metadata');
+    assert.ok(!metaStr.includes('resume.pdf'), 'no resume paths in audit metadata');
+    assert.ok(!metaStr.includes('Job description for'), 'no JD text in audit metadata');
   });
 
   /* ------------------------------------------------------- blast radius */

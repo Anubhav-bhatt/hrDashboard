@@ -7,6 +7,7 @@ const { getJobDetails } = require('../services/jobService');
 const { STRONG_MATCH_MIN } = require('../utils/scoreThresholds');
 const { closeJob, getShortlistedCandidates, JobClosureError } = require('../services/jobClosureService');
 const { deleteClosedJob, previewJobDeletion, JobDeletionError } = require('../services/jobDeletionService');
+const { recordPlatformActivity } = require('../services/platformActivityService');
 
 /**
  * @desc    Create a new recruitment job with uploaded JD using Prisma
@@ -54,8 +55,21 @@ const createJob = async (req, res, next) => {
         preferredSkills: reqs.preferredSkills || [],
         roleKeywords: reqs.roleKeywords || [],
         minimumExperience: reqs.minimumExperience || 0,
-        preferredEducation: reqs.preferredEducation || []
+        preferredEducation: reqs.preferredEducation || [],
+        createdByUserId: req.user?.id || null
       }
+    });
+
+    recordPlatformActivity({
+      userId: req.user?.id || null,
+      userName: req.user?.name || 'Recruiter',
+      userEmail: req.user?.email || null,
+      action: 'JOB_CREATED',
+      entityType: 'JOB',
+      entityId: job.id,
+      entityName: job.title,
+      description: `${req.user?.name || 'Recruiter'} created job "${job.title}"`,
+      metadata: { jobId: job.id, title: job.title, jdFileName: job.jdFileName }
     });
 
     return res.status(201).json({
@@ -512,7 +526,8 @@ const deleteJobById = async (req, res, next) => {
     const summary = await deleteClosedJob({
       jobId,
       confirmation,
-      actor: req.user || null
+      actor: req.user || null,
+      workspaceId: req.workspaceId || null
     });
 
     return res.status(200).json({
@@ -544,7 +559,7 @@ const deleteJobById = async (req, res, next) => {
  */
 const getJobDeletionPreview = async (req, res, next) => {
   try {
-    const preview = await previewJobDeletion(req.params.jobId);
+    const preview = await previewJobDeletion(req.params.jobId, req.workspaceId || null);
     return res.status(200).json({ success: true, data: preview });
   } catch (error) {
     if (error instanceof JobDeletionError) {

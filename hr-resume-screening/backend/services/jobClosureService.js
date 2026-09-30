@@ -1,5 +1,6 @@
 const prisma = require('../config/prisma');
 const { recordActivityWithin } = require('./activityService');
+const { recordPlatformActivityWithin } = require('./platformActivityService');
 
 /**
  * Job closure: recording the hire for a vacancy and retiring the job.
@@ -154,20 +155,33 @@ const closeJob = async ({ jobId, selectedCandidateId, actor = null }) => {
     // Audit trail. Written inside the transaction so history and state commit
     // together. Names only — no contact details reach the activity log.
     const candidateName = candidate.name || 'Candidate';
-    await recordActivityWithin(tx, {
-      candidateId: candidate.id,
-      actor,
-      type: 'CANDIDATE_SELECTED',
-      description: `${candidateName} selected for ${job.title}.`,
-      metadata: { jobId, previousStatus: SELECTABLE_FROM_STATUS }
-    });
-    await recordActivityWithin(tx, {
-      candidateId: candidate.id,
-      actor,
-      type: 'JOB_CLOSED',
-      description: `${job.title} closed.`,
-      metadata: { jobId, selectedCandidateId: candidate.id }
-    });
+    await Promise.all([
+      recordActivityWithin(tx, {
+        candidateId: candidate.id,
+        actor,
+        type: 'CANDIDATE_SELECTED',
+        description: `${candidateName} selected for ${job.title}.`,
+        metadata: { jobId, previousStatus: SELECTABLE_FROM_STATUS }
+      }),
+      recordActivityWithin(tx, {
+        candidateId: candidate.id,
+        actor,
+        type: 'JOB_CLOSED',
+        description: `${job.title} closed.`,
+        metadata: { jobId, selectedCandidateId: candidate.id }
+      }),
+      recordPlatformActivityWithin(tx, {
+        userId: actor && actor.id ? actor.id : null,
+        userName: actor && actor.name ? actor.name : 'Recruiter',
+        userEmail: actor && actor.email ? actor.email : null,
+        action: 'JOB_CLOSED',
+        entityType: 'JOB',
+        entityId: job.id,
+        entityName: job.title,
+        description: `${actor && actor.name ? actor.name : 'Recruiter'} closed job "${job.title}" and selected ${candidateName}`,
+        metadata: { jobId, candidateId: candidate.id, candidateName }
+      })
+    ]);
 
     return tx.job.findUnique({
       where: { id: jobId },
@@ -181,6 +195,9 @@ const closeJob = async ({ jobId, selectedCandidateId, actor = null }) => {
         selectedCandidate: { select: SELECTED_CANDIDATE_SELECT }
       }
     });
+  }, {
+    maxWait: 15000,
+    timeout: 30000
   });
 };
 

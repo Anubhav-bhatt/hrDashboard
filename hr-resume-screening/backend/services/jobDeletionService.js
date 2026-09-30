@@ -102,125 +102,157 @@ const measure = async (tx, jobId) => {
  * @returns {Promise<Object>} A summary of what was destroyed
  * @throws {JobDeletionError}
  */
-const deleteClosedJob = async ({ jobId, confirmation, actor = null }) => {
-  const summary = await prisma.$transaction(async (tx) => {
-    const job = await tx.job.findUnique({
-      where: { id: jobId },
-      select: { id: true, title: true, status: true, closedAt: true, selectedCandidateId: true }
-    });
+const deleteClosedJob = async ({ jobId, confirmation, actor = null, workspaceId = null }) => {
+  const summary = await prisma.$transaction(
+    async (tx) => {
+      const job = await tx.job.findUnique({
+        where: { id: jobId },
+        select: { id: true, title: true, status: true, closedAt: true, selectedCandidateId: true, workspaceId: true }
+      });
 
-    if (!job) {
-      throw new JobDeletionError('JOB_NOT_FOUND', 'Job not found.', 404);
-    }
-
-    /*
-     * The lifecycle gate. An open role is live recruitment and its candidates
-     * are live work, so there is no path — not even an authorised one — that
-     * destroys it. Closing first is deliberate friction: it makes the recruiter
-     * record the outcome before the record can be discarded.
-     */
-    if (job.status !== 'CLOSED') {
-      throw new JobDeletionError(
-        'JOB_NOT_CLOSED',
-        'Only a closed job can be permanently deleted. Close this job first.',
-        409
-      );
-    }
-
-    // The caller has to name what they are destroying. This is what makes a
-    // single stray click — or a replayed request — incapable of deleting a role.
-    if (!normalise(confirmation) || normalise(confirmation) !== normalise(job.title)) {
-      throw new JobDeletionError(
-        'DELETE_CONFIRMATION_MISMATCH',
-        'Type the job title exactly as shown to confirm permanent deletion.',
-        400
-      );
-    }
-
-    const before = await measure(tx, job.id);
-
-    /*
-     * Deleted explicitly, child-first, rather than leaning on the database
-     * cascade.
-     *
-     * Postgres would in fact cascade all of this from a single `job.delete()` —
-     * that was verified against the live schema, including through raw SQL. Two
-     * reasons not to rely on it anyway: `deleteMany` returns the row count each
-     * step actually removed, which is what makes the summary below a measurement
-     * rather than an estimate; and the guarantee is a property of the database's
-     * foreign keys, so it would silently disappear if Prisma's relationMode ever
-     * moved to "prisma", which turns FK enforcement off. The order below has no
-     * dependency on either.
-     */
-    const activities = await tx.candidateActivity.deleteMany({
-      where: { candidateId: { in: before.candidateIds } }
-    });
-    const notes = await tx.candidateNote.deleteMany({
-      where: { candidateId: { in: before.candidateIds } }
-    });
-
-    // Clearing the job's pointer at its hire before the candidate rows go. The
-    // FK is ON DELETE SET NULL and would handle it, but the job row is about to
-    // be re-read by the guarded delete below and this keeps that read honest.
-    await tx.job.update({ where: { id: job.id }, data: { selectedCandidateId: null } });
-
-    const candidates = await tx.candidate.deleteMany({ where: { jobId: job.id } });
-    const importSessions = await tx.importSession.deleteMany({ where: { jobId: job.id } });
-
-    /*
-     * The job itself, still guarded on CLOSED.
-     *
-     * Closure is terminal in this product — there is no reopen route — so the
-     * status cannot have changed under us. The guard costs nothing and means the
-     * one statement that destroys the job is itself conditional on the rule,
-     * rather than trusting a check made earlier in the transaction.
-     */
-    const removed = await tx.job.deleteMany({ where: { id: job.id, status: 'CLOSED' } });
-
-    if (removed.count !== 1) {
-      throw new JobDeletionError('JOB_NOT_CLOSED', 'This job is no longer eligible for deletion.', 409);
-    }
-
-    return {
-      job: { id: job.id, title: job.title, closedAt: job.closedAt },
-      deleted: {
-        jobs: removed.count,
-        candidates: candidates.count,
-        candidateNotes: notes.count,
-        candidateActivities: activities.count,
-        importSessions: importSessions.count,
-        storedResumes: before.storedResumes,
-        jobDescriptions: 1
-      },
-      storage: {
-        // Resume bytes are a Postgres column, so removing the rows is what frees
-        // the space. Reported so the figure is a measurement, not a claim.
-        resumeBytesReleased: before.resumeBytes,
-        storedResumesRemoved: before.storedResumes
-      },
-      external: {
-        /*
-         * Nothing of the user's own is touched. Outlook-sourced candidates never
-         * had their bytes copied here in the first place, so there is no local
-         * copy to remove and — importantly — no reason for this operation to
-         * reach into a mailbox. The original emails are left exactly as they are.
-         */
-        outlookSourcedCandidates: before.outlookSourced,
-        mailboxOriginalsDeleted: 0
+      if (!job || (workspaceId && job.workspaceId !== workspaceId)) {
+        throw new JobDeletionError('JOB_NOT_FOUND', 'Job not found.', 404);
       }
-    };
-  });
+
+      /*
+       * The lifecycle gate. An open role is live recruitment and its candidates
+       * are live work, so there is no path — not even an authorised one — that
+       * destroys it. Closing first is deliberate friction: it makes the recruiter
+       * record the outcome before the record can be discarded.
+       */
+      if (job.status !== 'CLOSED') {
+        throw new JobDeletionError(
+          'JOB_NOT_CLOSED',
+          'Only a closed job can be permanently deleted. Close this job first.',
+          409
+        );
+      }
+
+      // The caller has to name what they are destroying. This is what makes a
+      // single stray click — or a replayed request — incapable of deleting a role.
+      if (!normalise(confirmation) || normalise(confirmation) !== normalise(job.title)) {
+        throw new JobDeletionError(
+          'DELETE_CONFIRMATION_MISMATCH',
+          'Type the job title exactly as shown to confirm permanent deletion.',
+          400
+        );
+      }
+
+      const before = await measure(tx, job.id);
+
+      /*
+       * Deleted explicitly, child-first, rather than leaning on the database
+       * cascade.
+       *
+       * Postgres would in fact cascade all of this from a single `job.delete()` —
+       * that was verified against the live schema, including through raw SQL. Two
+       * reasons not to rely on it anyway: `deleteMany` returns the row count each
+       * step actually removed, which is what makes the summary below a measurement
+       * rather than an estimate; and the guarantee is a property of the database's
+       * foreign keys, so it would silently disappear if Prisma's relationMode ever
+       * moved to "prisma", which turns FK enforcement off. The order below has no
+       * dependency on either.
+       */
+      const [activities, notes] = await Promise.all([
+        tx.candidateActivity.deleteMany({
+          where: { candidateId: { in: before.candidateIds } }
+        }),
+        tx.candidateNote.deleteMany({
+          where: { candidateId: { in: before.candidateIds } }
+        })
+      ]);
+
+      // Clearing the job's pointer at its hire before the candidate rows go. The
+      // FK is ON DELETE SET NULL and would handle it, but the job row is about to
+      // be re-read by the guarded delete below and this keeps that read honest.
+      await tx.job.update({ where: { id: job.id }, data: { selectedCandidateId: null } });
+
+      const [candidates, importSessions] = await Promise.all([
+        tx.candidate.deleteMany({ where: { jobId: job.id } }),
+        tx.importSession.deleteMany({ where: { jobId: job.id } })
+      ]);
+
+      /*
+       * The job itself, still guarded on CLOSED.
+       *
+       * Closure is terminal in this product — there is no reopen route — so the
+       * status cannot have changed under us. The guard costs nothing and means the
+       * one statement that destroys the job is itself conditional on the rule,
+       * rather than trusting a check made earlier in the transaction.
+       */
+      const removed = await tx.job.deleteMany({ where: { id: job.id, status: 'CLOSED' } });
+
+      if (removed.count !== 1) {
+        throw new JobDeletionError('JOB_NOT_CLOSED', 'This job is no longer eligible for deletion.', 409);
+      }
+
+      // Minimal deletion audit event preserved in PlatformActivity for accountability.
+      // Deliberately contains ZERO candidate PII, no resumes, no score breakdown, and no JD text.
+      try {
+        await tx.platformActivity.create({
+          data: {
+            userId: actor?.id || null,
+            userName: actor?.name || 'Administrator',
+            userEmail: actor?.email || null,
+            action: 'JOB_PERMANENTLY_DELETED',
+            entityType: 'JOB',
+            entityId: job.id,
+            entityName: job.title,
+            description: `${actor?.name || 'Administrator'} permanently deleted closed job "${job.title}"`,
+            metadata: {
+              deletedJobId: job.id,
+              deletedJobTitle: job.title,
+              workspaceId: job.workspaceId,
+              deletedCandidatesCount: candidates.count,
+              deletedNotesCount: notes.count,
+              deletedActivitiesCount: activities.count,
+              deletedImportSessionsCount: importSessions.count,
+              storedResumesRemoved: before.storedResumes,
+              resumeBytesReleased: before.resumeBytes
+            }
+          }
+        });
+      } catch (auditErr) {
+        console.warn('[JobDeletion] PlatformActivity write warning:', auditErr.message);
+      }
+
+      return {
+        job: { id: job.id, title: job.title, closedAt: job.closedAt },
+        deleted: {
+          jobs: removed.count,
+          candidates: candidates.count,
+          candidateNotes: notes.count,
+          candidateActivities: activities.count,
+          importSessions: importSessions.count,
+          storedResumes: before.storedResumes,
+          jobDescriptions: 1
+        },
+        storage: {
+          // Resume bytes are a Postgres column, so removing the rows is what frees
+          // the space. Reported so the figure is a measurement, not a claim.
+          resumeBytesReleased: before.resumeBytes,
+          storedResumesRemoved: before.storedResumes
+        },
+        external: {
+          /*
+           * Nothing of the user's own is touched. Outlook-sourced candidates never
+           * had their bytes copied here in the first place, so there is no local
+           * copy to remove and — importantly — no reason for this operation to
+           * reach into a mailbox. The original emails are left exactly as they are.
+           */
+          outlookSourcedCandidates: before.outlookSourced,
+          mailboxOriginalsDeleted: 0
+        }
+      };
+    },
+    {
+      maxWait: 15000,
+      timeout: 30000
+    }
+  );
 
   /*
-   * The deletion record.
-   *
-   * Every audit trail this job had lived in CandidateActivity rows keyed to its
-   * candidates, so the history went with them — which is the point of a
-   * permanent delete, but it means the fact of the deletion would otherwise
-   * leave no trace at all. There is no system-level audit table in this schema
-   * to write to, and adding one is a schema change rather than something to
-   * introduce as a side effect of this feature, so the evidence is a structured
-   * server log line: what was destroyed, how much of it, and who asked.
+   * Server console log line as secondary logging.
    */
   console.warn(
     `[JobDeletion] JOB_PERMANENTLY_DELETED job="${summary.job.title}" id=${summary.job.id} ` +
@@ -245,13 +277,13 @@ const deleteClosedJob = async ({ jobId, confirmation, actor = null }) => {
  * @returns {Promise<Object>}
  * @throws {JobDeletionError} JOB_NOT_FOUND, JOB_NOT_CLOSED
  */
-const previewJobDeletion = async (jobId) => {
+const previewJobDeletion = async (jobId, workspaceId = null) => {
   const job = await prisma.job.findUnique({
     where: { id: jobId },
-    select: { id: true, title: true, status: true, closedAt: true }
+    select: { id: true, title: true, status: true, closedAt: true, workspaceId: true }
   });
 
-  if (!job) {
+  if (!job || (workspaceId && job.workspaceId !== workspaceId)) {
     throw new JobDeletionError('JOB_NOT_FOUND', 'Job not found.', 404);
   }
 
