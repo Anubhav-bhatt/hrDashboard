@@ -37,6 +37,7 @@ const {
   buildPaginationMeta
 } = require('../utils/candidateQuery');
 const { formatCandidateForApi, formatCandidateDetail, computeCompatibilityFlags } = require('../utils/candidateSerializer');
+const { isOriginAllowed, buildAllowedOrigins } = require('../config/origins');
 
 const suite = createSuite('Unit tests — parsing, querying & serialisation');
 const { test } = suite;
@@ -879,6 +880,31 @@ test('a non-Prisma application error keeps its own message', () => {
   assert.strictEqual(status, 404);
   assert.strictEqual(payload.message, 'This candidate profile could not be found.');
   assert.strictEqual(payload.code, 'CANDIDATE_NOT_FOUND');
+});
+
+suite.group('Origin policy & Vercel preview validation');
+
+test('isOriginAllowed permits configured production origins and their preview deployments', () => {
+  const allowed = buildAllowedOrigins({
+    NODE_ENV: 'production',
+    FRONTEND_URL: 'https://hr-dashboard-v9wq.vercel.app'
+  });
+
+  assert.strictEqual(isOriginAllowed('https://hr-dashboard-v9wq.vercel.app', allowed), true);
+  assert.strictEqual(isOriginAllowed('https://hr-dashboard-v9wq-bb1819bak.vercel.app', allowed), true);
+  assert.strictEqual(isOriginAllowed('https://hr-dashboard-v9wq-git-main-anubhav.vercel.app', allowed), true);
+});
+
+test('isOriginAllowed strictly rejects untrusted or third-party vercel apps', () => {
+  const allowed = buildAllowedOrigins({
+    NODE_ENV: 'production',
+    FRONTEND_URL: 'https://hr-dashboard-v9wq.vercel.app'
+  });
+
+  assert.strictEqual(isOriginAllowed('https://attacker-controlled-app.vercel.app', allowed), false);
+  assert.strictEqual(isOriginAllowed('https://hr-dashboard-attacker.vercel.app', allowed), false);
+  assert.strictEqual(isOriginAllowed('https://localhost.attacker-controlled.example', allowed), false);
+  assert.strictEqual(isOriginAllowed('https://untrusted.com', allowed), false);
 });
 
 const { failed } = suite.summary();
