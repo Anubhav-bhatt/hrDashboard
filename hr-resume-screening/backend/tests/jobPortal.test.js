@@ -479,6 +479,33 @@ const run = async () => {
     assert.ok(first.body.data.every((c) => c.jobId === reactJob.id));
   });
 
+  suite.group('Job description parsing route');
+
+  await testAsync('POST /jobs/parse-jd rejects empty payload with 400', async () => {
+    const res = await request('POST', '/jobs/parse-jd', { body: {} });
+    assert.strictEqual(res.status, 400);
+    assert.strictEqual(res.body.success, false);
+    assert.strictEqual(res.body.message, 'A job description file or text is required.');
+  });
+
+  await testAsync('POST /jobs/parse-jd parses valid text and returns structured requirements', async () => {
+    const jdText = `Senior React Engineer
+We are seeking a Senior React Engineer with 4+ years experience.
+Must have strong skills in React, TypeScript, Redux, and REST APIs.
+Preferred: Next.js, GraphQL, Docker.
+Responsibilities: Design scalable frontend components and mentor junior developers.`;
+
+    const res = await request('POST', '/jobs/parse-jd', { body: { text: jdText } });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.success, true);
+    assert.strictEqual(res.body.data.suggestedTitle, 'Senior React Engineer');
+    assert.strictEqual(res.body.data.minimumExperience, 4);
+    assert.ok(Array.isArray(res.body.data.requiredSkills));
+    assert.ok(res.body.data.requiredSkills.includes('React'));
+    assert.ok(res.body.data.requiredSkills.includes('TypeScript'));
+    assert.strictEqual(res.body.data.status, 'complete');
+  });
+
   const { failed } = suite.summary();
   await teardown();
   process.exit(failed > 0 ? 1 : 0);

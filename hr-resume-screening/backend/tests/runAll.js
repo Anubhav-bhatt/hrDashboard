@@ -16,6 +16,7 @@ const SUITES = [
   { name: 'Scoring & ranking baseline', file: 'scoringBaseline.test.js', requiresDatabase: false },
   { name: 'Scoring & parsing (legacy phase 4)', file: 'phase4.test.js', requiresDatabase: false },
   { name: 'Outlook & matching (legacy phase 5)', file: 'phase5.test.js', requiresDatabase: false },
+  { name: 'JD extraction & requirements parsing', file: 'jdExtraction.test.js', requiresDatabase: false },
   { name: 'AI foundation (flags, provider, orchestrator)', file: 'aiFoundation.test.js', requiresDatabase: false },
   { name: 'API integration', file: 'api.test.js', requiresDatabase: true },
   { name: 'Authentication, refresh rotation & sessions', file: 'authSession.test.js', requiresDatabase: true },
